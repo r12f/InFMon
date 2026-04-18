@@ -34,7 +34,7 @@ permissions:
 jobs:
   package-deb:
     name: dpkg-buildpackage (arm64)
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
@@ -69,9 +69,9 @@ jobs:
           # try to fetch arm64 from the wrong mirror.
           sudo sed -i 's/^deb /deb [arch=amd64,i386] /' /etc/apt/sources.list
           sudo tee /etc/apt/sources.list.d/arm64.list >/dev/null <<'EOF'
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main universe
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main universe
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security main universe
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main universe
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe
           EOF
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
