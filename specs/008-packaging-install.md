@@ -2,16 +2,12 @@
 
 ## Version history
 
-| Version | Date       | Author      | Changes                                                                       |
-| ------- | ---------- | ----------- | ----------------------------------------------------------------------------- |
-| 0.1     | 2026-04-18 | r12f        | Initial draft.                                                                |
-| 0.2     | 2026-04-18 | r12f        | Address PR #9 review: version-locked deps, drop PartOf, drop compat file, add source/format, postrm cross-pkg fix, equivs over --force-depends, GPG verification note, version-skew check, CLI stability marking, explicit cmake+cargo rules. |
+- **Depends on:** [`000-overview`](000-overview.md), [`004-backend-architecture`](004-backend-architecture.md)
+- **Affects:** [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md), [`001-ci-and-precommit`](001-ci-and-precommit.md) (build job produces the `.deb`)
 
-| Field    | Value                                                                                  |
-| -------- | -------------------------------------------------------------------------------------- |
-| Repo     | https://github.com/r12f/InFMon                                                         |
-| Depends  | spec 000 (overview), spec 004 (backend architecture)                                   |
-| Affects  | spec 005 (frontend), spec 007 (CLI), spec 001 (CI — build job will produce the .deb)   |
+| Version | Date       | Author       | Changes |
+| ------- | ---------- | ------------ | ------- |
+| 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the `.deb` packaging contract for Ubuntu aarch64 on BlueField-3. Version-locked deps, source/format declared, postrm cross-package fix, equivs preferred over `--force-depends`, GPG verification note, version-skew check, CLI stability marking, explicit cmake + cargo rules; PartOf and compat file dropped per PR #9 review. |
 
 ## 1. Motivation
 
