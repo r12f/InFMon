@@ -5,6 +5,7 @@
 | Version | Date       | Author      | Changes |
 | ------- | ---------- | ----------- | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f) | Initial draft. Establishes mission, scope, component map, repo layout, build/release model, glossary (incl. flow / flow-rule), and pointers to the canonical spec template at [`TEMPLATE.md`](TEMPLATE.md). |
+| 0.2     | 2026-04-18 | Riff (r12f) | Rename CLI binary references from `infmon-cli` to `infmonctl`; `infmon-cli` retained only as Cargo crate / Debian package name. |
 
 ---
 
@@ -55,7 +56,7 @@ In-scope for v1:
 - Expose a snapshot/aggregate API consumed by `infmon-frontend`.
 - Ship exporters for at least one standard format (IPFIX or OpenTelemetry —
   decided in spec 004).
-- A CLI (`infmon-cli`) for inspection, debugging, and admin.
+- A CLI (`infmonctl`) for inspection, debugging, and admin.
 - Packaging as a `.deb` for **arm64 / aarch64**, single artifact for v1.
 
 Out-of-scope for v1 (non-goals):
@@ -98,7 +99,7 @@ packets         |     v                                         |
                 +------------|----------------------------------+
                              |  local UDS, loopback only
                        +-----+------+
-                       | infmon-cli |
+                       | infmonctl |
                        |  (Rust)    |
                        +------------+
 ```
@@ -107,7 +108,7 @@ packets         |     v                                         |
 |-------------------|----------|----------------|----------------------------------------------|
 | `infmon-backend`  | C/C++    | gtest          | VPP plugin: ERSPAN decap, parse, flow table  |
 | `infmon-frontend` | Rust     | cargo test     | Snapshot/aggregate, exporter drivers, API    |
-| `infmon-cli`      | Rust     | cargo test     | Operator/admin CLI over the frontend API     |
+| `infmon-cli`     | Rust     | cargo test     | Operator/admin CLI over the frontend API     |
 | `tests/`          | mixed    | pytest + pcap  | E2E real-packet replay (see *E2E execution* below) |
 
 > **Backend language note.** "C/C++" here means: production VPP plugin code
@@ -155,7 +156,7 @@ packets         |     v                                         |
 6. **Snapshot.** Frontend periodically reads the backend's exposed snapshot
    (lock-free / RCU-style; details in spec 002) and builds an aggregate view.
 7. **Export.** Frontend pushes records to configured exporters and serves
-   `infmon-cli` queries against the aggregate.
+   `infmonctl` queries against the aggregate.
 
 ## Repo Layout
 
@@ -224,7 +225,7 @@ running Ubuntu 22.04 / DOCA-supported distro).
 - Artifact:
   - `infmon_<version>_arm64.deb` — installs the VPP plugin (`.so` into VPP's
     plugin dir), the `infmon-frontend` daemon (systemd unit), and the
-    `infmon-cli` binary into `/usr/bin`.
+    `infmonctl` binary into `/usr/bin`.
   - The package ships its plugin under VPP's standard plugin directory but
     **does not** force-enable it. VPP's default behavior is to auto-load
     every `.so` in the plugin dir; to keep InFMon opt-in on shared DPUs
@@ -281,8 +282,8 @@ running Ubuntu 22.04 / DOCA-supported distro).
   key tuple it sees, with its own packet/byte counters.
 - **Flow-rule** — A configured matcher (key-set + limits) that selects
   packets and emits flows. One flow-rule yields many flows (one per unique
-  key tuple). Flow-rules are managed via `infmon-cli flow-rule {add,rm,list,show}`;
-  the resulting flows are read with `infmon-cli flow {list,show}`.
+  key tuple). Flow-rules are managed via `infmonctl flow-rule {add,rm,list,show}`;
+  the resulting flows are read with `infmonctl flow {list,show}`.
 - **Flow table** — In-memory data structure that maps a flow key to its
   current counters and metadata; the backend's core state.
 - **Snapshot** — A point-in-time, read-only view of the flow table that the
@@ -294,7 +295,7 @@ running Ubuntu 22.04 / DOCA-supported distro).
 - **Collector** — Off-DPU consumer of exported records.
 - **Frontend** — `infmon-frontend`, the Rust user-space service that owns
   aggregation, exporters, and the API surface for the CLI.
-- **CLI** — `infmon-cli`, operator/admin tool that talks to the frontend.
+- **CLI** — `infmonctl`, operator/admin tool that talks to the frontend.
 - **DCO / Signed-off-by** — Developer Certificate of Origin attestation
   required on every commit (`git commit -s`).
 

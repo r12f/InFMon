@@ -5,6 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Consolidated from v0.1–v0.6. Initial draft of `infmon-frontend` (Rust). Task model, `interval_ns` defined on tick 1, single-reader enforcement, reload-rollback failure handling, stop exit code, complete tracker→flow-rule rename (`FlowRuleStats`/`FlowRuleCounters`/`FlowRuleDef`/`FlowStatsSnapshot`), metric prefix cleanup, YAML config, `polling_interval_ms`, `InFMonStatsClient`/`InFMonControlClient`, control-plane `flow_rule_*` methods, and §3.0 mental-model paragraph. |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Rename CLI binary references from `infmon-cli` to `infmonctl`. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`004-backend-architecture`](004-backend-architecture.md)
@@ -322,7 +323,7 @@ Per tick, per exporter, the dispatcher records exactly one of:
   closed). Bumps `frontend_export_disabled_total`.
 
 A permanent error never crashes the process. Operators see it as
-a `permanent` status in `infmon-cli exporter list`.
+a `permanent` status in `infmonctl exporter list`.
 
 ## 8. IPC to the backend
 
@@ -397,7 +398,7 @@ impl InFMonControlClient {
 }
 ```
 
-`infmon-cli` (Spec 007) is a thin wrapper over `InFMonControlClient`;
+`infmonctl` (Spec 007) is a thin wrapper over `InFMonControlClient`;
 keeping the client in `frontend-ipc` means the CLI and frontend
 cannot drift on the wire format.
 

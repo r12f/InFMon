@@ -5,6 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the flow-rule data model and lifecycle. Establishes flow-rule (matcher) vs flow (one per distinct key tuple), `mirror_src_ip` as the only outer-header field allowed in a key, name regex / `max_keys` / 64-byte caps, LRU recency on insert, file-load vs per-`add` budget enforcement, drop-reason set, `infmon_flow_rule_*` metric names, and §2.4 mental-model section. CLI examples align with the `flow-rule` / `flow` verb split (Spec 007). |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Rename CLI binary references from `infmon-cli` to `infmonctl`. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
 - **Depends on:** [`000-overview`](000-overview.md), [`003-erspan-and-packet-parsing`](003-erspan-and-packet-parsing.md)
@@ -255,17 +256,17 @@ operators can size `max_keys` against observed eviction rate.
 
 ## 7. CRUD API surface
 
-The backend exposes a small management API consumed by `infmon-cli`
+The backend exposes a small management API consumed by `infmonctl`
 (Spec 007) and by the config loader. Transport is owned by Spec 004
 (likely a Unix socket carrying length-prefixed protobuf or JSON); this
 spec defines only the operations and their semantics.
 
 | Op       | CLI                              | Input                                     | Output                              | Notes |
 |----------|----------------------------------|-------------------------------------------|-------------------------------------|-------|
-| `add`    | `infmon-cli flow-rule add <spec>`     | full flow-rule definition (name, fields, max_keys, eviction_policy) | created flow-rule, or error           | Fails if name exists. |
-| `rm`     | `infmon-cli flow-rule rm <name>`      | flow-rule name                              | ok / `not_found`                    | Drops all flows for that flow-rule. |
-| `list`   | `infmon-cli flow-rule list`           | —                                         | array of flow-rule definitions        | Cheap; no flow data. |
-| `show`   | `infmon-cli flow-rule show <name>`    | flow-rule name                              | flow-rule definition + live stats: `flow_count`, `evictions_total`, `drops_total`, `last_seen_ns` (the maximum `last_seen_ns` across this flow-rule's resident flows; absent if there are none) | Stats are best-effort snapshots. |
+| `add`    | `infmonctl flow-rule add <spec>`     | full flow-rule definition (name, fields, max_keys, eviction_policy) | created flow-rule, or error           | Fails if name exists. |
+| `rm`     | `infmonctl flow-rule rm <name>`      | flow-rule name                              | ok / `not_found`                    | Drops all flows for that flow-rule. |
+| `list`   | `infmonctl flow-rule list`           | —                                         | array of flow-rule definitions        | Cheap; no flow data. |
+| `show`   | `infmonctl flow-rule show <name>`    | flow-rule name                              | flow-rule definition + live stats: `flow_count`, `evictions_total`, `drops_total`, `last_seen_ns` (the maximum `last_seen_ns` across this flow-rule's resident flows; absent if there are none) | Stats are best-effort snapshots. |
 
 ### 7.1 Semantics
 
