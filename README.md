@@ -14,8 +14,8 @@ This repository hosts the full stack:
 
 🚧 Early scaffolding. APIs, schemas, and component boundaries are still
 being defined under [`specs/`](./specs/). Expect breaking changes. Roadmap
-and active work are tracked in [GitHub Issues](https://github.com/r12f/InFMon/issues)
-(see the bootstrap issue [DPU-5](https://github.com/r12f/InFMon/issues)).
+and active work are tracked in
+[GitHub Issues](https://github.com/r12f/InFMon/issues).
 
 ## Repository layout
 

@@ -16,4 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.gitignore` for Rust, C/C++, and VPP build artifacts.
 - This `CHANGELOG.md` (Keep a Changelog format).
 
-[Unreleased]: https://github.com/r12f/InFMon/compare/HEAD...HEAD
+<!-- TODO: replace with a real diff link (e.g. compare/v0.1.0...HEAD) once the
+     first version is tagged. `compare/HEAD...HEAD` would always render an
+     empty diff, so it is intentionally omitted here. -->
+[Unreleased]: https://github.com/r12f/InFMon/commits/main
