@@ -1,10 +1,13 @@
 # Spec 008 — Packaging & Install (.deb, Ubuntu aarch64)
 
+## Version history
+
+| Version | Date       | Author      | Changes        |
+| ------- | ---------- | ----------- | -------------- |
+| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
+
 | Field    | Value                                                                                  |
 | -------- | -------------------------------------------------------------------------------------- |
-| Status   | Draft                                                                                  |
-| Owner    | bf3 (agent)                                                                            |
-| Reviewer | @banidoru                                                                              |
 | Tracking | DPU-14 (parent: DPU-4 — EPIC InFMon)                                                   |
 | Repo     | https://github.com/r12f/InFMon                                                         |
 | Depends  | spec 000 (overview), spec 004 (backend architecture)                                   |
