@@ -5,6 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Consolidated from v0.1–v0.6. Initial draft of `infmon-frontend` (Rust). Task model, `interval_ns` defined on tick 1, single-reader enforcement, reload-rollback failure handling, stop exit code, complete tracker→flow-rule rename (`FlowRuleStats`/`FlowRuleCounters`/`FlowRuleDef`/`FlowStatsSnapshot`), metric prefix cleanup, YAML config, `polling_interval_ms`, `InFMonStatsClient`/`InFMonControlClient`, control-plane `flow_rule_*` methods, and §3.0 mental-model paragraph. |
+| 0.2     | 2026-04-18 | BF-3 (bf3)   | §8.2: replace length-prefixed protobuf framing with gRPC server on Unix-domain socket (DPU-28). |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`004-backend-architecture`](004-backend-architecture.md)
@@ -375,8 +376,8 @@ race the poller on the clear half of the operation.
 
 ### 8.2 Control API (request/response)
 
-A Unix-domain socket at `frontend.backend_socket`, length-prefixed
-protobuf (transport owned by Spec 004). The client crate exposes:
+A gRPC server on a Unix-domain socket at `/run/infmon/frontend.sock`
+(transport owned by Spec 004). The client crate exposes:
 
 ```rust
 pub struct InFMonControlClient { /* ... */ }

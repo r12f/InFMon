@@ -5,6 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the `.deb` packaging contract for Ubuntu aarch64 on BlueField-3. Version-locked deps, source/format declared, postrm cross-package fix, equivs preferred over `--force-depends`, GPG verification note, version-skew check, CLI stability marking, explicit cmake + cargo rules; PartOf and compat file dropped per PR #9 review. |
+| 0.2     | 2026-04-18 | BF-3 (bf3)   | §3, §5.3, §9.1: replace REST references with gRPC for CLI↔frontend communication (DPU-28). |
 
 - **Depends on:** [`000-overview`](000-overview.md), [`004-backend-architecture`](004-backend-architecture.md)
 - **Affects:** [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md), [`001-ci-and-precommit`](001-ci-and-precommit.md) (build job produces the `.deb`)
@@ -72,7 +73,7 @@ upgrades from producing skewed deployments:
 - `infmon-frontend` declares `Depends: infmon-backend (= ${binary:Version})`
   so a co-installed pair always shares the same source release. (CLI
   remains independent — it is allowed to talk to an older frontend over
-  the REST surface; cross-version compatibility there is handled in
+  the gRPC surface; cross-version compatibility there is handled in
   spec 005.)
 
 Splitting the three lets operators run the CLI from a jump host without
@@ -196,8 +197,8 @@ not orphan log files.
 | `/usr/share/man/man1/infmonctl.1.gz`                | root  | 0644 | Generated from clap by `clap_mangen`.  |
 | `/usr/share/doc/infmon-cli/changelog.gz`            | root  | 0644 |                                        |
 
-The CLI does not require VPP locally; it talks to the frontend's REST
-surface (spec 005) over TCP or a Unix socket. `infmon-cli` therefore
+The CLI does not require VPP locally; it talks to the frontend's gRPC
+service (spec 005) over a Unix socket. `infmon-cli` therefore
 declares no dependency on VPP.
 
 ## 6. systemd unit
@@ -489,7 +490,7 @@ InFMon uses **SemVer 2.0.0** (`MAJOR.MINOR.PATCH`) on the source release.
 
 - `MAJOR` bumps on incompatible changes to the binary-API messages
   (spec 004 §7.1), the stats-segment descriptor layout (spec 004 §6),
-  the frontend REST contract (spec 005), or the CLI argument grammar
+  the frontend gRPC contract (spec 005), or the CLI argument grammar
   marked as stable. Stable CLI arguments are those whose `clap`
   definition does **not** carry the `#[arg(hide = true)]` attribute or
   a doc-comment line starting with `UNSTABLE:`; the help text rendered
