@@ -5,7 +5,7 @@
 | Version | Date       | Author      | Changes |
 | ------- | ---------- | ----------- | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f) | Initial draft. Establishes mission, scope, component map, repo layout, build/release model, glossary (incl. flow / flow-rule), and pointers to the canonical spec template at [`TEMPLATE.md`](TEMPLATE.md). |
-| 0.2     | 2026-04-18 | Riff (r12f) | Rename CLI binary references from `infmon-cli` to `infmonctl`; `infmon-cli` retained only as Cargo crate / Debian package name. |
+| 0.2     | 2026-04-18 | Riff (r12f) | Rename CLI binary references from `infmon-cli` to `infmonctl`; `infmon-cli` retained only as Cargo crate / Debian package name. Mark open questions #1 (exporter→OTLP) and #3 (eviction→`lru_drop`) as resolved. Update architecture diagram exporter label to OTLP. |
 
 ---
 
@@ -92,7 +92,7 @@ packets         |     v                                         |
                 |            v                                  |
                 |  +-------------------+    +---------------+   |
                 |  | infmon-frontend   |--->| exporters     |---+--> collectors
-                |  | (Rust)            |    | (IPFIX/OTel)  |   |     (off-DPU)
+                |  | (Rust)            |    | (OTLP)        |   |     (off-DPU)
                 |  | - aggregate       |    +---------------+   |
                 |  | - serve API       |                        |
                 |  +---------+---------+                        |
@@ -331,14 +331,13 @@ explanations of each rule.
 
 ## Open Questions
 
-1. **Exporter format for v1** — IPFIX, OpenTelemetry, or both? Decided in
-   spec 004. *Default:* IPFIX first (broadest collector support); OTel as a
-   fast follow.
+1. ~~**Exporter format for v1** — IPFIX, OpenTelemetry, or both?~~ **Resolved:**
+   OTLP is the only v1 exporter (spec 006).
 2. **Snapshot transport** — shared memory ring vs. local Unix-domain socket
    vs. gRPC. Decided in spec 004. *Default:* shared-memory ring (lowest
    overhead on DPU).
-3. **Flow table eviction policy** — LRU, time-based, or hybrid. Decided in
-   spec 002. *Default:* time-based with active/idle timeouts (IPFIX-aligned).
+3. ~~**Flow table eviction policy** — LRU, time-based, or hybrid.~~ **Resolved:**
+   `lru_drop` per spec 002 §6.
 4. **Distro target** — Ubuntu 22.04 only, or also DOCA's recommended base?
    Decided in spec 008. *Default:* Ubuntu 22.04 arm64.
 5. **Frontend API authn/authz** — v1 ships with UNIX-group-based access on a

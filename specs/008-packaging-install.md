@@ -4,7 +4,7 @@
 
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
-| 0.2     | 2026-04-18 | Riff (r12f)   | Unify config path to `/etc/infmon/config.yaml` (YAML); replace `backend.conf`, `frontend.conf` references. |
+| 0.2     | 2026-04-18 | Riff (r12f)   | Unify config path to `/etc/infmon/config.yaml` (YAML); replace `backend.conf`, `frontend.conf` references. Rename `flow_defs.d/` → `flow_rules.d/`, `flow_def` → `flow_rule`. Change systemd to disabled-by-default. Replace REST surface references with gRPC interface. |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the `.deb` packaging contract for Ubuntu aarch64 on BlueField-3. Version-locked deps, source/format declared, postrm cross-package fix, equivs preferred over `--force-depends`, GPG verification note, version-skew check, CLI stability marking, explicit cmake + cargo rules; PartOf and compat file dropped per PR #9 review. |
 
 - **Depends on:** [`000-overview`](000-overview.md), [`004-backend-architecture`](004-backend-architecture.md)
@@ -76,7 +76,7 @@ upgrades from producing skewed deployments:
 - `infmon-frontend` declares `Depends: infmon-backend (= ${binary:Version})`
   so a co-installed pair always shares the same source release. (CLI
   remains independent — it is allowed to talk to an older frontend over
-  the REST surface; cross-version compatibility there is handled in
+  the gRPC interface; cross-version compatibility there is handled in
   spec 005.)
 
 Splitting the three lets operators run the CLI from a jump host without
@@ -172,7 +172,7 @@ operator.
 | Path                                            | Owner          | Mode | Notes                                                     |
 | ----------------------------------------------- | -------------- | ---- | --------------------------------------------------------- |
 | `/usr/bin/infmon-frontend`                      | root           | 0755 | Daemon binary.                                            |
-| `/etc/infmon/flow_defs.d/`                      | root           | 0755 | Operator drops flow_def YAML here (consumed per spec 002).|
+| `/etc/infmon/flow_rules.d/`                     | root           | 0755 | Operator drops flow_rule YAML here (consumed per spec 002).|
 | `/lib/systemd/system/infmon-frontend.service`   | root           | 0644 | Unit file (§6).                                           |
 | `/var/log/infmon/`                              | infmon:infmon  | 0750 | Created by postinst; rotated by `/etc/logrotate.d/infmon`.|
 | `/etc/logrotate.d/infmon`                       | root           | 0644 | Daily rotation, 14 days, compressed.                      |
@@ -199,8 +199,8 @@ not orphan log files.
 | `/usr/share/man/man1/infmonctl.1.gz`                | root  | 0644 | Generated from clap by `clap_mangen`.  |
 | `/usr/share/doc/infmon-cli/changelog.gz`            | root  | 0644 |                                        |
 
-The CLI does not require VPP locally; it talks to the frontend's REST
-surface (spec 005) over TCP or a Unix socket. `infmon-cli` therefore
+The CLI does not require VPP locally; it talks to the frontend's gRPC
+interface (spec 005) over a Unix socket. `infmon-cli` therefore
 declares no dependency on VPP.
 
 ## 6. systemd unit
@@ -284,9 +284,12 @@ Notes:
   unit name would silently break for operators who run a renamed VPP
   unit. The optional drop-in shown in the unit comment lets operators
   on the canonical `vpp.service` opt in to auto-restart coupling.
-- The unit is installed enabled-by-default via `dh_installsystemd`'s
-  default behaviour; operators who do not want it auto-started can
-  `systemctl disable infmon-frontend` after install.
+- The unit is installed **disabled-by-default**. `dh_installsystemd
+  --no-enable --no-start` is passed during build so that `apt install
+  infmon` does not auto-start the service. To enable and start after
+  install, run `systemctl enable --now infmon-frontend.service`. A
+  debconf flag `infmon/autostart` (priority low, default false) can be
+  pre-seeded to `true` to enable-and-start on first install.
 
 There is **no** unit for `infmon-backend` — the backend is a VPP plugin,
 not a service. Its lifecycle is VPP's.
@@ -304,8 +307,8 @@ apt install infmon
   └─ postinst (frontend):
        creates infmon user/group (idempotent)
        creates /var/log/infmon, /var/lib/infmon
-       deb-systemd-helper enable infmon-frontend.service
-       deb-systemd-invoke start infmon-frontend.service
+       deb-systemd-helper enable infmon-frontend.service  # only if debconf infmon/autostart=true
+       deb-systemd-invoke start infmon-frontend.service   # only if debconf infmon/autostart=true
   └─ postinst (backend):
        prints NOTICE asking operator to restart VPP
 ```
@@ -500,7 +503,7 @@ InFMon uses **SemVer 2.0.0** (`MAJOR.MINOR.PATCH`) on the source release.
   "Unstable / experimental" section so the boundary is mechanically
   enforceable from the source. Spec 007 will be updated to make this
   marking convention normative when this spec lands.
-- `MINOR` bumps on additive changes (new `flow_def` operators, new
+- `MINOR` bumps on additive changes (new `flow_rule` operators, new
   binary-API messages, new exporter formats).
 - `PATCH` bumps on bugfixes and packaging-only changes.
 

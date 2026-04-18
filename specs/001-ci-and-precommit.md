@@ -5,7 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft. Defines local pre-commit contract, GH Actions workflows, x86 vs aarch64 split, and the §11 changelog of review fixes from PR #4 (banidoru). |
-| 0.2     | 2026-04-18 | BF-3 (r12f)  | Align VPP version from 24.02 → 24.10 across §4.3, §4.4, §5 to match deployment floor in specs 004/008. Resolve open question §9.2. |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Align VPP version from 24.02 → 24.10 across §4.3, §4.4, §5 to match deployment floor in specs 004/008. Resolve open question §9.2. |
 
 - **Related:** [`000-overview`](000-overview.md)
 

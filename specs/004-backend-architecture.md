@@ -161,7 +161,8 @@ struct infmon_slot {
   the contribution from this packet (the packet itself still goes to
   `drop`, like every other packet — InFMon never forwards).
 - Table full → contribution dropped, `table_full` counter incremented.
-  We deliberately do not evict; eviction policy is a v2 conversation.
+  Eviction follows the `lru_drop` policy defined in Spec 002 §6: when the table is full,
+  the least-recently-updated entry is dropped.
 
 ### 5.3 Width
 
