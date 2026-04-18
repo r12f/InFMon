@@ -41,7 +41,7 @@ override_dh_auto_clean:
 	rm -rf $(BACKEND_BUILD_DIR)
 	rm -rf $(CARGO_TARGET_DIR)
 	rm -rf $(CARGO_HOME)
-	rm -rf debian/_staging
+	rm -rf debian/tmp
 	dh_auto_clean
 
 # ----------------------------------------------------------------------
@@ -80,14 +80,14 @@ override_dh_auto_build:
 	fi
 
 	# ---- generated artefacts (completions + man page) ----
-	mkdir -p debian/_staging/completions debian/_staging/man
+	mkdir -p debian/tmp/completions debian/tmp/man
 	if [ -x $(CARGO_TARGET_DIR)/release/infmonctl ]; then \
 	  $(CARGO_TARGET_DIR)/release/infmonctl --generate-completions bash \
-	    > debian/_staging/completions/infmonctl 2>/dev/null || true; \
+	    > debian/tmp/completions/infmonctl 2>/dev/null || true; \
 	  $(CARGO_TARGET_DIR)/release/infmonctl --generate-completions zsh \
-	    > debian/_staging/completions/_infmonctl 2>/dev/null || true; \
+	    > debian/tmp/completions/_infmonctl 2>/dev/null || true; \
 	  $(CARGO_TARGET_DIR)/release/infmonctl --generate-manpage \
-	    > debian/_staging/man/infmonctl.1 2>/dev/null || true; \
+	    > debian/tmp/man/infmonctl.1 2>/dev/null || true; \
 	fi
 
 # ----------------------------------------------------------------------
@@ -112,35 +112,33 @@ override_dh_auto_test:
 # ----------------------------------------------------------------------
 override_dh_auto_install:
 	# Backend plugin → /usr/lib/vpp_plugins/
-	install -d debian/_staging/usr/lib/vpp_plugins
-	install -d debian/_staging/usr/share/vpp/api/plugins
+	install -d debian/tmp/usr/lib/vpp_plugins
+	install -d debian/tmp/usr/share/vpp/api/plugins
 	if [ -f $(BACKEND_BUILD_DIR)/infmon.so ]; then \
 	  install -m 0644 $(BACKEND_BUILD_DIR)/infmon.so \
-	    debian/_staging/usr/lib/vpp_plugins/infmon.so; \
+	    debian/tmp/usr/lib/vpp_plugins/infmon.so; \
 	fi
 	if [ -f $(BACKEND_BUILD_DIR)/infmon.api.json ]; then \
 	  install -m 0644 $(BACKEND_BUILD_DIR)/infmon.api.json \
-	    debian/_staging/usr/share/vpp/api/plugins/infmon.api.json; \
+	    debian/tmp/usr/share/vpp/api/plugins/infmon.api.json; \
 	fi
 
 	# Frontend daemon → /usr/bin/
-	install -d debian/_staging/usr/bin
+	install -d debian/tmp/usr/bin
 	if [ -x $(CARGO_TARGET_DIR)/release/infmon-frontend ]; then \
 	  install -m 0755 $(CARGO_TARGET_DIR)/release/infmon-frontend \
-	    debian/_staging/usr/bin/infmon-frontend; \
+	    debian/tmp/usr/bin/infmon-frontend; \
 	fi
 
 	# CLI → /usr/bin/infmonctl
 	if [ -x $(CARGO_TARGET_DIR)/release/infmonctl ]; then \
 	  install -m 0755 $(CARGO_TARGET_DIR)/release/infmonctl \
-	    debian/_staging/usr/bin/infmonctl; \
+	    debian/tmp/usr/bin/infmonctl; \
 	fi
 
-	# Default config files (shipped from debian/configs/ — owned by us
-	# until each component lands its own canonical default).
-	install -d debian/_staging/etc/infmon/flow_defs.d
-	install -m 0644 debian/configs/backend.conf  debian/_staging/etc/infmon/backend.conf
-	install -m 0644 debian/configs/frontend.conf debian/_staging/etc/infmon/frontend.conf
+	install -d debian/tmp/etc/infmon/flow_defs.d
+	install -m 0644 debian/configs/backend.conf  debian/tmp/etc/infmon/backend.conf
+	install -m 0644 debian/configs/frontend.conf debian/tmp/etc/infmon/frontend.conf
 
 	dh_auto_install
 

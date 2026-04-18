@@ -1,2 +1,2 @@
-_staging/usr/bin/infmon-frontend           usr/bin/
-_staging/etc/infmon/frontend.conf          etc/infmon/
+usr/bin/infmon-frontend           usr/bin/
+etc/infmon/frontend.conf          etc/infmon/
