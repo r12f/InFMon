@@ -155,6 +155,7 @@ override_dh_auto_install:
 	    touch debian/tmp/$$f; \
 	  fi; \
 	done
+	# TODO(DPU-XX): remove stubs once real binaries are built by CMake
 
 # ----------------------------------------------------------------------
 # systemd — installed via debian/infmon-frontend.service which
@@ -170,6 +171,7 @@ override_dh_installsystemd:
 # dh_missing — tolerate absent files while source trees are landing.
 # ----------------------------------------------------------------------
 override_dh_missing:
+	# TODO(DPU-XX): switch to --fail-missing once all source trees are merged
 	dh_missing --list-missing
 
 # ----------------------------------------------------------------------
