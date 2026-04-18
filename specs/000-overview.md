@@ -99,7 +99,7 @@ packets         |     v                                         |
                 +------------|----------------------------------+
                              |  local UDS, loopback only
                        +-----+------+
-                       | infmonctl |
+                       | infmonctl  |
                        |  (Rust)    |
                        +------------+
 ```
@@ -108,7 +108,7 @@ packets         |     v                                         |
 |-------------------|----------|----------------|----------------------------------------------|
 | `infmon-backend`  | C/C++    | gtest          | VPP plugin: ERSPAN decap, parse, flow table  |
 | `infmon-frontend` | Rust     | cargo test     | Snapshot/aggregate, exporter drivers, API    |
-| `infmon-cli`     | Rust     | cargo test     | Operator/admin CLI over the frontend API     |
+| `infmon-cli`      | Rust     | cargo test     | Operator/admin CLI over the frontend API     |
 | `tests/`          | mixed    | pytest + pcap  | E2E real-packet replay (see *E2E execution* below) |
 
 > **Backend language note.** "C/C++" here means: production VPP plugin code
