@@ -7,6 +7,7 @@
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
 | 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
 | 0.3     | 2026-04-18 | bf3 (agent) | Address PR #11 review feedback (clarifications, runtime cap, jitter, naming, drop-reason enum, dynamic host.arch). |
+| 0.4     | 2026-04-18 | bf3 (agent) | Add §1.1 mental-model paragraph (flow-rule = matcher; one flow per distinct key tuple); add `flow.mirror_src_ip` per-flow attribute (opt-in, sourced from Spec 003 §4.2.1); fix `distinct_data_points_per_bucket` → `_per_flow` typo. |
 
 Tracking issue: DPU-12 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
@@ -28,6 +29,15 @@ sole production sink for flow data; everything else (CLI `flow show`, ad-hoc
 JSON dumps) is for debugging. Getting this contract right means downstream
 collectors, dashboards, and alerting can be built without waiting for InFMon
 to stabilise further.
+
+### 1.1 Mental model
+
+A **flow-rule** is a configured matcher (key field set + limits) declared by
+the operator. At runtime each flow-rule generates one **flow** per distinct
+key tuple it observes, and that flow owns the packet/byte counters. The
+exporter walks every live flow under every flow-rule each tick (§3.2) and
+emits per-flow OTLP data points carrying the flow's key as attributes plus
+per-flow-rule observability points (§3.4) scoped to the flow-rule itself.
 
 ## 2. Concepts
 
@@ -140,6 +150,7 @@ the flow-rule's field list (Spec 002 §3) plus a `flow-rule` label:
 | `flow.dst_ip`     | string      | same rule for `dst_ip`                  |
 | `flow.ip_proto`   | int         | numeric `ip_proto`, 0–255               |
 | `flow.dscp`       | int         | numeric `dscp`, 0–63                    |
+| `flow.mirror_src_ip` | string   | canonical text form of the ERSPAN outer source IP (Spec 003 §4.2.1); only emitted when the flow-rule opts into `mirror_src_ip` (Spec 002 v1 field set). |
 
 Rules:
 
@@ -362,7 +373,7 @@ each live flow becomes ≥ 3 unique time series in the receiving TSDB.
 Document in the `infmon-frontend` operator README and CLI `--help`:
 
 - A flow-rule's worst-case time-series contribution to the collector is
-  `max_keys × distinct_data_points_per_bucket`. With v1's 3 per-flow
+  `max_keys × distinct_data_points_per_flow`. With v1's 3 per-flow
   metrics, a flow-rule with `max_keys = 1_048_576` can land 3 Mi series in
   the receiving TSDB **per scrape interval**.
 - The four v1 fields are *all* high-cardinality except `dscp`. A flow-rule
