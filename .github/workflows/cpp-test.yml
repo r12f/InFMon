@@ -69,13 +69,14 @@ jobs:
 
       - name: cppcheck (full tree)
         if: steps.detect.outputs.have_backend == 'true'
+        # Let cppcheck auto-detect C vs C++ per file extension; pinning
+        # --std=c11 misparses any .cpp/.cc sources (gtest harnesses).
         run: |
           cppcheck \
               --enable=warning,performance,portability \
               --error-exitcode=1 \
               --inline-suppr \
               --suppressions-list=.cppcheck-suppressions \
-              --std=c11 \
               src/infmon-backend
 
       - name: ctest
