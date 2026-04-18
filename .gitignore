@@ -1,0 +1,111 @@
+# ---------------------------------------------------------------------------
+# Rust
+# ---------------------------------------------------------------------------
+# Cargo.lock policy: this repository will host both binary and library crates.
+# Convention: check in `Cargo.lock` for binaries, ignore for libraries. Today
+# we have no published library crates, so `Cargo.lock` is committed. Update
+# this comment (and the ignore list) when that changes.
+target/
+**/*.rs.bk
+Cargo.lock.bak
+*.pdb
+
+# ---------------------------------------------------------------------------
+# C / C++
+# ---------------------------------------------------------------------------
+# Object / archive / shared lib artifacts
+*.o
+*.obj
+*.ko
+*.a
+*.la
+*.lo
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exp
+*.ilk
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug info
+*.dSYM/
+*.su
+*.idb
+
+# Precompiled headers
+*.gch
+*.pch
+
+# Dependency files
+*.d
+
+# Build trees
+build/
+build-*/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+Makefile.in
+.deps/
+.libs/
+autom4te.cache/
+config.log
+config.status
+configure.scan
+
+# ---------------------------------------------------------------------------
+# VPP build artifacts
+# ---------------------------------------------------------------------------
+build-root/
+build-data/
+install-*/
+*.deb
+*.rpm
+vpp-api/
+.ccache/
+*.api.json
+*.api.h
+*.api.c
+*_test.api.vapi.json
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+
+# ---------------------------------------------------------------------------
+# Logs / coverage / misc
+# ---------------------------------------------------------------------------
+# Note: blanket `*.log` is intentional today; if/when we add log fixtures
+# under tests/, add a more specific un-ignore (e.g. `!tests/fixtures/**/*.log`).
+*.log
+*.gcda
+*.gcno
+*.gcov
+coverage/
+lcov.info
