@@ -5,7 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the `.deb` packaging contract for Ubuntu aarch64 on BlueField-3. Version-locked deps, source/format declared, postrm cross-package fix, equivs preferred over `--force-depends`, GPG verification note, version-skew check, CLI stability marking, explicit cmake + cargo rules; PartOf and compat file dropped per PR #9 review. |
-| 0.2     | 2026-04-18 | BF-3 (bf3)   | Add `/etc/vpp/startup.d/10-infmon.conf` (VPP plugin disable snippet) to §5.1 file layout and `debian/` source tree per spec 000 alignment. |
+| 0.2     | 2026-04-18 | Riff (r12f)   | Add `/etc/vpp/startup.d/10-infmon.conf` (VPP plugin disable snippet) to §5.1 file layout and `debian/` source tree per spec 000 alignment. |
 
 - **Depends on:** [`000-overview`](000-overview.md), [`004-backend-architecture`](004-backend-architecture.md)
 - **Affects:** [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md), [`001-ci-and-precommit`](001-ci-and-precommit.md) (build job produces the `.deb`)
