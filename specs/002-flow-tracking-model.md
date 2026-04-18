@@ -288,7 +288,7 @@ spec defines only the operations and their semantics.
   fields, the total `max_keys` budget in rule 6 — are reported up
   front), then issues `add` calls one at a time. Each `add` also
   re-checks the running budget, so the same `budget_exceeded` error
-  (§7.2) can be produced by a CLI `flow add` that would push the
+  (§7.2) can be produced by a CLI `flow-rule add` that would push the
   cumulative `max_keys` past rule 6's limit. This means file-order does
   **not** affect whether a valid file loads, but it does affect the
   order of error reporting if the validator is bypassed (e.g. a future
@@ -304,7 +304,7 @@ A small, closed set:
   reason.
 - `budget_exceeded` — would exceed the backend's total `max_keys`
   budget (§5.3 rule 6). Returned both at config-file load and from a
-  CLI `flow add` whose `max_keys` would push the cumulative total past
+  CLI `flow-rule add` whose `max_keys` would push the cumulative total past
   the budget; runtime `add` therefore enforces the same invariant as
   the file validator and operators cannot silently overcommit between
   reloads.
