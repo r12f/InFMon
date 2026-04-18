@@ -5,7 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Consolidated from v0.1–v0.6. Initial draft of `infmon-frontend` (Rust). Task model, `interval_ns` defined on tick 1, single-reader enforcement, reload-rollback failure handling, stop exit code, complete tracker→flow-rule rename (`FlowRuleStats`/`FlowRuleCounters`/`FlowRuleDef`/`FlowStatsSnapshot`), metric prefix cleanup, YAML config, `polling_interval_ms`, `InFMonStatsClient`/`InFMonControlClient`, control-plane `flow_rule_*` methods, and §3.0 mental-model paragraph. |
-| 0.2     | 2026-04-18 | Riff (r12f)   | Fix stats segment path: replace custom `/dev/shm/infmon-stats` with VPP's native stats segment socket (`/run/vpp/stats.sock`), converging with Spec 004. |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Fix stats segment path: replace custom `/dev/shm/infmon-stats` with VPP's native stats segment socket (`/run/vpp/stats.sock`), converging with Spec 004. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`004-backend-architecture`](004-backend-architecture.md)
@@ -357,10 +357,10 @@ race on the destructive clear half and each see partial data), the
 frontend enforces single-writer-of-the-clear-side at startup:
 
 1. On `start`, the frontend acquires an advisory `flock(LOCK_EX |
-   LOCK_NB)` on `frontend.vpp_stats_socket` (or a sibling
-   `<vpp_stats_socket>.lock` file if the kernel rejects locks on the
-   socket node). Failure → refuse to start with `stats_segment_busy`
-   in the closed error set.
+   LOCK_NB)` on a sibling `<vpp_stats_socket>.lock` file (created
+   atomically if absent). This avoids portability issues with
+   `flock` on Unix-domain socket inodes. Failure → refuse to start
+   with `vpp_stats_socket_busy` in the closed error set.
 2. The lock is held for the lifetime of the process and released on
    exit (kernel does this automatically on FD close, including
    abnormal termination).
