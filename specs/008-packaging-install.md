@@ -2,9 +2,10 @@
 
 ## Version history
 
-| Version | Date       | Author      | Changes        |
-| ------- | ---------- | ----------- | -------------- |
-| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
+| Version | Date       | Author      | Changes                                                                       |
+| ------- | ---------- | ----------- | ----------------------------------------------------------------------------- |
+| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft.                                                                |
+| 0.2     | 2026-04-18 | bf3 (agent) | Address PR #9 review: version-locked deps, drop PartOf, drop compat file, add source/format, postrm cross-pkg fix, equivs over --force-depends, GPG verification note, version-skew check, CLI stability marking, explicit cmake+cargo rules. |
 
 | Field    | Value                                                                                  |
 | -------- | -------------------------------------------------------------------------------------- |
@@ -67,7 +68,17 @@ package `infmon`:
 | `infmon-cli`             | `arm64` | The `infmonctl` CLI binary + shell completions + man page.               |
 
 A meta-package `infmon` depends on all three so that `apt install infmon`
-gives operators the full system in one step.
+gives operators the full system in one step. The meta-package and the
+inter-component dependencies are version-locked to prevent partial
+upgrades from producing skewed deployments:
+
+- `infmon` (meta) declares `Depends: infmon-backend (= ${binary:Version}),
+  infmon-frontend (= ${binary:Version}), infmon-cli (= ${binary:Version})`.
+- `infmon-frontend` declares `Depends: infmon-backend (= ${binary:Version})`
+  so a co-installed pair always shares the same source release. (CLI
+  remains independent — it is allowed to talk to an older frontend over
+  the REST surface; cross-version compatibility there is handled in
+  spec 005.)
 
 Splitting the three lets operators run the CLI from a jump host without
 pulling VPP in, and lets us ship plugin-only updates without restarting
@@ -109,6 +120,12 @@ sudo apt update
 sudo apt install infmon
 ```
 
+Operators should verify the fd.io GPG key fingerprint out-of-band
+against the fd.io project's published value before trusting it — a
+compromised signing key means a compromised VPP on a production DPU.
+`debian/README.Debian` reproduces the current fingerprint and the
+verification command (`gpg --show-keys` on the dearmored file).
+
 We deliberately do **not** auto-add the fd.io repo from a maintainer
 script: silently editing `/etc/apt/sources.list.d/` on install is hostile
 and breaks the principle of least surprise. The dependency declaration
@@ -117,10 +134,17 @@ combined with documented bootstrap is sufficient.
 ### 4.3 Behaviour when VPP is already managed locally
 
 Many BF-3 users build VPP from source (e.g. NVIDIA's BF reference image
-ships its own VPP). In that case the operator passes
-`--no-install-recommends` and uses `dpkg --force-depends` or installs an
-equivalent locally-built VPP `.deb`. We document this path in
-`debian/README.Debian` but do not weaken the declared dependency.
+ships its own VPP). The recommended path is to build a local `equivs`
+shim package that satisfies the `vpp` / `vpp-plugin-core` virtual
+dependencies (or to install a locally-built VPP `.deb` that provides
+those names directly), then `apt install infmon-backend` resolves
+cleanly. We document both flows in `debian/README.Debian`.
+
+We deliberately do **not** recommend `dpkg --force-depends` as a
+first-class workaround: it leaves the package in a half-configured
+state from `apt`'s perspective, and a subsequent `apt --fix-broken
+install` may try to remove the force-installed component. `equivs` is
+the cleaner alternative and we treat it as the supported path.
 
 ## 5. File-system layout
 
@@ -159,8 +183,13 @@ operator.
 
 Postinst creates a system user `infmon` (group `infmon`) via `adduser
 --system --group --no-create-home --home /var/lib/infmon infmon`. The
-user is removed only on `purge`, not on `remove`, so an upgrade
-round-trip does not orphan log files.
+call is idempotent (`adduser --system` is a no-op if the user already
+exists) and only `infmon-frontend.postinst` performs it; the backend
+and CLI postinsts do not touch the user database. `dpkg` serialises
+`configure` phases across packages in the same transaction, so even an
+`apt install infmon` (meta) cannot race against itself. The user is
+removed only on `purge`, not on `remove`, so an upgrade round-trip does
+not orphan log files.
 
 ### 5.3 `infmon-cli`
 
@@ -186,10 +215,16 @@ Description=InFMon flow-telemetry frontend
 Documentation=https://github.com/r12f/InFMon
 After=vpp.service network-online.target
 Wants=network-online.target
-# We cannot Require= vpp.service because some operators run a custom
-# VPP unit name (e.g. vpp-bf3.service). BindsTo= would be wrong for the
-# same reason. The frontend retries on the binary-API socket itself.
-PartOf=vpp.service
+# We cannot Require= / BindsTo= / PartOf= vpp.service because some
+# operators run a custom VPP unit name (e.g. vpp-bf3.service) — any
+# of those would be a silent no-op there. The frontend instead relies
+# on its own retry loop on the binary-API socket (see §7.1) to handle
+# VPP restarts. Operators who run the canonical vpp.service unit and
+# want auto-restart on VPP restart can drop in
+# /etc/systemd/system/infmon-frontend.service.d/partof.conf with
+#   [Unit]
+#   PartOf=vpp.service
+# This drop-in path is documented in README.Debian.
 
 [Service]
 Type=notify
@@ -211,10 +246,27 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
-# Stats segment is a hugepages-backed mmap; we need access but not write.
+# Stats segment is a hugepages-backed mmap. ReadOnlyPaths= creates a
+# read-only bind mount, which on some kernels rejects mmap() of files
+# that live under it even with PROT_READ only (the VMA flag check
+# considers the mount writability). The implementation PR MUST validate
+# on the target kernel (Ubuntu 22.04 HWE for BF-3) that mmap() of the
+# stats segment succeeds under this confinement; if it does not, switch
+# to ReadWritePaths=/dev/hugepages — NoNewPrivileges=true plus the
+# empty CapabilityBoundingSet= below already prevent privilege
+# escalation, so the security delta is small.
 ReadOnlyPaths=/dev/hugepages
 # Frontend opens its own listening socket (spec 005); if that ever
 # requires CAP_NET_BIND_SERVICE for port < 1024 we will revisit.
+# Note: with all capabilities dropped, accessing hugepages-backed
+# files relies entirely on filesystem permissions. The implementation
+# MUST verify the VPP stats-segment file mode/group on the target
+# image (typically 0640 root:vpp) and confirm that SupplementaryGroups=vpp
+# above is sufficient. If VPP is configured to create the segment
+# 0600 root:root, the operator must either reconfigure VPP's
+# stats-segment permissions or this unit must add CAP_DAC_READ_SEARCH
+# back to the bounding set. This is captured as an implementation-PR
+# acceptance check.
 CapabilityBoundingSet=
 AmbientCapabilities=
 
@@ -228,9 +280,12 @@ Notes:
   successfully attached to the stats segment and the binary-API socket.
   This guarantees that `systemctl start infmon-frontend` blocks until
   the service is actually consuming counters, not merely forked.
-- `PartOf=vpp.service` means a `systemctl restart vpp` automatically
-  restarts the frontend (which is correct: a VPP restart invalidates
-  the stats-segment mappings).
+- VPP-restart coupling is intentionally left to the frontend's own
+  retry loop rather than to a `PartOf=` / `BindsTo=` directive on
+  `vpp.service` (see the unit-file comment above): hard-coding the VPP
+  unit name would silently break for operators who run a renamed VPP
+  unit. The optional drop-in shown in the unit comment lets operators
+  on the canonical `vpp.service` opt in to auto-restart coupling.
 - The unit is installed enabled-by-default via `dh_installsystemd`'s
   default behaviour; operators who do not want it auto-started can
   `systemctl disable infmon-frontend` after install.
@@ -271,6 +326,28 @@ that the install order between the two packages does not matter.
   and restarts the unit. The snapshot/swap contract in spec 004 §7.2
   ensures no counters are lost across the restart window — at worst,
   one export interval is delayed.
+- **Frontend / backend version-skew handling.** Because `infmon.so` is
+  loaded into VPP and is not re-mapped until VPP itself is restarted,
+  an upgraded `infmon-frontend` may run against the *previous*
+  `infmon.so` until the operator restarts VPP. Two mechanisms keep
+  this safe:
+  1. The `Depends: infmon-backend (= ${binary:Version})` declared in
+     §3 prevents `apt` from leaving the on-disk packages skewed in
+     the first place — both packages must be at the same source
+     version after any transaction.
+  2. The frontend MUST query the backend's API version on every
+     binary-API connect (the existing message defined in spec 004 §7.1)
+     and refuse to start streaming if the major version of the loaded
+     plugin does not match its own. On mismatch it logs a structured
+     `backend_version_mismatch` error, parks in
+     `status=waiting_for_vpp_restart`, and `sd_notify(STATUS=...)`s
+     the same to systemd. This makes the upgrade window observable
+     and prevents silent deserialization corruption when the binary-
+     API messages have changed across a MAJOR bump.
+  The packaging spec records this as a normative requirement on the
+  frontend implementation; the wire-level details (message ID, fields,
+  exact string formats) are owned by spec 004 / spec 005 and may be
+  refined there.
 - Conffiles (`/etc/infmon/*.conf`) follow standard Debian conffile
   handling: operator edits are preserved; on a packaged-default change
   `dpkg` prompts.
@@ -291,9 +368,18 @@ There are two levels, matching standard Debian semantics:
 **`apt purge infmon-frontend infmon-backend infmon-cli`**
 
 - Everything from `remove`, plus:
-- Removes `/etc/infmon/` (including operator-edited conffiles).
-- Removes `/var/log/infmon/` and `/var/lib/infmon/`.
-- Removes the `infmon` system user and group.
+- Each package's `postrm` removes only its own conffiles and
+  package-private state — never the shared `/etc/infmon/` directory
+  itself, because another InFMon package may still own files there
+  (e.g. purging `infmon-frontend` while `infmon-backend` is still
+  installed must not delete `backend.conf`). After removing its own
+  conffiles, each `postrm` calls
+  `rmdir --ignore-fail-on-non-empty /etc/infmon` so the directory
+  disappears only once the last package is purged. `dpkg` itself
+  removes conffiles listed in each package's `conffiles` control file.
+- `infmon-frontend.postrm` additionally removes
+  `/var/log/infmon/` and `/var/lib/infmon/`, and the `infmon` system
+  user and group (these are owned exclusively by the frontend).
 - **Still leaves VPP alone.** We never call `apt remove vpp` from a
   maintainer script.
 
@@ -308,7 +394,7 @@ data-plane). Removing InFMon must never put that traffic at risk.
 | `postinst`    | `infmon-backend`  | Print NOTICE about `systemctl restart vpp`. No file changes beyond what `dpkg` already did.                                     |
 | `postinst`    | `infmon-frontend` | Create user, dirs; `deb-systemd-helper enable`; `deb-systemd-invoke start`.                                                     |
 | `prerm`       | `infmon-frontend` | `deb-systemd-invoke stop infmon-frontend.service`.                                                                              |
-| `postrm`      | `infmon-frontend` | On `purge`: remove `/etc/infmon`, `/var/log/infmon`, `/var/lib/infmon`, and the `infmon` user. On `remove`: nothing.            |
+| `postrm`      | `infmon-frontend` | On `purge`: remove `/var/log/infmon`, `/var/lib/infmon`, the `infmon` user, the frontend's own conffiles, then `rmdir --ignore-fail-on-non-empty /etc/infmon`. On `remove`: nothing. Never touches files owned by `infmon-backend`. |
 | `postrm`     | `infmon-backend`  | Print NOTICE that `infmon.so` is gone and operator should restart VPP if they want to unload it now.                            |
 
 All scripts are idempotent and follow Debian Policy §6.
@@ -320,8 +406,7 @@ debian/
 ├── changelog              # dch-managed; mirrors top-level CHANGELOG.md
 ├── control                # declares all 3 binary packages + meta package
 ├── copyright              # Apache-2.0, machine-readable format
-├── rules                  # dh $@ --with systemd, --buildsystem=cmake+cargo
-├── compat                 # 13
+├── rules                  # see below — explicit override targets, no cmake+cargo addon
 ├── source/format          # 3.0 (quilt)
 ├── infmon-backend.install
 ├── infmon-backend.postinst
@@ -338,13 +423,50 @@ debian/
 └── README.Debian                  # fd.io repo bootstrap, custom-VPP notes
 ```
 
-The `rules` file invokes the existing top-level build:
+Notes on the layout:
 
-- `cmake --build build/backend` → `infmon.so`, `infmon.api.json`
-- `cargo build --release -p infmon-frontend` → daemon binary
-- `cargo build --release -p infmon-cli` → `infmonctl`
-- `cargo run -p infmon-cli -- --generate-completions` → completions
-- `clap_mangen` → man page
+- There is no `debian/compat` file: compat level 13 is declared via
+  `debhelper-compat (= 13)` in `Build-Depends` (see below), and
+  shipping both would trigger lintian's
+  `uses-compat-file-with-debhelper-compat` warning.
+- `debian/source/format` contains exactly `3.0 (quilt)`; this is
+  required by `dpkg-source` to build the source package.
+
+The `rules` file invokes the existing top-level build. There is no
+`cmake+cargo` debhelper buildsystem — debhelper only ships `cmake`,
+`makefile`, `meson`, etc. Instead, `debian/rules` uses the default
+`dh` sequencer with explicit `override_dh_auto_*` targets that drive
+cmake (for the backend) and cargo (for the frontend / CLI) by hand:
+
+```make
+%:
+	dh $@
+
+override_dh_auto_configure:
+	cmake -S backend -B build/backend -DCMAKE_BUILD_TYPE=Release
+
+override_dh_auto_build:
+	cmake --build build/backend
+	cargo build --release --locked -p infmon-frontend
+	cargo build --release --locked -p infmon-cli
+	cargo run --release -p infmon-cli -- --generate-completions \
+	    > target/infmonctl.bash
+	# clap_mangen target produces target/infmonctl.1
+
+override_dh_auto_install:
+	cmake --install build/backend --prefix=$(CURDIR)/debian/tmp/usr
+	install -Dm0755 target/release/infmon-frontend \
+	    $(CURDIR)/debian/tmp/usr/bin/infmon-frontend
+	install -Dm0755 target/release/infmonctl \
+	    $(CURDIR)/debian/tmp/usr/bin/infmonctl
+
+override_dh_auto_test:
+	# Unit tests are run in CI separately; skip during package build.
+```
+
+The per-binary `*.install` files then partition `debian/tmp/` into the
+three output packages. This pattern is what other mixed cmake+cargo
+Debian packages (e.g. `librsvg`) use today.
 
 Build dependencies in `debian/control`:
 
@@ -373,7 +495,13 @@ InFMon uses **SemVer 2.0.0** (`MAJOR.MINOR.PATCH`) on the source release.
 - `MAJOR` bumps on incompatible changes to the binary-API messages
   (spec 004 §7.1), the stats-segment descriptor layout (spec 004 §6),
   the frontend REST contract (spec 005), or the CLI argument grammar
-  (spec 007) that the help text marks as stable.
+  marked as stable. Stable CLI arguments are those whose `clap`
+  definition does **not** carry the `#[arg(hide = true)]` attribute or
+  a doc-comment line starting with `UNSTABLE:`; the help text rendered
+  by `infmonctl --help` lists unstable flags in a separate
+  "Unstable / experimental" section so the boundary is mechanically
+  enforceable from the source. Spec 007 will be updated to make this
+  marking convention normative when this spec lands.
 - `MINOR` bumps on additive changes (new `flow_def` operators, new
   binary-API messages, new exporter formats).
 - `PATCH` bumps on bugfixes and packaging-only changes.
