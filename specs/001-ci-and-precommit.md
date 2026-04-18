@@ -5,7 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft. Defines local pre-commit contract, GH Actions workflows, x86 vs aarch64 split, and the §11 changelog of review fixes from PR #4 (banidoru). |
-| 0.2     | 2026-04-18 | BF-3 (r12f)  | Align VPP version from 24.02 → 24.10 across §4.3, §4.4, §5 to match deployment floor in specs 004/008. Resolve open question §9.2. |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Align VPP version from 24.02 → 24.10 across §4.3, §4.4, §5 to match deployment floor in specs 004/008. Resolve open question §9.2. |
 
 ## 1. Motivation
 
@@ -185,7 +185,7 @@ Cross-compilation smoke test: prove the BF-3 target builds; do not run tests
 - Runner: `ubuntu-24.04`.
 - Targets:
   - Rust: `aarch64-unknown-linux-gnu` via `cargo build --workspace --target aarch64-unknown-linux-gnu --release`. Linker: `aarch64-linux-gnu-gcc` from `gcc-aarch64-linux-gnu`. `cross` is acceptable as an alternative.
-  - C/C++: cross-toolchain in container `ligato/vpp-base:24.10-arm64` (multi-arch tag) **strongly preferred** over `--platform linux/arm64` build via `docker buildx`. The buildx/QEMU path emulates every compiler invocation and a full backend build can blow well past the §8 8-min warm target. Compile only; do **not** invoke `ctest`.
+  - C/C++: cross-toolchain in container `ligato/vpp-base:24.10-arm64` (multi-arch tag) **strongly preferred** over `--platform linux/arm64` build via `docker buildx`. **Note:** the `24.10-arm64` tag should be verified against the `ligato/vpp-base` registry before first CI run — it may not exist as a separate tag if the image uses a multi-arch manifest. The buildx/QEMU path emulates every compiler invocation and a full backend build can blow well past the §8 8-min warm target. Compile only; do **not** invoke `ctest`.
   - **Time budget for the QEMU fallback path**: if QEMU buildx is used, the spec accepts up to **20 min wall-time** for `cross-build` (vs. 8 min for the native cross-toolchain path) — implementers SHOULD treat anything beyond that as a CI bug and switch to the cross-toolchain image.
 - Cache: `Swatinem/rust-cache@v2` with target key suffix; `~/.ccache`.
 - Failure modes worth calling out:
@@ -206,7 +206,7 @@ Cross-compilation smoke test: prove the BF-3 target builds; do not run tests
 
 ## 5. Container image for VPP-in-CI
 
-**Proposal: use `ligato/vpp-base:24.10` (Debian-based, VPP 24.10 LTS) as the
+**Proposal: use `ligato/vpp-base:24.10` (Debian-based, VPP 24.10) as the
 primary CI image for `cpp-test` and `cross-build`.**
 
 Reasoning:
