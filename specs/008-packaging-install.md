@@ -102,7 +102,7 @@ will be bumped in lockstep with the build matrix in spec 001.
 
 If VPP is not installed when the user runs `apt install infmon-backend`,
 `apt` resolves the dependency from configured sources. We document the
-fd.io apt-repo bootstrap in `debian/README.Debian` and reproduce the
+fd.io apt-repo bootstrap in `packaging/debian/README.Debian` and reproduce the
 canonical command in this spec for reference:
 
 ```bash
@@ -118,7 +118,7 @@ sudo apt install infmon
 Operators should verify the fd.io GPG key fingerprint out-of-band
 against the fd.io project's published value before trusting it — a
 compromised signing key means a compromised VPP on a production DPU.
-`debian/README.Debian` reproduces the current fingerprint and the
+`packaging/debian/README.Debian` reproduces the current fingerprint and the
 verification command (`gpg --show-keys` on the dearmored file).
 
 We deliberately do **not** auto-add the fd.io repo from a maintainer
@@ -133,7 +133,7 @@ ships its own VPP). The recommended path is to build a local `equivs`
 shim package that satisfies the `vpp` / `vpp-plugin-core` virtual
 dependencies (or to install a locally-built VPP `.deb` that provides
 those names directly), then `apt install infmon-backend` resolves
-cleanly. We document both flows in `debian/README.Debian`.
+cleanly. We document both flows in `packaging/debian/README.Debian`.
 
 We deliberately do **not** recommend `dpkg --force-depends` as a
 first-class workaround: it leaves the package in a half-configured
@@ -397,7 +397,7 @@ All scripts are idempotent and follow Debian Policy §6.
 ## 8. Source-tree layout for `dpkg-buildpackage`
 
 ```
-debian/
+packaging/debian/
 ├── changelog              # dch-managed; mirrors top-level CHANGELOG.md
 ├── control                # declares all 3 binary packages + meta package
 ├── copyright              # Apache-2.0, machine-readable format
@@ -420,16 +420,16 @@ debian/
 
 Notes on the layout:
 
-- There is no `debian/compat` file: compat level 13 is declared via
+- There is no `packaging/debian/compat` file: compat level 13 is declared via
   `debhelper-compat (= 13)` in `Build-Depends` (see below), and
   shipping both would trigger lintian's
   `uses-compat-file-with-debhelper-compat` warning.
-- `debian/source/format` contains exactly `3.0 (quilt)`; this is
+- `packaging/debian/source/format` contains exactly `3.0 (quilt)`; this is
   required by `dpkg-source` to build the source package.
 
 The `rules` file invokes the existing top-level build. There is no
 `cmake+cargo` debhelper buildsystem — debhelper only ships `cmake`,
-`makefile`, `meson`, etc. Instead, `debian/rules` uses the default
+`makefile`, `meson`, etc. Instead, `packaging/debian/rules` uses the default
 `dh` sequencer with explicit `override_dh_auto_*` targets that drive
 cmake (for the backend) and cargo (for the frontend / CLI) by hand:
 
@@ -463,7 +463,7 @@ The per-binary `*.install` files then partition `debian/tmp/` into the
 three output packages. This pattern is what other mixed cmake+cargo
 Debian packages (e.g. `librsvg`) use today.
 
-Build dependencies in `debian/control`:
+Build dependencies in `packaging/debian/control`:
 
 ```
 Build-Depends:
@@ -517,11 +517,11 @@ them before the final: `1.5.0~rc1-1` < `1.5.0-1`.
 ### 9.2 Single source of truth
 
 The top-level `CHANGELOG.md` (Keep a Changelog format, already added in
-the bootstrap PR) is the canonical changelog. `debian/changelog` is
+the bootstrap PR) is the canonical changelog. `packaging/debian/changelog` is
 generated from it by a small `tools/sync-debian-changelog.py` script
-invoked from `debian/rules` at source-package build time, so the two
+invoked from `packaging/debian/rules` at source-package build time, so the two
 never drift. Each `infmon` release tag (`vX.Y.Z`) creates exactly one
-`CHANGELOG.md` entry and exactly one `debian/changelog` entry.
+`CHANGELOG.md` entry and exactly one `packaging/debian/changelog` entry.
 
 The package metadata exposes the changelog at
 `/usr/share/doc/<package>/changelog.gz`, which `apt changelog infmon`
@@ -530,7 +530,7 @@ project ships as one source release).
 
 ### 9.3 Link from packages to CHANGELOG
 
-`debian/control` sets:
+`packaging/debian/control` sets:
 
 ```
 Homepage: https://github.com/r12f/InFMon
@@ -538,7 +538,7 @@ Vcs-Browser: https://github.com/r12f/InFMon
 Vcs-Git: https://github.com/r12f/InFMon.git
 ```
 
-and `debian/copyright` references the upstream `CHANGELOG.md` via the
+and `packaging/debian/copyright` references the upstream `CHANGELOG.md` via the
 `Source:` field, so `apt show infmon` points operators at both the repo
 and the human-readable changelog.
 
@@ -561,5 +561,5 @@ and the human-readable changelog.
 
 This spec is accepted (per the project's spec-first process — see spec
 000) when it is merged to `main` with @banidoru's sign-off. After
-acceptance, the implementation PR for the `debian/` tree may begin and
+acceptance, the implementation PR for the `packaging/debian/` tree may begin and
 must conform to §3–§9 or amend this spec first.
