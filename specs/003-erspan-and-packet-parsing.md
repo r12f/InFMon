@@ -6,11 +6,10 @@
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | r12f        | Initial draft. |
 | 0.2     | 2026-04-18 | r12f        | Surface `mirror_src_ip` (outer GRE source IP) to downstream as the only outer-header value that crosses the parser boundary. ERSPAN session ID still stripped. |
-| 0.3     | 2026-04-18 | bf3(agent)| Add §4.2.1 explicit outer-IPv4/IPv6 source-IP extraction → `mirror_src_ip` as a parsed field exposed to flow-keys (Spec 002). ERSPAN session ID remains dropped. Align prose with the flow-rule/flow split. |
+| 0.3     | 2026-04-18 | r12f       | Add §4.2.1 explicit outer-IPv4/IPv6 source-IP extraction → `mirror_src_ip` as a parsed field exposed to flow-keys (Spec 002). ERSPAN session ID remains dropped. Align prose with the flow-rule/flow split. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
-| Tracking | DPU-9 (parent: DPU-4 — EPIC InFMon)                           |
 | Repo     | https://github.com/r12f/InFMon                                |
 
 ## 1. Motivation
