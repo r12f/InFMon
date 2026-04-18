@@ -1,14 +1,15 @@
 name: package-deb
 
-# Cross-build the InFMon .deb packages for arm64 (BlueField-3 target)
-# per spec 008. Produces three binary packages + the meta package and
-# uploads them as workflow artefacts.
+# Native arm64 build of InFMon .deb packages (BlueField-3 target)
+# per spec 008. Runs on GitHub's native arm64 runner. Produces three
+# binary packages + the meta package and uploads them as workflow
+# artefacts.
 #
 # This workflow is intentionally permissive while the source trees
-# under src/ are still empty: debian/rules skips the cmake/cargo
-# steps when the corresponding inputs are missing, so this gate
-# verifies the packaging tree itself (control / changelog / scripts /
-# unit file) before the implementations land.
+# are still empty: debian/rules skips the cmake/cargo steps when
+# the corresponding inputs are missing, so this gate verifies the
+# packaging tree itself (control / changelog / scripts / unit file)
+# before the implementations land.
 
 on:
   push:
@@ -34,7 +35,7 @@ permissions:
 jobs:
   package-deb:
     name: dpkg-buildpackage (arm64)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
 
     steps:
@@ -46,7 +47,7 @@ jobs:
       - name: Run sync script unit tests
         run: python3 -m unittest discover -s tools/tests -v
 
-      - name: Install host tooling
+      - name: Install build tooling
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -55,30 +56,10 @@ jobs:
             debhelper \
             dpkg-dev \
             fakeroot \
-            lintian \
-            qemu-user-static \
-            binfmt-support \
-            sbuild \
-            schroot \
-            debootstrap
-
-      - name: Set up arm64 cross toolchain
-        run: |
-          sudo dpkg --add-architecture arm64
-          # Restrict the default sources to amd64/i386 so apt does not
-          # try to fetch arm64 from the wrong mirror.
-          sudo sed -i 's/^deb /deb [arch=amd64,i386] /' /etc/apt/sources.list
-          sudo tee /etc/apt/sources.list.d/arm64.list >/dev/null <<'EOF'
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main universe
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main universe
-          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main universe
-          EOF
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            crossbuild-essential-arm64
+            lintian
 
       - name: Validate debian/control parses
-        run: dpkg-checkbuilddeps -a arm64 || true   # informational
+        run: dpkg-checkbuilddeps || true   # informational
 
       - name: Synthesize upstream orig tarball
         # Source format is `3.0 (quilt)` (non-native), which requires an
@@ -105,7 +86,7 @@ jobs:
           dpkg-buildpackage -S -us -uc -d
           ls -la ../
 
-      - name: Cross-build binary .debs for arm64
+      - name: Build binary .debs
         env:
           DEB_BUILD_OPTIONS: "nocheck parallel=2"
         run: |
@@ -116,7 +97,7 @@ jobs:
           # the real build-deps via mk-build-deps.
           # TODO(DPU-XX): remove -d and add mk-build-deps step once
           # VPP build-deps are available in CI.
-          dpkg-buildpackage -B -us -uc -d -aarm64
+          dpkg-buildpackage -B -us -uc -d
           mkdir -p artifacts
           mv ../*.deb ../*.changes ../*.buildinfo artifacts/ 2>/dev/null || true
           ls -la artifacts/

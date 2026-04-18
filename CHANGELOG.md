@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   upgrade, remove, and purge.
 - `tools/sync-debian-changelog.py`: regenerates `debian/changelog`
   from this file at source-package build time.
-- GitHub Actions workflow `package-deb.yml`: cross-builds the `.deb`s
+- GitHub Actions workflow `package-deb.yml`: builds the `.deb`s
   for `arm64` on every push and uploads them as workflow artefacts.
 
 <!-- TODO: replace with a real diff link (e.g. compare/v0.1.0...HEAD) once the

@@ -87,6 +87,7 @@ def _parse_changelog(md: str) -> List[Tuple[str, str | None, List[Tuple[str, str
     cur_date: str | None = None
     cur_subsection: str = "Changed"
     cur_bullets: List[Tuple[str, str]] = []
+    in_html_comment: bool = False
 
     def flush():
         if cur_ver is not None:
@@ -112,7 +113,17 @@ def _parse_changelog(md: str) -> List[Tuple[str, str | None, List[Tuple[str, str
             cur_bullets.append((cur_subsection, bm.group("text")))
             continue
         # Continuation line: indented text that follows a bullet
-        if cur_bullets and line.startswith("  ") and line.strip():
+        # Skip HTML comment blocks
+        stripped = line.strip()
+        if stripped.startswith("<!--"):
+            if "-->" not in stripped:
+                in_html_comment = True
+            continue
+        if in_html_comment:
+            if "-->" in stripped:
+                in_html_comment = False
+            continue
+        if cur_bullets and line.startswith("  ") and stripped:
             section, prev = cur_bullets[-1]
             cur_bullets[-1] = (section, prev + " " + line.strip())
 
