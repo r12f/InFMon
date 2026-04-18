@@ -5,19 +5,20 @@
 | Version | Date       | Author      | Changes        |
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
+| 0.2     | 2026-04-18 | bf3 (agent) | Rename `tracker` → `flow-rule`, `bucket` → `flow`. |
 
 Tracking issue: DPU-12 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
 Depends on: 000-overview (system overview),
-            002-flow-tracking-model (defines trackers, keys, buckets,
-            and the per-tracker observability counters this exporter ships)
+            002-flow-tracking-model (defines flow-rules, keys, flows,
+            and the per-flow-rule observability counters this exporter ships)
 Related: 004-backend-architecture (owns the snapshot mechanism the
          exporter consumes), 005-frontend (hosts the exporter process),
          007-cli (`infmon-cli exporter ...` surface)
 
 ## 1. Purpose
 
-Define the **v1 OpenTelemetry (OTLP) exporter** for InFMon: how flow-tracker
+Define the **v1 OpenTelemetry (OTLP) exporter** for InFMon: how flow-flow-rule
 state held by the backend (Spec 002) is turned into OTLP metrics and shipped
 off-DPU to a collector.
 
@@ -39,7 +40,7 @@ should run an OpenTelemetry Collector adjacent to the DPU.
 
 The exporter never touches the data plane. It consumes the **snapshot**
 surface owned by the backend (Spec 004) on a fixed cadence and translates
-each tracker's live buckets into OTLP data points.
+each flow-rule's live flows into OTLP data points.
 
 ### 2.3 Wire shape
 
@@ -55,16 +56,16 @@ InFMon exports **metrics** only in v1. Logs and traces are out of scope —
 flow data is intrinsically aggregate counter state, and shoehorning it
 through `Logs` would lose the collector's native aggregation pipeline.
 
-### 3.2 Per-bucket data points
+### 3.2 Per-flow data points
 
-Each live bucket in each tracker becomes a fixed set of OTLP data points,
-all sharing the bucket's attribute set (§4):
+Each live flow in each flow-rule becomes a fixed set of OTLP data points,
+all sharing the flow's attribute set (§4):
 
 | OTLP metric name             | Instrument | Unit  | Source field      | Notes                                     |
 |------------------------------|------------|-------|-------------------|-------------------------------------------|
-| `infmon.flow.packets`        | Sum (cumulative, monotonic) | `{packets}` | `bucket.packets` | Total packets attributed to this bucket. |
-| `infmon.flow.bytes`          | Sum (cumulative, monotonic) | `By`        | `bucket.bytes`   | Total bytes (L3 length per Spec 003).    |
-| `infmon.flow.last_seen`      | Gauge      | `ns`  | `bucket.last_seen_ns` | Wall-clock ns of the most recent packet that updated this bucket. |
+| `infmon.flow.packets`        | Sum (cumulative, monotonic) | `{packets}` | `flow.packets` | Total packets attributed to this flow. |
+| `infmon.flow.bytes`          | Sum (cumulative, monotonic) | `By`        | `flow.bytes`   | Total bytes (L3 length per Spec 003).    |
+| `infmon.flow.last_seen`      | Gauge      | `ns`  | `flow.last_seen_ns` | Wall-clock ns of the most recent packet that updated this flow. |
 
 `first_seen_ns` is **not** exported as its own data point. It is folded into
 the data-point `start_time_unix_nano` of the two `Sum` metrics, which is the
@@ -76,36 +77,36 @@ OTLP-native way to express "this counter started accumulating at time T".
 
 - Cumulative is the OTLP default and what most collector pipelines (Prometheus
   remote-write, Mimir, Cortex) prefer.
-- The backend owns the bucket lifetime; the exporter is stateless. Cumulative
+- The backend owns the flow lifetime; the exporter is stateless. Cumulative
   + a stable `start_time_unix_nano` lets a collector compute deltas without
   the exporter having to track previous-export state.
-- On bucket eviction (Spec 002 §6) the counter is gone. Receivers that
+- On flow eviction (Spec 002 §6) the counter is gone. Receivers that
   compute deltas will see a counter reset; OTLP Sum semantics handle that
   correctly when `start_time_unix_nano` advances.
 
-### 3.4 Per-tracker observability points
+### 3.4 Per-flow-rule observability points
 
-The counters defined in Spec 002 §8 are exported alongside the per-bucket
-data points. They are scoped to the tracker, not the key:
+The counters defined in Spec 002 §8 are exported alongside the per-flow
+data points. They are scoped to the flow-rule, not the key:
 
 | OTLP metric name                  | Instrument | Unit         | Source                                    |
 |-----------------------------------|------------|--------------|-------------------------------------------|
-| `infmon.tracker.buckets`          | Gauge      | `{buckets}`  | `infmon_tracker_buckets`                  |
-| `infmon.tracker.evictions`        | Sum (cum.) | `{evictions}`| `infmon_tracker_evictions_total`          |
-| `infmon.tracker.drops`            | Sum (cum.) | `{drops}`    | `infmon_tracker_drops_total{reason}`      |
-| `infmon.tracker.packets`          | Sum (cum.) | `{packets}`  | `infmon_tracker_packets_total`            |
-| `infmon.tracker.bytes`            | Sum (cum.) | `By`         | `infmon_tracker_bytes_total`              |
+| `infmon.flow-rule.flows`          | Gauge      | `{flows}`  | `infmon_tracker_buckets`                  |
+| `infmon.flow-rule.evictions`        | Sum (cum.) | `{evictions}`| `infmon_tracker_evictions_total`          |
+| `infmon.flow-rule.drops`            | Sum (cum.) | `{drops}`    | `infmon_tracker_drops_total{reason}`      |
+| `infmon.flow-rule.packets`          | Sum (cum.) | `{packets}`  | `infmon_tracker_packets_total`            |
+| `infmon.flow-rule.bytes`            | Sum (cum.) | `By`         | `infmon_tracker_bytes_total`              |
 
-Their attribute set is `{tracker}` (plus `reason` for `drops`), nothing else.
+Their attribute set is `{flow-rule}` (plus `reason` for `drops`), nothing else.
 
-## 4. Attribute mapping (per-bucket points)
+## 4. Attribute mapping (per-flow points)
 
-Each per-bucket data point carries a fixed attribute set derived from
-the tracker's field list (Spec 002 §3) plus a `tracker` label:
+Each per-flow data point carries a fixed attribute set derived from
+the flow-rule's field list (Spec 002 §3) plus a `flow-rule` label:
 
 | Attribute         | Type        | Source                                  |
 |-------------------|-------------|-----------------------------------------|
-| `tracker`         | string      | tracker `name` (Spec 002 §2.1)          |
+| `flow-rule`         | string      | flow-rule `name` (Spec 002 §2.1)          |
 | `flow.src_ip`     | string      | `enc(src_ip)` rendered as canonical text (IPv4 if v4-mapped, else v6) |
 | `flow.dst_ip`     | string      | same rule for `dst_ip`                  |
 | `flow.ip_proto`   | int         | numeric `ip_proto`, 0–255               |
@@ -114,8 +115,8 @@ the tracker's field list (Spec 002 §3) plus a `tracker` label:
 Rules:
 
 1. The exporter MUST emit **only** attributes that correspond to fields
-   actually present in the tracker's `ordered_field_list`. A tracker keyed
-   on `[dscp]` produces points with attributes `{tracker, flow.dscp}` —
+   actually present in the flow-rule's `ordered_field_list`. A flow-rule keyed
+   on `[dscp]` produces points with attributes `{flow-rule, flow.dscp}` —
    nothing else.
 2. The mapping is fixed (§9 reserves the `flow.*` namespace for future
    fields). Attribute names MUST NOT vary between exports.
@@ -232,8 +233,8 @@ On each tick:
 
 1. Ask the backend for a fresh snapshot (Spec 004 surface). The snapshot
    is read-only and lock-free w.r.t. the data plane.
-2. Walk every tracker. For each live bucket emit the data points defined
-   in §3.2. Append the per-tracker points (§3.4).
+2. Walk every flow-rule. For each live flow emit the data points defined
+   in §3.2. Append the per-flow-rule points (§3.4).
 3. Group data points into OTLP `ResourceMetrics` → `ScopeMetrics` →
    `Metric` according to standard OTLP shape (one `ResourceMetrics` per
    process; one `ScopeMetrics` per InstrumentationScope `infmon`; one
@@ -288,21 +289,21 @@ guarantee a restart will resume cleanly with a fresh
 ## 8. Cardinality guidance and safeguards
 
 OTLP cardinality is the single sharpest foot-gun in this exporter, since
-each live bucket becomes ≥ 3 unique time series in the receiving TSDB.
+each live flow becomes ≥ 3 unique time series in the receiving TSDB.
 
 ### 8.1 Operator-facing guidance
 
 Document in the `infmon-frontend` operator README and CLI `--help`:
 
-- A tracker's worst-case time-series contribution to the collector is
-  `max_keys × distinct_data_points_per_bucket`. With v1's 3 per-bucket
-  metrics, a tracker with `max_keys = 1_048_576` can land 3 Mi series in
+- A flow-rule's worst-case time-series contribution to the collector is
+  `max_keys × distinct_data_points_per_bucket`. With v1's 3 per-flow
+  metrics, a flow-rule with `max_keys = 1_048_576` can land 3 Mi series in
   the receiving TSDB **per scrape interval**.
-- The four v1 fields are *all* high-cardinality except `dscp`. A tracker
+- The four v1 fields are *all* high-cardinality except `dscp`. A flow-rule
   keyed on `[src_ip, dst_ip, ip_proto, dscp]` is appropriate for an
   always-on production deployment **only** if the receiving TSDB is sized
   for it.
-- Prefer narrower trackers (e.g. `[src_ip]` for talker tables, `[dscp]`
+- Prefer narrower flow-rules (e.g. `[src_ip]` for talker tables, `[dscp]`
   for class-of-service rollups) for default-on deployments.
 - The growth signal is `infmon_tracker_evictions_total`. A non-zero,
   growing eviction rate means cardinality exceeds the configured budget;
@@ -314,18 +315,18 @@ The exporter MUST enforce these, independently of the backend:
 
 1. **Hard per-export point cap** — `max_export_points_per_tick`
    (compile-time default `2_000_000`). If a tick would emit more, the
-   exporter ships the first cap-many points sorted by tracker name then
-   bucket recency and **drops the rest**, bumping
+   exporter ships the first cap-many points sorted by flow-rule name then
+   flow recency and **drops the rest**, bumping
    `infmon_exporter_points_dropped_total{reason="export_cap"}`. This
    protects the collector from a backend misconfiguration.
 2. **Per-attribute length cap** — string attribute values are truncated
    to 256 bytes (UTF-8 safe) with a trailing `…`. Bumps
    `infmon_exporter_attrs_truncated_total`.
-3. **Drop empty trackers** — a tracker with zero live buckets emits its
-   per-tracker points (§3.4) but no per-bucket points. This is normal,
+3. **Drop empty flow-rules** — a flow-rule with zero live flows emits its
+   per-flow-rule points (§3.4) but no per-flow points. This is normal,
    not an error.
 4. **No metadata explosion** — the exporter MUST NOT add free-form
-   per-bucket attributes beyond §4. There is no escape hatch in v1.
+   per-flow attributes beyond §4. There is no escape hatch in v1.
 
 ### 8.3 Self-observability
 
@@ -344,7 +345,7 @@ The exporter exports its own health on the same OTLP stream:
 | `infmon.exporter.queue_depth`                 | Gauge      | `{batches}`|
 
 These carry the §5 resource attributes and a `reason` attribute where
-relevant; they do **not** carry tracker or bucket attributes.
+relevant; they do **not** carry flow-rule or flow attributes.
 
 ## 9. Future extension hooks (non-normative)
 
@@ -354,7 +355,7 @@ relevant; they do **not** carry tracker or bucket attributes.
 - **RoCE attributes.** `flow.roce_dest_qp`, `flow.roce_opcode` etc.,
   one-to-one with Spec 002 §9.2 fields.
 - **Histograms.** RTT samples (Spec 000 component map mentions them as
-  a future bucket field) will export as OTLP `Histogram`. The instrument
+  a future flow field) will export as OTLP `Histogram`. The instrument
   type column in §3.2 / §3.4 is precisely why instrument is per-metric,
   not global.
 - **Multiple destinations.** v1 explicitly forbids fan-out; v2 can add
@@ -392,7 +393,7 @@ relevant; they do **not** carry tracker or bucket attributes.
     attribute keys.
 - **Performance:**
   - On the v1 target host (BF-3 ARM cores), an export tick over 1M live
-    buckets across 8 trackers SHOULD complete in ≤ 2 s wall time (well
+    flows across 8 flow-rules SHOULD complete in ≤ 2 s wall time (well
     under the 10 s default `export_interval`). This is a guideline, not
     a CI gate.
 
