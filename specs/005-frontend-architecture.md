@@ -7,6 +7,7 @@
 | 0.1     | 2026-04-18 | Riff (r12f)  | Consolidated from v0.1–v0.6. Initial draft of `infmon-frontend` (Rust). Task model, `interval_ns` defined on tick 1, single-reader enforcement, reload-rollback failure handling, stop exit code, complete tracker→flow-rule rename (`FlowRuleStats`/`FlowRuleCounters`/`FlowRuleDef`/`FlowStatsSnapshot`), metric prefix cleanup, YAML config, `polling_interval_ms`, `InFMonStatsClient`/`InFMonControlClient`, control-plane `flow_rule_*` methods, and §3.0 mental-model paragraph. |
 | 0.2     | 2026-04-18 | Riff (r12f)   | Unify config path to `/etc/infmon/config.yaml` (YAML); rename `timeout_ms` → `export_timeout` to align with spec 006. |
 | 0.3     | 2026-04-18 | Riff (r12f)   | Fix stats segment path: replace custom `/dev/shm/infmon-stats` with VPP's native stats segment socket (`/run/vpp/stats.sock`), converging with Spec 004. |
+| 0.4     | 2026-04-18 | Riff (r12f)   | Remove `frontend-` prefix from crate subfolder names; remove artificial `polling_interval_ms` restriction. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`004-backend-architecture`](004-backend-architecture.md)
@@ -111,7 +112,7 @@ FlowRuleStats {
 
 Flows carry the v1 counter set defined by Spec 002 §2.3 (`packets`,
 `bytes`, `first_seen_ns`, `last_seen_ns`). The `FlowStats` struct is the
-**decoded frontend representation** built by `frontend-ipc` from the
+**decoded frontend representation** built by the `ipc` crate from the
 raw stats-segment record (whose binary layout is Spec 004's; the wire
 shape is not the in-memory shape). Concretely, in this spec:
 
@@ -176,7 +177,7 @@ The frontend reads two pieces of config at start (and at reload):
 # /etc/infmon/config.yaml
 
 frontend:
-  polling_interval_ms: 1000           # v1: only 1000 is supported
+  polling_interval_ms: 1000           # default 1000; any positive value accepted
   backend_socket: "/run/infmon/backend.sock"
   control_socket: "/run/infmon/frontend.sock"
   vpp_stats_socket: "/run/vpp/stats.sock"   # VPP's native stats segment socket
@@ -191,9 +192,8 @@ exporters:
     on_overflow: "drop_oldest"         # drop_oldest | drop_newest
 ```
 
-`polling_interval_ms` is fixed at `1000` in v1; the field exists so a future spec can
-move to sub-second cadence without a config break. Validation is
-all-or-nothing: a bad exporter block fails the whole reload (§9.2).
+`polling_interval_ms` defaults to `1000` and accepts any positive value.
+Validation is all-or-nothing: a bad exporter block fails the whole reload (§9.2).
 
 `export_timeout` is the deadline applied to a single `Exporter::export`
 call by the dispatcher and is **decoupled from the tick interval**:
@@ -261,17 +261,17 @@ The `[[exporter]]` blocks in §5 are matched to registrations by
 
 ```text
 src/infmon-frontend/
-├── frontend-core/        # tick loop, lifecycle, FlowStatsSnapshot
-├── frontend-exporter/    # Exporter trait, registration, dispatch
-├── frontend-ipc/         # shared with infmon-cli (Spec 007)
-└── frontend-bin/         # main(), config loading, signal wiring
+├── core/                 # tick loop, lifecycle, FlowStatsSnapshot
+├── exporter/             # Exporter trait, registration, dispatch
+├── ipc/                  # shared with infmon-cli (Spec 007)
+└── bin/                  # main(), config loading, signal wiring
 src/exporters/
 └── otlp/                 # the v1 exporter (Spec 006)
 ```
 
 Adding an exporter is: new crate under `src/exporters/`, depend on
-`frontend-exporter`, `inventory::submit!` a registration, declare the
-crate as a dep of `frontend-bin`. No changes to the loop or the trait.
+`exporter`, `inventory::submit!` a registration, declare the
+crate as a dep of `bin`. No changes to the loop or the trait.
 
 ## 7. Backpressure & failure handling
 
@@ -296,7 +296,7 @@ Mechanism:
 | Policy            | Behavior                                                                 | When to use                          |
 |-------------------|--------------------------------------------------------------------------|--------------------------------------|
 | `drop_oldest`     | Pop oldest queued tick, push new one. Bumps `frontend_drops_total{reason="overflow_old"}`.  | **Default.** Freshness wins.         |
-| `drop_newest`     | Discard the just-produced tick. Bumps `..reason="overflow_new"`.         | Exporters that prefer monotonic seq. |
+|| `drop_newest`     | Discard the just-produced tick. Bumps `..reason="overflow_new"`.         | Exporters that prefer monotonic seq. |
 
 A `block_one_tick` policy was considered and rejected for v1: any
 poller-side blocking starves *all* exporters of the next tick, which
@@ -336,7 +336,7 @@ A `mmap`'d shared-memory region (VPP's native stats segment, accessed via
 `frontend.vpp_stats_socket`, default `/run/vpp/stats.sock`) whose layout
 is owned by Spec 004.
 The frontend reads it on every tick to obtain flow data. The
-client crate (`frontend-ipc`) exposes:
+client crate (`ipc`) exposes:
 
 ```rust
 pub struct InFMonStatsClient { /* ... */ }
@@ -401,7 +401,7 @@ impl InFMonControlClient {
 ```
 
 `infmon-cli` (Spec 007) is a thin wrapper over `InFMonControlClient`;
-keeping the client in `frontend-ipc` means the CLI and frontend
+keeping the client in the `ipc` crate means the CLI and frontend
 cannot drift on the wire format.
 
 ### 8.3 Reconnection
@@ -538,7 +538,7 @@ Metrics emitted (under `frontend_*`):
 - `frontend_export_failures_total{exporter,reason}` — counter;
   `reason` ∈ `{"transient","timeout","permanent"}`.
 - `frontend_drops_total{exporter,reason}` — counter; `reason`
-  ∈ `{"overflow_old","overflow_new"}`.
+`reason` ∈ `{"overflow_old","overflow_new"}`
 - `frontend_export_disabled_total{exporter}` — counter, bumped
   once when an exporter goes `permanent`.
 - `frontend_backend_disconnects_total` — counter.
@@ -550,9 +550,9 @@ operator answer "is the frontend keeping up?" without reading logs.
 
 | Layer            | Test type      | What it covers                                      |
 |------------------|----------------|-----------------------------------------------------|
-| `frontend-ipc`   | unit (cargo)   | Snapshot decode, control RPC round-trips against an in-process fake backend. |
-| `frontend-core`  | unit (cargo)   | Tick scheduling skew under load; snapshot decode. |
-| `frontend-exporter` | unit        | Backpressure policies; permanent-error disables exporter; reload rollback. |
+| `ipc`            | unit (cargo)   | Snapshot decode, control RPC round-trips against an in-process fake backend. |
+| `core`           | unit (cargo)   | Tick scheduling skew under load; snapshot decode. |
+| `exporter`       | unit        | Backpressure policies; permanent-error disables exporter; reload rollback. |
 | `otlp` exporter  | unit + integ   | Wire format vs. an embedded OTLP receiver (Spec 006). |
 | frontend bin     | integration    | `start → reload → stop` against a stub backend that mocks the stats segment and control socket. Lives in `tests/` (Spec 000), not in CI. |
 
@@ -562,9 +562,10 @@ project-wide policy.
 
 ## 12. Future extension hooks (non-normative)
 
-- **Sub-second tick.** Move `polling_interval_ms` below 1000 once we have evidence
-  the backend's `snapshot_and_clear` and the OTLP collector can keep
-  up. No trait change required.
+- **Sub-second tick.** `polling_interval_ms` already accepts any positive
+  value; lowering it below 1000 only requires evidence that the
+  backend's `snapshot_and_clear` and the OTLP collector can keep up.
+  No trait or config change required.
 - **Dynamic exporter loading.** Replace the `inventory` registration
   with a `dlopen`-style loader. Trait stays the same; only
   registration changes.
