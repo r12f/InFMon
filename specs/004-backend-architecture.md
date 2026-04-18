@@ -2,11 +2,11 @@
 
 ## Version history
 
-- **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`003-erspan-and-packet-parsing`](003-erspan-and-packet-parsing.md)
-
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of `infmon-backend` (VPP plugin). Linear-probing flow table with offset-based descriptors, memory ordering, epoch-based RCU, scratch cap, alloc-failed recovery; internal identifiers use `flow_rule*` per Spec 002 mental model; per-worker scratch-triple and §6 emit format use `flow_rule_index` (u32 handle), keeping the 24 B/entry estimate. |
+
+- **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`003-erspan-and-packet-parsing`](003-erspan-and-packet-parsing.md)
 
 ## 1. Motivation
 
