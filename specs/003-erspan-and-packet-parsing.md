@@ -5,6 +5,7 @@
 | Version | Date       | Author      | Changes        |
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
+| 0.2     | 2026-04-18 | bf3 (agent) | Surface `mirror_src_ip` (outer GRE source IP) to downstream as the only outer-header value that crosses the parser boundary. ERSPAN session ID still stripped. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
@@ -40,6 +41,11 @@ In scope:
 - Skipping all outer headers (Ethernet, optional single VLAN, IPv4/IPv6, GRE,
   ERSPAN III header + optional Platform-Specific Sub-Header).
 - Returning a bounded view of the **inner packet** to downstream code.
+- Surfacing **mirror metadata** (currently the outer source IP — i.e. the
+  IP of the device that mirrored the packet to us) alongside the inner view
+  so downstream flow-rules can key on or label by mirror device. This is
+  the only outer-header field that propagates downstream; everything else
+  is dropped by §4.
 - Tolerating truncated mirror copies (~128 B end-to-end) without overreads.
 - A **single inner-decap hook** reserving room for one future extra
   encapsulation layer (VXLAN / GENEVE / RoCEv2). v1 ships the hook **disabled**
@@ -165,7 +171,9 @@ explicit feature flag and a new spec.
 
 The "inner packet" begins at the first byte after the ERSPAN III header (and
 Platform Sub-Header, if present). All downstream parsers, matchers, and
-feature extractors **see only the inner packet**.
+feature extractors **see only the inner packet**, with the single exception
+of `mirror_src_ip` (see "The parser returns" below) which travels alongside
+the inner view as opaque mirror-device metadata.
 
 The parser returns:
 
@@ -173,6 +181,12 @@ The parser returns:
 - `inner_len` — number of inner bytes available (may be less than the declared
   inner length; see §5).
 - `inner_truncated` — bool, true iff `inner_len < declared_inner_len`.
+- `mirror_src_ip` — the **outer source IP** of the GRE/ERSPAN packet,
+  i.e. the IP address of the device that performed the mirror. Stored as
+  a tagged union (`v4` / `v6`), copied out of the outer L3 header before
+  the outer headers are discarded. This is the only outer-header value
+  that crosses the parser boundary; downstream code MUST treat all other
+  outer fields as gone. The ERSPAN session ID remains stripped (§4.4).
 
 `declared_inner_len` is computed from the outer IP length field minus the
 bytes consumed by outer L3 + GRE + ERSPAN III + (optional) Platform
