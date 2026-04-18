@@ -4,8 +4,8 @@
 
 | Version | Date       | Author      | Changes                                              |
 | ------- | ---------- | ----------- | ---------------------------------------------------- |
-| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft.                                       |
-| 0.2     | 2026-04-18 | bf3 (agent) | Address PR #4 review (banidoru). See §11 changelog. |
+| 0.1     | 2026-04-18 | r12f        | Initial draft.                                       |
+| 0.2     | 2026-04-18 | r12f        | Address PR #4 review (banidoru). See §11 changelog. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
