@@ -1,10 +1,13 @@
 # Spec 001 — CI and Pre-commit
 
+## Version history
+
+| Version | Date       | Author      | Changes        |
+| ------- | ---------- | ----------- | -------------- |
+| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
+
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
-| Status   | Draft                                                         |
-| Owner    | bf3 (agent)                                                   |
-| Reviewer | @banidoru                                                     |
 | Tracking | DPU-7 (parent: DPU-4 — EPIC InFMon)                           |
 | Repo     | https://github.com/r12f/InFMon                                |
 
