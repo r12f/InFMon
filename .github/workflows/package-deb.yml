@@ -91,7 +91,10 @@ jobs:
           set -euo pipefail
           PKG=$(dpkg-parsechangelog -SSource)
           UVER=$(dpkg-parsechangelog -SVersion | sed 's/-[^-]*$//')
-          tar --exclude='./debian' --exclude-vcs --exclude='./.github' \
+          # IMPORTANT: only exclude ./debian and VCS metadata. Anything else
+          # excluded from the orig tarball will be flagged as an unexpected
+          # upstream change by `dpkg-source -b` under format '3.0 (quilt)'.
+          tar --exclude='./debian' --exclude-vcs \
               -czf "../${PKG}_${UVER}.orig.tar.gz" .
           ls -la "../${PKG}_${UVER}.orig.tar.gz"
 
