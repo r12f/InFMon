@@ -55,27 +55,31 @@ repos:
           - --error-exitcode=1
           - --inline-suppr
           - --suppressions-list=.cppcheck-suppressions
-          - --std=c11
-          - --language=c
+          # Let cppcheck auto-detect C vs C++ per file extension. Forcing
+          # --std=c11 / --language=c misparses any .cpp/.cc sources we add
+          # later under src/infmon-backend gtest harnesses.
 
   # ---------------------------------------------------------------------------
   # Rust -- delegated to local cargo so we use the workspace toolchain.
+  # The wrappers below short-circuit cleanly when no Cargo workspace exists
+  # yet, so `pre-commit run --all-files` (and therefore `make lint` and the
+  # `lint` CI job) stays green on the bootstrap repo state.
   # ---------------------------------------------------------------------------
   - repo: local
     hooks:
       - id: rustfmt
         name: rustfmt
-        description: "cargo fmt --all -- --check"
-        entry: cargo fmt --all -- --check
-        language: system
+        description: "cargo fmt --all -- --check (skipped when no Cargo.toml)"
+        entry: ci/run-rustfmt.sh
+        language: script
         types: [rust]
         pass_filenames: false
 
       - id: clippy
         name: clippy
-        description: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
-        entry: cargo clippy --workspace --all-targets --all-features -- -D warnings
-        language: system
+        description: "cargo clippy --workspace --all-targets --all-features -- -D warnings (skipped when no Cargo.toml)"
+        entry: ci/run-clippy.sh
+        language: script
         types: [rust]
         pass_filenames: false
 

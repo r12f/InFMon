@@ -33,6 +33,7 @@ gh api \
       "rust-test",
       "cpp-test",
       "cross-build",
+      "cross-build-cpp",
       "dco"
     ]
   },
