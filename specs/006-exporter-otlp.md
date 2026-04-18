@@ -1,4 +1,4 @@
-# 006 — OTLP exporter (v1)
+# Spec 006 — OTLP exporter (v1)
 
 ## Version history
 
@@ -124,9 +124,15 @@ The `reason` attribute on `infmon.flow-rule.drops` is a closed enum. v1 values:
 |---------------------|------------------------------------------------------------------|
 | `eviction_failed`   | LRU eviction could not free a slot for a new key.                |
 
-> Earlier drafts listed `budget_exceeded_runtime`; in v1 the CRUD plane is
+> **v0 → v1 change:** the previous table listed `table_full`, `parse_error`,
+> `rate_limit`, and `key_rejected`. In v1, `table_full` is replaced by the
+> more precise `eviction_failed`; `parse_error` is now surfaced via the
+> `infmon-erspan-decap` node error counter (Spec 004 §4); `rate_limit` and
+> `key_rejected` are handled before the drop-counter path and no longer
+> appear as drop reasons. `budget_exceeded_runtime` (mentioned in earlier
+> drafts) is reserved for a future revision — in v1 the CRUD plane is
 > single-threaded and budget overcommit is rejected synchronously at `add`
-> time (Spec 002 §7.2), so this reason is reserved for a future revision.
+> time (Spec 002 §7.2).
 
 The authoritative list lives in Spec 002 §8; this table is a mirror for
 implementer convenience. Any new value MUST be added there first.

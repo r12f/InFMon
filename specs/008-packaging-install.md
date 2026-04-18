@@ -1,4 +1,4 @@
-# 008 — Packaging & Install (.deb, Ubuntu aarch64)
+# Spec 008 — Packaging & Install (.deb, Ubuntu aarch64)
 
 ## Version history
 

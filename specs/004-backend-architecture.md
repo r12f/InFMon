@@ -1,4 +1,4 @@
-# 004 — Backend Architecture (VPP plugin)
+# Spec 004 — Backend Architecture (VPP plugin)
 
 ## Version history
 
@@ -7,7 +7,7 @@
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of `infmon-backend` (VPP plugin). Linear-probing flow table with offset-based descriptors, memory ordering, epoch-based RCU, scratch cap, alloc-failed recovery; internal identifiers use `flow_rule*` per Spec 002 mental model; per-worker scratch-triple and §6 emit format use `flow_rule_index` (u32 handle), keeping the 24 B/entry estimate. |
 
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`003-erspan-and-packet-parsing`](003-erspan-and-packet-parsing.md)
-- **Related:** [`006-exporter-otlp`](006-exporter-otlp.md), [`007-cli`](007-cli.md)
+- **Related:** [`005-frontend-architecture`](005-frontend-architecture.md), [`006-exporter-otlp`](006-exporter-otlp.md), [`007-cli`](007-cli.md)
 
 ## 1. Motivation
 
@@ -83,7 +83,7 @@ hand-off occurs on the data path.
 Per-node responsibilities:
 
 - **`infmon-erspan-decap`** — Validates outer L2/L3, recognises GRE proto
-  `0x22EB` (ERSPAN III), strips the outer headers
+  `0x88BE` (ERSPAN II) / `0x22EB` (ERSPAN III), strips the outer headers
   according to spec 003, and rewrites `vlib_buffer_t.current_data` /
   `current_length` so the inner Ethernet frame is at the head of the buffer.
   Non-ERSPAN packets and malformed encapsulations go to `drop` with a

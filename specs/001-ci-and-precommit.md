@@ -1,4 +1,4 @@
-# 001 — CI and Pre-commit
+# Spec 001 — CI and Pre-commit
 
 ## Version history
 

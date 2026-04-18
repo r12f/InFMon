@@ -1,4 +1,4 @@
-# 005 — Frontend architecture (Rust)
+# Spec 005 — Frontend architecture (Rust)
 
 ## Version history
 
@@ -530,7 +530,7 @@ Metrics emitted (under `frontend_*`):
 - `frontend_tick_skew_ns` — histogram, `actual - scheduled`
   for each tick. The 1 Hz cadence health signal.
 - `frontend_snapshot_duration_ns` — histogram.
-- `frontend_snapshot_flows` — histogram, flows per tick (renamed from `aggregate_buckets` in v0.4; no backcompat alias).
+- `frontend_snapshot_flows` — histogram, flows per tick (renamed from `aggregate_buckets` → `aggregate_flows` → `snapshot_flows`; no backcompat alias).
 - `frontend_export_duration_ns{exporter}` — histogram.
 - `frontend_export_failures_total{exporter,reason}` — counter;
   `reason` ∈ `{"transient","timeout","permanent"}`.
