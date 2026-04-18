@@ -10,7 +10,7 @@ if [[ -z "$msg_file" || ! -f "$msg_file" ]]; then
     exit 2
 fi
 
-if grep -qE '^Signed-off-by: .+ <.+@.+>$' "$msg_file"; then
+if grep -qE '^Signed-off-by: .+ <.+@.+>[[:space:]]*$' "$msg_file"; then
     exit 0
 fi
 

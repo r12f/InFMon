@@ -21,6 +21,11 @@ module.exports = {
         "revert",
       ],
     ],
+    // scope-enum is intentionally a warning (severity 1) so contributors can
+    // introduce new scopes without a config PR; the listed scopes are the
+    // canonical set from specs/001-ci-and-precommit.md §3 and unfamiliar
+    // scopes will surface a yellow notice in commitlint output without
+    // blocking the commit. Promote to 2 if/when we want a hard allowlist.
     "scope-enum": [
       1,
       "always",
