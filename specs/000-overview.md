@@ -5,7 +5,7 @@
 | Version | Date       | Author      | Changes |
 | ------- | ---------- | ----------- | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f) | Initial draft. Establishes mission, scope, component map, repo layout, build/release model, glossary (incl. flow / flow-rule), and pointers to the canonical spec template at [`TEMPLATE.md`](TEMPLATE.md). |
-| 0.2     | 2026-04-18 | BF-3 (bf3)  | Fix exporter format references: OTLP is the only v1 exporter (per spec 006). Update cross-references from spec 004 to spec 006, remove IPFIX-first language. |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Fix exporter format references: OTLP is the only v1 exporter (per spec 006). Update cross-references from spec 004 to spec 006, remove IPFIX-first language. |
 
 ---
 
