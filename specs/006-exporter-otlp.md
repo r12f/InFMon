@@ -5,7 +5,8 @@
 | Version | Date       | Author      | Changes        |
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
-| 0.2     | 2026-04-18 | bf3 (agent) | Rename `tracker` → `flow-rule`, `bucket` → `flow`. |
+| 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
+| 0.2     | 2026-04-18 | bf3 (agent) | Rename `flow-rule` → `flow-rule`, `flow` → `flow`. |
 
 Tracking issue: DPU-12 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
