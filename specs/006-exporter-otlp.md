@@ -2,20 +2,13 @@
 
 ## Version history
 
-| Version | Date       | Author      | Changes        |
-| ------- | ---------- | ----------- | -------------- |
-| 0.1     | 2026-04-18 | r12f        | Initial draft. |
-| 0.2     | 2026-04-18 | r12f        | Rename tracker->flow-rule, bucket->flow. |
-| 0.3     | 2026-04-18 | r12f        | Address PR #11 review feedback (clarifications, runtime cap, jitter, naming, drop-reason enum, dynamic host.arch). |
-| 0.4     | 2026-04-18 | r12f        | Add §1.1 mental-model paragraph (flow-rule = matcher; one flow per distinct key tuple); add `flow.mirror_src_ip` per-flow attribute (opt-in, sourced from Spec 003 §4.2.1); fix `distinct_data_points_per_bucket` → `_per_flow` typo. |
+| Version | Date       | Author       | Changes |
+| ------- | ---------- | ------------ | ------- |
+| 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the v1 OpenTelemetry (OTLP) exporter. Defines OTLP metric mapping for flow-rule and flow state from Spec 002, runtime cap, jitter, naming, drop-reason enum, dynamic `host.arch`, §1.1 mental-model paragraph, and the `flow.mirror_src_ip` per-flow attribute (opt-in, sourced from Spec 003 §4.2.1). Identifier `distinct_data_points_per_flow`. |
 
-Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
-Depends on: 000-overview (system overview),
-            002-flow-tracking-model (defines flow-rules, keys, flows,
-            and the per-flow-rule observability counters this exporter ships)
-Related: 004-backend-architecture (owns the snapshot mechanism the
-         exporter consumes), 005-frontend (hosts the exporter process),
-         007-cli (`infmon-cli exporter ...` surface)
+- **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
+- **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md)
+- **Related:** [`004-backend-architecture`](004-backend-architecture.md), [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md)
 
 ## 1. Purpose
 
