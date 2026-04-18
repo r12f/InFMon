@@ -1,6 +1,11 @@
 # Spec 002 — Flow tracking model
 
-Status: Draft
+## Version history
+
+| Version | Date       | Author      | Changes        |
+| ------- | ---------- | ----------- | -------------- |
+| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
+
 Tracking issue: DPU-8 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
 Depends on: 000-overview (system overview), 003-erspan-and-packet-parsing
