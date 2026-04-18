@@ -5,6 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Consolidated from v0.1–v0.6. Initial draft of `infmon-frontend` (Rust). Task model, `interval_ns` defined on tick 1, single-reader enforcement, reload-rollback failure handling, stop exit code, complete tracker→flow-rule rename (`FlowRuleStats`/`FlowRuleCounters`/`FlowRuleDef`/`FlowStatsSnapshot`), metric prefix cleanup, YAML config, `polling_interval_ms`, `InFMonStatsClient`/`InFMonControlClient`, control-plane `flow_rule_*` methods, and §3.0 mental-model paragraph. |
+| 0.2     | 2026-04-18 | BF-3 (bf3)   | Fix stats segment path: replace custom `/dev/shm/infmon-stats` with VPP's native stats segment socket (`/run/vpp/stats.sock`), converging with Spec 004. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`004-backend-architecture`](004-backend-architecture.md)
@@ -177,7 +178,7 @@ frontend:
   polling_interval_ms: 1000           # v1: only 1000 is supported
   backend_socket: "/run/infmon/backend.sock"
   control_socket: "/run/infmon/frontend.sock"
-  stats_segment: "/dev/shm/infmon-stats"
+  vpp_stats_socket: "/run/vpp/stats.sock"   # VPP's native stats segment socket
 
 exporters:
   - type: "otlp"
@@ -330,8 +331,9 @@ The frontend talks to the backend over two channels:
 
 ### 8.1 Stats segment (read-only, hot path)
 
-A `mmap`'d shared-memory file (path in `frontend.stats_segment`,
-default `/dev/shm/infmon-stats`) whose layout is owned by Spec 004.
+A `mmap`'d shared-memory region (VPP's native stats segment, accessed via
+`frontend.vpp_stats_socket`, default `/run/vpp/stats.sock`) whose layout
+is owned by Spec 004.
 The frontend reads it on every tick to obtain flow data. The
 client crate (`frontend-ipc`) exposes:
 
@@ -355,9 +357,9 @@ race on the destructive clear half and each see partial data), the
 frontend enforces single-writer-of-the-clear-side at startup:
 
 1. On `start`, the frontend acquires an advisory `flock(LOCK_EX |
-   LOCK_NB)` on `frontend.stats_segment` (or a sibling
-   `<stats_segment>.lock` file if the kernel rejects locks on the
-   shm node). Failure → refuse to start with `stats_segment_busy`
+   LOCK_NB)` on `frontend.vpp_stats_socket` (or a sibling
+   `<vpp_stats_socket>.lock` file if the kernel rejects locks on the
+   socket node). Failure → refuse to start with `stats_segment_busy`
    in the closed error set.
 2. The lock is held for the lifetime of the process and released on
    exit (kernel does this automatically on FD close, including
@@ -428,7 +430,7 @@ restart it explicitly via `systemctl restart infmon-frontend`.
    disconnects are tolerated indefinitely) is intentional: at start
    we have no exporters spawned yet and no useful work to do, so
    failing fast surfaces a misconfigured `backend_socket` /
-   `stats_segment` to the operator immediately. Once we are running
+   `vpp_stats_socket` to the operator immediately. Once we are running
    and have produced at least one tick, the cost of exiting (losing
    queued aggregates, restart storms under systemd `Restart=on-failure`)
    outweighs the diagnostic value, so we keep retrying instead.
