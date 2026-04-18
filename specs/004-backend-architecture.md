@@ -6,6 +6,7 @@
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
 | 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
+| 0.3     | 2026-04-18 | bf3 (agent) | Address PR #7 review: linear probing, offset-based descriptors, memory ordering, epoch-based RCU, scratch cap, alloc-failed recovery. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
@@ -115,8 +116,14 @@ place where the data path could plausibly block.
 
 For each `flow_def` the plugin owns one **counter table**:
 
-- A bounded-size Robin-Hood hash table sized at plugin init from a CLI
-  argument (`max_keys_per_flow_def`, default `2^20 = 1,048,576`).
+- A bounded-size open-addressing hash table with **linear probing** sized
+  at plugin init from a CLI argument (`max_keys_per_flow_def`, default
+  `2^20 = 1,048,576`). We deliberately avoid Robin-Hood hashing on the
+  data path: Robin-Hood requires displacing existing occupied slots
+  during insert, and CAS-swapping a chain of slots cannot be made atomic
+  as a whole, so a concurrent reader or inserter could observe a
+  partially-displaced chain. Plain linear probing is well-understood
+  under lock-free CAS and remains cache-friendly.
 - Slot layout (cache-line aligned, 64 B):
 
 ```
@@ -128,7 +135,8 @@ struct infmon_slot {
     u16  key_len;           // 28
     u16  flags;             // 30  occupied / tombstone / overflow
     u8   _pad[32];          // 32  pad to 64 B
-};
+} __attribute__((packed, aligned(64)));
+// static_assert(sizeof(struct infmon_slot) == 64, "ABI: slot must be 64 B");
 ```
 
 - Key blobs live in a separate **key arena** (a flat `u8[]` with a bump
@@ -138,9 +146,13 @@ struct infmon_slot {
 ### 5.2 Atomicity
 
 - `packets` and `bytes` are updated with `__atomic_fetch_add(..., RELAXED)`
-  on the data path. Relaxed is sufficient because the frontend never
-  correlates the two fields with anything outside the same row, and the
-  snapshot mechanism (§7) provides the only consistency boundary it needs.
+  on the data path. For the **live** table, snapshot readers must load
+  these counters with `__atomic_load_n(..., ACQUIRE)` paired with the
+  seqlock's release store on the slot metadata, otherwise a reader on
+  another core could observe stale counter values whose stores have not
+  yet propagated from the writer's store buffer. The **retired** table
+  (post-swap, §7.2) is immutable and the grace period acts as a global
+  fence, so plain loads are sufficient there.
 - Slot occupancy transitions (`free → occupied`, `occupied → tombstone`)
   are gated by a per-flow-group seqlock so that the snapshot reader can
   detect a torn read of `(key_hash, key_offset, key_len)` and retry. A
@@ -174,17 +186,23 @@ This gives us:
   paths.
 
 Per-table descriptor layout (registered under
-`/infmon/<flow_def_id>/<generation>`):
+`/infmon/<flow_def_id>/<generation>`). All pointer-shaped fields are
+**byte offsets from the stats-segment base**, never raw `void*`: the
+frontend mmaps the segment at an arbitrary virtual address that does
+not match the plugin's, so raw pointers would be unusable across the
+boundary (this is the same convention VPP's own stats segment uses):
 
 | Field                  | Type     | Notes                                       |
 | ---------------------- | -------- | ------------------------------------------- |
-| `flow_def_id`          | `u128`   | UUID of the flow_def.                       |
+| `flow_def_id`          | `u128`   | UUID of the flow_def (external identity).   |
+| `flow_def_index`       | `u32`    | Internal handle into the flow_def vector (§8); workers index by this, not the UUID. |
 | `generation`           | `u64`    | Bumped on every snapshot_and_clear (§7).    |
 | `epoch_ns`             | `u64`    | Wall-clock at table creation.               |
-| `slots_ptr`            | `void*`  | Pointer into stats segment to slot array.   |
+| `slots_offset`         | `u64`    | Byte offset into stats segment to slot array. |
 | `slots_len`            | `u32`    | Number of slots.                            |
-| `key_arena_ptr`        | `void*`  | Pointer into stats segment to key arena.    |
-| `key_arena_len`        | `u32`    | Bytes in arena.                             |
+| `key_arena_offset`     | `u64`    | Byte offset into stats segment to key arena. |
+| `key_arena_capacity`   | `u32`    | Total bytes allocated to the arena.         |
+| `key_arena_used`       | `u32`    | High-water mark (bump-allocator head). Frontend MUST iterate keys only up to this offset; bytes beyond it are uninitialised. |
 | `insert_failed`        | `u64`    | Cumulative.                                 |
 | `table_full`           | `u64`    | Cumulative.                                 |
 
@@ -232,21 +250,34 @@ This is the export primitive. Frontends call it once per export interval
    this `flow_def_id`. Allocation happens off the worker thread; the
    table is zeroed by a control thread before installation.
 3. Plugin atomically swaps the table pointer published in the
-   `infmon-counter` node's per-flow_def context. The swap is a single
-   `__atomic_store_n(..., RELEASE)` on a pointer — no worker thread
-   stalls, no lock is taken, no packet is dropped.
-4. From the next packet onward, the worker counts into the new table
+   `infmon-counter` node's per-flow_def context. The control thread
+   issues `__atomic_store_n(..., RELEASE)` on the pointer; workers MUST
+   load it with `__atomic_load_n(..., ACQUIRE)` (once per frame, not
+   per packet — see §8). The release/acquire pair guarantees the new
+   table's contents are visible when the new pointer is observed; the
+   bounded-staleness window is exactly one frame (≤ `VLIB_FRAME_SIZE`
+   packets) on each worker, after which every subsequent packet counts
+   into `G+1`. No worker thread stalls, no lock is taken, no packet is
+   dropped.
+4. From the next frame onward, each worker counts into the new table
    (`G+1`).
 5. The retired table (`G`) remains live in the stats segment under its
    old directory entry. The reply to `snapshot_and_clear` contains the
    descriptor of `G`; the caller may walk it at leisure.
-6. The retired table is freed by a control-thread RCU-style grace period:
-   we wait until every worker has executed at least one node dispatch
-   (using VPP's existing `vlib_worker_thread_barrier_*` machinery, **not**
-   on the data path) plus an additional grace window of
-   `INFMON_RETIRE_GRACE_NS` (default 5 s) to give in-flight readers time
-   to finish, then unregister the directory entry and free the slot
-   array + key arena.
+6. The retired table is freed by a control-thread RCU-style grace
+   period. The grace condition is satisfied by an **epoch counter per
+   worker**: every worker bumps a thread-local epoch (`RELEASE`) once
+   per dispatch loop iteration; the control thread waits until every
+   worker's published epoch has advanced past the swap epoch, plus an
+   additional grace window of `INFMON_RETIRE_GRACE_NS` (default 5 s)
+   for in-flight readers. Only **after** that condition is met do we
+   unregister the directory entry and free the slot array + key arena.
+   The retirement step deliberately does **not** use
+   `vlib_worker_thread_barrier_*` — barriers force every worker to
+   stall at a barrier point, which would contradict §10's "0 cycles of
+   worker stall during snapshot" guarantee. The barrier API is reserved
+   for genuinely admin-rate operations (plugin teardown), not the
+   per-export retirement path.
 
 The crucial properties:
 
@@ -275,11 +306,20 @@ The crucial properties:
   may legally hit the same row concurrently; the relaxed atomics ensure
   this stays cheap.
 - `flow_def` definitions are read-mostly. They are stored in an
-  RCU-protected vector indexed by `flow_def_id`. Workers acquire a
-  pointer to the current vector once per frame (not per packet) and use
-  it for the whole batch. Definition updates publish a new vector and
-  retire the old one through the same grace-period machinery as table
-  retirement.
+  RCU-protected vector indexed by an internal `flow_def_index` (`u32`)
+  — the externally visible `flow_def_id` is a `u128` UUID and is
+  resolved to its `flow_def_index` by a control-plane lookup at
+  registration time; on the data path workers only ever use the integer
+  index, so per-packet dispatch is an O(1) array index, not a UUID
+  hash. The control thread publishes a new vector pointer with
+  `__atomic_store_n(..., RELEASE)`; workers acquire it once per frame
+  with `__atomic_load_n(..., ACQUIRE)` (not per packet) and use that
+  snapshot for the whole batch. The release/acquire pair ensures any
+  worker that observes the new pointer also observes the new vector's
+  contents. Old vectors are retired through the **same epoch-counter
+  RCU machinery** as table retirement (§7.2 step 6) — explicitly **not**
+  `vlib_worker_thread_barrier_*` — so flow_def add/remove imposes no
+  worker stall on production traffic.
 - We require RX-queue → worker pinning (set via VPP's standard
   `dpdk { dev … { workers <list> } }` config). Without pinning the
   cache-line story in §5 collapses; the plugin will refuse to start if
@@ -293,7 +333,13 @@ The crucial properties:
   of `+2` and `+3`), which is the standard VPP pattern.
 - The match-emit scratch vector is sized
   `VLIB_FRAME_SIZE × max_active_flow_defs` and lives in per-thread TLS;
-  no allocation occurs per frame.
+  no allocation occurs per frame. To bound TLS footprint, v1 caps
+  `max_active_flow_defs` at **64** (a hard `static_assert` in the
+  plugin); at the v1 entry size of ≈24 B per `(flow_def_id, key_hash,
+  key_blob_ptr)` triple this gives a per-worker scratch of
+  `256 × 64 × 24 ≈ 384 KiB`, comfortably below the default 8 MiB VPP
+  worker stack/TLS budget. Lifting the cap requires either shrinking
+  the entry or moving the scratch to a heap-backed per-worker arena.
 - Counter updates are issued one row at a time. We do not batch CAS
   attempts across packets — the contention rate at expected workloads
   (millions of distinct flows, sparse hot keys) does not justify the
@@ -334,6 +380,19 @@ The plugin exposes the following error counters via the standard VPP
 | `counter_insert_retry_exhausted` | CAS retries exceeded `INFMON_INSERT_RETRY`.        |
 | `counter_table_full`          | Table reached `max_keys_per_flow_def`.               |
 | `snapshot_alloc_failed`       | Could not allocate replacement table (OOM in stats segment). |
+
+**`snapshot_alloc_failed` recovery contract.** If step 2 of §7.2 fails,
+the existing live table remains installed and continues accumulating
+into generation `G` — no swap is performed, no counters are reset, no
+worker thread is disturbed. The `infmon_snapshot_and_clear` reply
+returns the `snapshot_alloc_failed` error code with the current
+generation `G` so the caller can distinguish "no new data" from a
+silent failure. The caller's expected response is to (a) wait for any
+retired tables still inside their grace window to be freed, or (b)
+increase `statseg { size }` and retry; until then, counters in `G`
+keep accumulating monotonically (64-bit width, ≈3.9k years of
+headroom — see §5.3 — so wrap-around is not a concern over any
+plausible outage).
 
 These are per-worker, summed by VPP's existing stats infrastructure;
 the frontend reports them as gauges so operators can wire alerts.
