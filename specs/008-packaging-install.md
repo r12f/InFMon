@@ -169,7 +169,7 @@ operator.
 | ----------------------------------------------- | -------------- | ---- | --------------------------------------------------------- |
 | `/usr/bin/infmon-frontend`                      | root           | 0755 | Daemon binary.                                            |
 | `/etc/infmon/frontend.conf`                     | root           | 0644 | Conffile.                                                 |
-| `/etc/infmon/flow_defs.d/`                      | root           | 0755 | Operator drops flow_def YAML here (consumed per spec 002).|
+| `/etc/infmon/flow_rules.d/`                     | root           | 0755 | Operator drops flow_rule YAML here (consumed per spec 002).|
 | `/lib/systemd/system/infmon-frontend.service`   | root           | 0644 | Unit file (§6).                                           |
 | `/var/log/infmon/`                              | infmon:infmon  | 0750 | Created by postinst; rotated by `/etc/logrotate.d/infmon`.|
 | `/etc/logrotate.d/infmon`                       | root           | 0644 | Daily rotation, 14 days, compressed.                      |
@@ -497,7 +497,7 @@ InFMon uses **SemVer 2.0.0** (`MAJOR.MINOR.PATCH`) on the source release.
   "Unstable / experimental" section so the boundary is mechanically
   enforceable from the source. Spec 007 will be updated to make this
   marking convention normative when this spec lands.
-- `MINOR` bumps on additive changes (new `flow_def` operators, new
+- `MINOR` bumps on additive changes (new `flow_rule` operators, new
   binary-API messages, new exporter formats).
 - `PATCH` bumps on bugfixes and packaging-only changes.
 
