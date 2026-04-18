@@ -495,7 +495,7 @@ InFMon uses **SemVer 2.0.0** (`MAJOR.MINOR.PATCH`) on the source release.
 
 - `MAJOR` bumps on incompatible changes to the binary-API messages
   (spec 004 §7.1), the stats-segment descriptor layout (spec 004 §6),
-  the frontend REST contract (spec 005), or the CLI argument grammar
+  the frontend gRPC contract (spec 005), or the CLI argument grammar
   marked as stable. Stable CLI arguments are those whose `clap`
   definition does **not** carry the `#[arg(hide = true)]` attribute or
   a doc-comment line starting with `UNSTABLE:`; the help text rendered

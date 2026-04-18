@@ -8,7 +8,6 @@ if multiple specs are in flight, the reviewer assigns the final number
 at merge time to avoid conflicts. Gaps are allowed (do not renumber
 once a spec is merged). Each spec should include:
 
-- **Status** (draft / accepted / superseded)
 - **Context** — the problem being solved
 - **Decision** — what we are building
 - **Consequences** — trade-offs, follow-ups, open questions

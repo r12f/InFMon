@@ -55,8 +55,7 @@ In-scope for v1:
 > revisited in spec 002 (parser).
 
 - Expose a snapshot/aggregate API consumed by `infmon-frontend`.
-- Ship exporters for at least one standard format (IPFIX or OpenTelemetry —
-  decided in spec 004).
+- Ship an OTLP exporter (decided in spec 006).
 - A CLI (`infmonctl`) for inspection, debugging, and admin.
 - Packaging as a `.deb` for **arm64 / aarch64**, single artifact for v1.
 
@@ -294,7 +293,7 @@ running Ubuntu 22.04 / DOCA-supported distro).
 - **Aggregate** — Frontend-side reduction of snapshots over a window (e.g.
   top-N talkers, per-VRF totals).
 - **Exporter** — Component that pushes flow records to an external collector
-  in a standard format (IPFIX, OpenTelemetry metrics/logs, etc.).
+  in a standard format (OTLP for v1).
 - **Collector** — Off-DPU consumer of exported records.
 - **Frontend** — `infmon-frontend`, the Rust user-space service that owns
   aggregation, exporters, and the API surface for the CLI.

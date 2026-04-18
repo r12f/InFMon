@@ -154,40 +154,14 @@ this spec only fixes the *input* (the bytes above, in this order).
 ## 5. Configuration schema
 
 Flow-rules are configured via a static file loaded at backend start.
-TOML is the canonical format; YAML is accepted but converted to the same
-internal representation. The CLI (Spec 007) is a thin wrapper that
+YAML is the canonical format. The CLI (Spec 007) is a thin wrapper that
 mutates this same schema and asks the backend to reload.
 
-The TOML form uses `[[flow-rule]]` (singular, idiomatic TOML for an
-array-of-tables) and the YAML form uses `flow-rules:` (plural,
-idiomatic YAML for a list). Both names refer to the same internal
-collection; the singular/plural difference is a syntactic convention
-of the two formats, not two different schemas.
-
-### 5.1 TOML
-
-```toml
-# /etc/infmon/flows.toml
-
-# Recommended default flow-rule: 5-tuple-ish L3 keyed per mirroring source.
-# Including `mirror_src_ip` keeps flows from different mirroring devices
-# distinct even when their inner traffic happens to collide on 5-tuple.
-[[flow-rule]]
-name             = "by_5tuple_l3"
-fields           = ["mirror_src_ip", "src_ip", "dst_ip", "ip_proto", "dscp"]
-max_keys         = 1_048_576           # 2^20
-eviction_policy  = "lru_drop"          # only value supported in v1
-
-[[flow-rule]]
-name             = "by_dscp"
-fields           = ["dscp"]
-max_keys         = 64
-eviction_policy  = "lru_drop"
-```
-
-### 5.2 YAML (equivalent)
+### 5.1 YAML
 
 ```yaml
+# /etc/infmon/config.yaml (flow-rules section)
+
 flow-rules:
   - name: by_5tuple_l3
     fields: [mirror_src_ip, src_ip, dst_ip, ip_proto, dscp]

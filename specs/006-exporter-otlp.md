@@ -388,7 +388,7 @@ Document in the `infmon-frontend` operator README and CLI `--help`:
 The exporter MUST enforce these, independently of the backend:
 
 1. **Hard per-export point cap** — `max_export_points_per_tick` (operator
-   configurable in the `[exporter.otlp]` TOML, see §6; default
+   configurable in the `exporter.otlp` section of config.yaml, see §6; default
    `2_000_000`). If a tick would emit more, the exporter ships
    approximately the cap-many points using a **per-flow-rule proportional
    allocation**: each flow-rule gets a budget of

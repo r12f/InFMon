@@ -49,7 +49,7 @@ In-scope:
 Out of scope (deferred to later specs):
 
 - Wire format of OTLP exports — spec 006.
-- Frontend aggregation logic, REST surface, auth — spec 005.
+- Frontend aggregation logic, gRPC control API, auth — spec 005.
 - CLI UX — spec 007.
 - Persistence of flow definitions across reboots — v2.
 - Sampling policies (every packet is counted in v1).
