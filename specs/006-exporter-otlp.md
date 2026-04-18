@@ -4,7 +4,7 @@
 
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
-| 0.2     | 2026-04-18 | BF-3 (bf3)   | Unify config path to `/etc/infmon/config.yaml`; convert TOML config block to YAML. |
+| 0.2     | 2026-04-18 | Riff (r12f)   | Unify config path to `/etc/infmon/config.yaml`; convert TOML config block to YAML. |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the v1 OpenTelemetry (OTLP) exporter. Defines OTLP metric mapping for flow-rule and flow state from Spec 002, runtime cap, jitter, naming, drop-reason enum, dynamic `host.arch`, §1.1 mental-model paragraph, and the `flow.mirror_src_ip` per-flow attribute (opt-in, sourced from Spec 003 §4.2.1). Identifier `distinct_data_points_per_flow`. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)

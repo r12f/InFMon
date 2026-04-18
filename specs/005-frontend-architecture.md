@@ -4,7 +4,7 @@
 
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
-| 0.2     | 2026-04-18 | BF-3 (bf3)   | Unify config path to `/etc/infmon/config.yaml` (YAML); rename `timeout_ms` → `export_timeout` to align with spec 006. |
+| 0.2     | 2026-04-18 | Riff (r12f)   | Unify config path to `/etc/infmon/config.yaml` (YAML); rename `timeout_ms` → `export_timeout` to align with spec 006. |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Consolidated from v0.1–v0.6. Initial draft of `infmon-frontend` (Rust). Task model, `interval_ns` defined on tick 1, single-reader enforcement, reload-rollback failure handling, stop exit code, complete tracker→flow-rule rename (`FlowRuleStats`/`FlowRuleCounters`/`FlowRuleDef`/`FlowStatsSnapshot`), metric prefix cleanup, YAML config, `polling_interval_ms`, `InFMonStatsClient`/`InFMonControlClient`, control-plane `flow_rule_*` methods, and §3.0 mental-model paragraph. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
