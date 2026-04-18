@@ -52,6 +52,7 @@ In-scope for v1:
 > mirrored payload happens to be a VXLAN frame, the VNI is treated as part
 > of the opaque inner payload, not extracted into the flow key. This will be
 > revisited in spec 002 (parser).
+
 - Expose a snapshot/aggregate API consumed by `infmon-frontend`.
 - Ship exporters for at least one standard format (IPFIX or OpenTelemetry —
   decided in spec 004).
@@ -69,7 +70,7 @@ Out-of-scope for v1 (non-goals):
 
 ## Component Map
 
-```
+```text
                 +-----------------------------------------------+
                 |                  BlueField-3 DPU              |
                 |                                               |
@@ -116,7 +117,7 @@ packets         |     v                                         |
 > is allowed only inside `backend/tests/` for GoogleTest fixtures and helpers,
 > which link against the plugin's C ABI through `extern "C"` headers. No C++
 > runtime is loaded into the VPP process in production.
-
+>
 > **Frontend → CLI API and security.** The frontend exposes its API to the
 > CLI over a Unix domain socket bound to a path under `/run/infmon/` with
 > `0660` permissions and an `infmon` group. Membership in that group is the
@@ -125,7 +126,7 @@ packets         |     v                                         |
 > on this socket — it is loopback/UDS only, never TCP. Stronger auth (token,
 > mTLS) is deferred and tracked as an open question; this is called out so
 > operators on a shared DPU understand the trust boundary.
-
+>
 > **E2E execution.** The `tests/` suite is **not** run on every PR because
 > it requires either a physical BlueField-3 with a real ERSPAN source or an
 > emulated DPU rig with replayed pcaps. It is run in two situations:
@@ -159,7 +160,7 @@ packets         |     v                                         |
 
 ## Repo Layout
 
-```
+```text
 InFMon/
 ├── README.md
 ├── LICENSE                 # Apache-2.0
@@ -231,11 +232,13 @@ running Ubuntu 22.04 / DOCA-supported distro).
     that may not need telemetry, the package installs a drop-in VPP config
     snippet at `/etc/vpp/startup.d/10-infmon.conf` that **disables**
     autoload by default:
-    ```
+
+    ```text
     plugins {
         plugin infmon_plugin.so { disable }
     }
     ```
+
     Operators flip `disable` → `enable` (or remove the snippet) on the
     instances where InFMon should run. The systemd unit for
     `infmon-frontend` is also installed disabled and must be `systemctl

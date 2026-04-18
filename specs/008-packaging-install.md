@@ -7,7 +7,10 @@
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the `.deb` packaging contract for Ubuntu aarch64 on BlueField-3. Version-locked deps, source/format declared, postrm cross-package fix, equivs preferred over `--force-depends`, GPG verification note, version-skew check, CLI stability marking, explicit cmake + cargo rules; PartOf and compat file dropped per PR #9 review. |
 
 - **Depends on:** [`000-overview`](000-overview.md), [`004-backend-architecture`](004-backend-architecture.md)
-- **Affects:** [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md), [`001-ci-and-precommit`](001-ci-and-precommit.md) (build job produces the `.deb`)
+- **Affects:** [`005-frontend-architecture`](005-frontend-architecture.md),
+  [`007-cli`](007-cli.md),
+  [`001-ci-and-precommit`](001-ci-and-precommit.md)
+  (build job produces the `.deb`)
 
 ## 1. Motivation
 
@@ -89,7 +92,7 @@ operator's existing VPP installation.
 
 `infmon-backend` declares:
 
-```
+```text
 Depends:  vpp (>= 24.10), vpp-plugin-core (>= 24.10), libc6, libstdc++6
 Recommends: vpp-dpdk-dev-mlx (>= 24.10)
 ```
@@ -292,7 +295,7 @@ not a service. Its lifecycle is VPP's.
 
 ### 7.1 Install
 
-```
+```text
 apt install infmon
   └─ resolves vpp >= 24.10 from fd.io repo (or local)
   └─ unpacks infmon-backend → /usr/lib/vpp_plugins/infmon.so
@@ -396,7 +399,7 @@ All scripts are idempotent and follow Debian Policy §6.
 
 ## 8. Source-tree layout for `dpkg-buildpackage`
 
-```
+```text
 debian/
 ├── changelog              # dch-managed; mirrors top-level CHANGELOG.md
 ├── control                # declares all 3 binary packages + meta package
@@ -435,28 +438,28 @@ cmake (for the backend) and cargo (for the frontend / CLI) by hand:
 
 ```make
 %:
-	dh $@
+    dh $@
 
 override_dh_auto_configure:
-	cmake -S backend -B build/backend -DCMAKE_BUILD_TYPE=Release
+    cmake -S backend -B build/backend -DCMAKE_BUILD_TYPE=Release
 
 override_dh_auto_build:
-	cmake --build build/backend
-	cargo build --release --locked -p infmon-frontend
-	cargo build --release --locked -p infmon-cli
-	cargo run --release -p infmon-cli -- --generate-completions \
-	    > target/infmonctl.bash
-	# clap_mangen target produces target/infmonctl.1
+    cmake --build build/backend
+    cargo build --release --locked -p infmon-frontend
+    cargo build --release --locked -p infmon-cli
+    cargo run --release -p infmon-cli -- --generate-completions \
+        > target/infmonctl.bash
+    # clap_mangen target produces target/infmonctl.1
 
 override_dh_auto_install:
-	cmake --install build/backend --prefix=$(CURDIR)/debian/tmp/usr
-	install -Dm0755 target/release/infmon-frontend \
-	    $(CURDIR)/debian/tmp/usr/bin/infmon-frontend
-	install -Dm0755 target/release/infmonctl \
-	    $(CURDIR)/debian/tmp/usr/bin/infmonctl
+    cmake --install build/backend --prefix=$(CURDIR)/debian/tmp/usr
+    install -Dm0755 target/release/infmon-frontend \
+        $(CURDIR)/debian/tmp/usr/bin/infmon-frontend
+    install -Dm0755 target/release/infmonctl \
+        $(CURDIR)/debian/tmp/usr/bin/infmonctl
 
 override_dh_auto_test:
-	# Unit tests are run in CI separately; skip during package build.
+    # Unit tests are run in CI separately; skip during package build.
 ```
 
 The per-binary `*.install` files then partition `debian/tmp/` into the
@@ -465,7 +468,7 @@ Debian packages (e.g. `librsvg`) use today.
 
 Build dependencies in `debian/control`:
 
-```
+```text
 Build-Depends:
   debhelper-compat (= 13),
   cmake,
@@ -505,7 +508,7 @@ The Debian package version is the upstream version verbatim, with the
 Debian revision suffix used only when we re-roll the *packaging* without
 changing the upstream source:
 
-```
+```text
 infmon (1.4.2-1)        # first .deb of upstream 1.4.2
 infmon (1.4.2-2)        # packaging-only fix, same source
 infmon (1.4.3-1)        # next upstream release
@@ -532,7 +535,7 @@ project ships as one source release).
 
 `debian/control` sets:
 
-```
+```text
 Homepage: https://github.com/r12f/InFMon
 Vcs-Browser: https://github.com/r12f/InFMon
 Vcs-Git: https://github.com/r12f/InFMon.git

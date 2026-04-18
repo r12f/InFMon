@@ -11,6 +11,7 @@
 | 0.1     | YYYY-MM-DD | Riff (r12f)  | Initial draft. |
 
 > **Version-history rules.**
+>
 > - **One PR = exactly one row.** When you push fixes addressing review
 >   comments on the same PR, **amend the existing row's `Changes` cell** —
 >   do **not** add a new row per review iteration.
@@ -32,6 +33,7 @@ Include only the fields that apply. All cross-spec references must be
 
 > **Forbidden metadata.** Do **not** add any of the following — they will
 > be stripped on sight:
+>
 > - `Owner` / `Owners` (the spec repo's commit history is the owner record)
 > - `Status` (a spec is "draft" while its PR is open and "accepted" once merged)
 > - `Reviewer` / `Reviewers` (GitHub PR reviewers are the source of truth)

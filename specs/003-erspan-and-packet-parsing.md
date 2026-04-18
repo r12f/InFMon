@@ -80,7 +80,7 @@ Out of scope (deliberately):
 
 ### 4.1 Stages
 
-```
+```text
 [ outer L2 ] -> [ outer L3 ] -> [ GRE ] -> [ ERSPAN III ] -> [ INNER PACKET ] -> downstream
 ```
 
@@ -135,7 +135,7 @@ parser branch-free with respect to flow-rule configuration.
 Fixed 12-byte header (per `draft-foschiano-erspan-03`). The diagram below is
 indicative; the authoritative bit ranges are listed underneath:
 
-```
+```text
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
