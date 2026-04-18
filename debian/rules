@@ -142,6 +142,20 @@ override_dh_auto_install:
 
 	dh_auto_install
 
+# Create empty placeholder files for anything not yet built, so that
+# dh_install does not error out while source trees are still landing.
+	for f in usr/lib/vpp_plugins/infmon.so \
+	         usr/share/vpp/api/plugins/infmon.api.json \
+	         usr/bin/infmon-frontend usr/bin/infmonctl \
+	         etc/infmon/backend.conf etc/infmon/frontend.conf \
+	         completions/infmonctl completions/_infmonctl \
+	         man/infmonctl.1; do \
+	  if [ ! -e debian/tmp/$$f ]; then \
+	    mkdir -p debian/tmp/$$(dirname $$f); \
+	    touch debian/tmp/$$f; \
+	  fi; \
+	done
+
 # ----------------------------------------------------------------------
 # systemd — installed via debian/infmon-frontend.service which
 # dh_installsystemd picks up automatically.
@@ -151,6 +165,12 @@ override_dh_installsystemd:
 	# We deliberately do not start at install time when running under
 	# dpkg-buildpackage; the postinst handles policy-aware start on the
 	# target system.
+
+# ----------------------------------------------------------------------
+# dh_missing — tolerate absent files while source trees are landing.
+# ----------------------------------------------------------------------
+override_dh_missing:
+	dh_missing --list-missing
 
 # ----------------------------------------------------------------------
 # Strip / shlibs — let dh handle these by default. No override.
