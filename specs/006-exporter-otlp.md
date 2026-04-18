@@ -6,6 +6,7 @@
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
 | 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
+| 0.3     | 2026-04-18 | bf3 (agent) | Address PR #11 review feedback (clarifications, runtime cap, jitter, naming, drop-reason enum, dynamic host.arch). |
 
 Tracking issue: DPU-12 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
@@ -18,7 +19,7 @@ Related: 004-backend-architecture (owns the snapshot mechanism the
 
 ## 1. Purpose
 
-Define the **v1 OpenTelemetry (OTLP) exporter** for InFMon: how flow-flow-rule
+Define the **v1 OpenTelemetry (OTLP) exporter** for InFMon: how flow-rule
 state held by the backend (Spec 002) is turned into OTLP metrics and shipped
 off-DPU to a collector.
 
@@ -65,7 +66,17 @@ all sharing the flow's attribute set (§4):
 |------------------------------|------------|-------|-------------------|-------------------------------------------|
 | `infmon.flow.packets`        | Sum (cumulative, monotonic) | `{packets}` | `flow.packets` | Total packets attributed to this flow. |
 | `infmon.flow.bytes`          | Sum (cumulative, monotonic) | `By`        | `flow.bytes`   | Total bytes (L3 length per Spec 003).    |
-| `infmon.flow.last_seen`      | Gauge      | `ns`  | `flow.last_seen_ns` | Wall-clock ns of the most recent packet that updated this flow. |
+| `infmon.flow.last_seen`      | Gauge      | `ns`  | `flow.last_seen_ns` | Wall-clock ns of the most recent packet that updated this flow. See note below on float64 precision. |
+
+> **Precision note for `last_seen`.** The unit is wall-clock nanoseconds since
+> the Unix epoch (~19-digit integer). Backends that store gauge values as
+> `float64` (Prometheus, many Mimir/Cortex setups) will lose sub-microsecond
+> precision (float64 has 53 bits of mantissa, < 16 decimal digits). This is
+> acceptable for `last_seen` — operators use it for staleness/age, not for
+> sub-microsecond ordering. Backends that need finer resolution can read the
+> source `start_time_unix_nano` / `time_unix_nano` fields directly from the
+> OTLP record. The unit stays `ns` to remain consistent with the OTel
+> timestamp conventions used elsewhere in the record.
 
 `first_seen_ns` is **not** exported as its own data point. It is folded into
 the data-point `start_time_unix_nano` of the two `Sum` metrics, which is the
@@ -83,6 +94,12 @@ OTLP-native way to express "this counter started accumulating at time T".
 - On flow eviction (Spec 002 §6) the counter is gone. Receivers that
   compute deltas will see a counter reset; OTLP Sum semantics handle that
   correctly when `start_time_unix_nano` advances.
+- If the **same flow key reappears** after eviction, the backend allocates
+  a brand-new flow with a fresh `first_seen_ns`. The exporter MUST therefore
+  treat it as a new time series: the cumulative counters restart at zero and
+  the new `start_time_unix_nano` advances. Receivers detect the reset via
+  the `start_time_unix_nano` change — the standard OTLP Sum reset signal —
+  and MUST NOT splice the old and new sequences into one continuous series.
 
 ### 3.4 Per-flow-rule observability points
 
@@ -91,13 +108,25 @@ data points. They are scoped to the flow-rule, not the key:
 
 | OTLP metric name                  | Instrument | Unit         | Source                                    |
 |-----------------------------------|------------|--------------|-------------------------------------------|
-| `infmon.flow-rule.flows`          | Gauge      | `{flows}`  | `infmon_tracker_buckets`                  |
-| `infmon.flow-rule.evictions`        | Sum (cum.) | `{evictions}`| `infmon_tracker_evictions_total`          |
-| `infmon.flow-rule.drops`            | Sum (cum.) | `{drops}`    | `infmon_tracker_drops_total{reason}`      |
-| `infmon.flow-rule.packets`          | Sum (cum.) | `{packets}`  | `infmon_tracker_packets_total`            |
-| `infmon.flow-rule.bytes`            | Sum (cum.) | `By`         | `infmon_tracker_bytes_total`              |
+| `infmon.flow-rule.flows`          | Gauge      | `{flows}`  | `infmon_flow_rule_flows`                  |
+| `infmon.flow-rule.evictions`        | Sum (cum.) | `{evictions}`| `infmon_flow_rule_evictions_total`        |
+| `infmon.flow-rule.drops`            | Sum (cum.) | `{drops}`    | `infmon_flow_rule_drops_total{reason}`    |
+| `infmon.flow-rule.packets`          | Sum (cum.) | `{packets}`  | `infmon_flow_rule_packets_total`          |
+| `infmon.flow-rule.bytes`            | Sum (cum.) | `By`         | `infmon_flow_rule_bytes_total`            |
 
 Their attribute set is `{flow-rule}` (plus `reason` for `drops`), nothing else.
+
+The `reason` attribute on `infmon.flow-rule.drops` is a closed enum. v1 values:
+
+| `reason`        | Meaning                                                          |
+|-----------------|------------------------------------------------------------------|
+| `table_full`    | Flow table at `max_keys`, no room to admit a new key.            |
+| `parse_error`   | Upstream packet failed parser invariants (Spec 003).             |
+| `rate_limit`    | Per-flow-rule admission rate limit (Spec 002 §8).                |
+| `key_rejected`  | Key violated a flow-rule field constraint (e.g. invalid `dscp`). |
+
+The authoritative list lives in Spec 002 §8; this table is a mirror for
+implementer convenience. Any new value MUST be added there first.
 
 ## 4. Attribute mapping (per-flow points)
 
@@ -149,7 +178,7 @@ Every export carries a `Resource` describing the producer. v1 set:
 | `service.instance.id`           | stable per-process UUID, generated at frontend startup, persisted in `/var/lib/infmon/instance_id` | Distinguishes restarts from re-deploys. |
 | `host.name`                     | `gethostname(2)` at startup                   | Human-readable host identity. |
 | `host.id`                       | `/etc/machine-id` if readable, else absent    | Stable across reboots; omit silently if unavailable. |
-| `host.arch`                     | constant `"arm64"` for the v1 .deb build      | Matches Spec 000 §"Build & Release Model". |
+| `host.arch`                     | runtime value of `std::env::consts::ARCH` (e.g. `"aarch64"` on the v1 BF-3 .deb build, `"x86_64"` on a dev box) | Reflects the actual binary; never hard-coded so unofficial dev/test builds aren't mis-labelled. Per OTel host conventions. |
 | `infmon.dpu.id`                 | configured value (see §6); falls back to `host.name` if unset | The "dpu" attribute the issue calls for. Free-form short string operators set per-DPU. |
 | `infmon.dpu.platform`           | configured value (e.g. `"bluefield-3"`)        | Optional; omitted if unset. |
 
@@ -176,12 +205,17 @@ endpoint           = "otel-collector.infra.local:4317"
 insecure           = false             # true => plaintext (TCP, not mTLS)
 ca_file            = "/etc/infmon/tls/ca.pem"      # optional; system trust if unset
 cert_file          = "/etc/infmon/tls/client.pem"  # optional client mTLS
-key_file           = "/etc/infmon/tls/client.key"  # optional client mTLS
+key_file           = "/etc/infmon/tls/client.key"  # optional client mTLS;
+                                       # PEM-encoded; PKCS#8 unencrypted private
+                                       # key (RSA or EC P-256/P-384). PKCS#1 RSA
+                                       # is also accepted on rustls; encrypted
+                                       # keys are rejected at startup.
 compression        = "gzip"            # "none" | "gzip"
 export_interval    = "10s"             # how often to take a snapshot and ship
 export_timeout     = "5s"              # per-request timeout
 max_batch_points   = 8192              # see §7
 queue_size         = 4                 # see §7
+max_export_points_per_tick = 2_000_000 # see §8.2; runtime safety cap
 
 [exporter.otlp.headers]
 # arbitrary key=value, sent on every request (gRPC metadata or HTTP headers)
@@ -206,6 +240,7 @@ Field-by-field defaults if absent:
 - `export_timeout = "5s"`.
 - `max_batch_points = 8192`.
 - `queue_size = 4`.
+- `max_export_points_per_tick = 2_000_000`.
 - `headers` and `resource` default to empty.
 
 ### 6.3 Validation
@@ -219,8 +254,13 @@ Reject the config (and refuse to start) if:
 5. Any TLS file path is set but unreadable at startup.
 6. `export_interval`, `export_timeout` are not positive durations.
 7. `export_timeout >= export_interval` (would let backpressure run away).
+   The boundary `export_timeout == export_interval` is rejected because a
+   single request consuming the full interval leaves zero headroom for
+   snapshot acquisition + serialization on the next tick. Operators that
+   want generous timeouts should also widen `export_interval`.
 8. `max_batch_points <= 0`.
 9. `queue_size <= 0`.
+10. `max_export_points_per_tick <= 0`.
 
 Configuration validation is all-or-nothing, mirroring Spec 002 §5.3.
 
@@ -229,6 +269,12 @@ Configuration validation is all-or-nothing, mirroring Spec 002 §5.3.
 ### 7.1 Tick
 
 The exporter runs on a single periodic tick of period `export_interval`.
+The first tick is delayed by a uniform random jitter in
+`[0, export_interval)` (computed once at startup). This staggers a fleet of
+DPUs that come up around the same time (e.g. after a rolling upgrade) so
+they don't hammer the collector in lock-step — same default behaviour as
+the upstream OTel SDK.
+
 On each tick:
 
 1. Ask the backend for a fresh snapshot (Spec 004 surface). The snapshot
@@ -254,6 +300,14 @@ arrives, the **oldest** batch is dropped (the freshest cumulative data
 supersedes it anyway) and `infmon_exporter_batches_dropped_total` is
 incremented.
 
+> **Gauge note.** Dropping the oldest batch is unambiguously safe for the
+> `Sum` metrics — the newest cumulative value supersedes the older one.
+> For the `infmon.flow.last_seen` Gauge, dropping older batches means a
+> receiver may see `last_seen` jump forward without observing intermediate
+> samples. This is acceptable for a "most recent packet" gauge, but worth
+> stating explicitly given the rest of this section is precise about
+> semantics.
+
 ### 7.3 Retry
 
 Per-batch retry policy:
@@ -267,6 +321,18 @@ Per-batch retry policy:
 - The per-request timeout is `export_timeout`. The total time spent on
   a single batch (including retries) is bounded by
   `4 * export_interval` to keep the queue head from rotting.
+
+> **Trade-off note.** With default `export_interval = 10s` and
+> `max_retries = 3`, a single batch can occupy the sender for up to ~40s.
+> Combined with `queue_size = 4`, a sustained slow / flapping collector
+> can silently age out up to 3 ticks of data while the head batch retries.
+> This is intentional — `last_seen` and the cumulative counters self-heal
+> once exports resume, so freshness is preferred over delivery guarantees.
+> Operators that want tighter freshness should lower `export_interval`
+> (which lowers the retry ceiling proportionally) rather than enlarge
+> `queue_size`. The drop is observable via
+> `infmon_exporter_ticks_dropped_total` and
+> `infmon_exporter_batches_dropped_total`.
 
 Non-retryable errors (auth failure, schema rejection, HTTP 4xx other than
 429) drop the batch immediately and bump
@@ -305,7 +371,7 @@ Document in the `infmon-frontend` operator README and CLI `--help`:
   for it.
 - Prefer narrower flow-rules (e.g. `[src_ip]` for talker tables, `[dscp]`
   for class-of-service rollups) for default-on deployments.
-- The growth signal is `infmon_tracker_evictions_total`. A non-zero,
+- The growth signal is `infmon_flow_rule_evictions_total`. A non-zero,
   growing eviction rate means cardinality exceeds the configured budget;
   either grow `max_keys` or narrow the field list.
 
@@ -313,11 +379,19 @@ Document in the `infmon-frontend` operator README and CLI `--help`:
 
 The exporter MUST enforce these, independently of the backend:
 
-1. **Hard per-export point cap** — `max_export_points_per_tick`
-   (compile-time default `2_000_000`). If a tick would emit more, the
-   exporter ships the first cap-many points sorted by flow-rule name then
-   flow recency and **drops the rest**, bumping
-   `infmon_exporter_points_dropped_total{reason="export_cap"}`. This
+1. **Hard per-export point cap** — `max_export_points_per_tick` (operator
+   configurable in the `[exporter.otlp]` TOML, see §6; default
+   `2_000_000`). If a tick would emit more, the exporter ships
+   approximately the cap-many points using a **per-flow-rule proportional
+   allocation**: each flow-rule gets a budget of
+   `floor(cap × flow_rule_flows / total_flows)` points (with any
+   leftover from rounding distributed in flow-rule-name order), then
+   each flow-rule emits its first `budget` flows in iteration order
+   (stable per snapshot) and **drops the rest**, bumping
+   `infmon_exporter_points_dropped_total{reason="export_cap"}`. The
+   proportional split avoids the O(n log n) global sort by
+   `last_seen_ns` that an earlier draft required, and keeps each
+   flow-rule's representation roughly proportional to its live size. This
    protects the collector from a backend misconfiguration.
 2. **Per-attribute length cap** — string attribute values are truncated
    to 256 bytes (UTF-8 safe) with a trailing `…`. Bumps
@@ -346,6 +420,26 @@ The exporter exports its own health on the same OTLP stream:
 
 These carry the §5 resource attributes and a `reason` attribute where
 relevant; they do **not** carry flow-rule or flow attributes.
+
+> **Naming convention.** The dot-separated `infmon.exporter.*` names in
+> the table above are the **canonical** OTLP metric names — those are
+> what the exporter MUST emit on the wire. Underscore-separated forms
+> like `infmon_exporter_ticks_dropped_total` used elsewhere in this spec
+> (§7.1, §7.3, §8.2) and in Spec 002 §8 are prose shorthand: they
+> describe the same metric in Prometheus-style notation that some
+> collectors will end up exposing after the OTLP→Prometheus naming
+> transform (`.` → `_`, `Sum` cumulative → `_total` suffix). Implementers
+> emit the dot form; operators reading dashboards may see the underscore
+> form depending on their downstream pipeline.
+
+> **Why `export_duration` is a Gauge in v1.** A single gauge per export
+> loses tail-latency information (p50/p99) that a Histogram or Summary
+> would expose. v1 ships a Gauge to keep self-observability cheap and
+> the cardinality story trivial. A future revision can add
+> `infmon.exporter.export_duration` as a `Histogram` with a small fixed
+> bucket set (or pair the gauge with `infmon.exporter.export_duration_max`)
+> once we have an operator asking for it; this is listed in §9 as a
+> non-normative extension hook.
 
 ## 9. Future extension hooks (non-normative)
 
