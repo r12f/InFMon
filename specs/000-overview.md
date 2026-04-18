@@ -5,7 +5,7 @@
 | Version | Date       | Author      | Changes |
 | ------- | ---------- | ----------- | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f) | Initial draft. Establishes mission, scope, component map, repo layout, build/release model, glossary (incl. flow / flow-rule), and pointers to the canonical spec template at [`TEMPLATE.md`](TEMPLATE.md). |
-| 0.2     | 2026-04-18 | BF-3 (bf3)  | Fix eviction policy references: §5 step 5 now points to spec 002 (not 003); §open-questions item 3 updated to reflect `lru_drop` decision. |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Fix eviction policy references: §5 step 5 now points to spec 002 (not 003); §open-questions item 3 updated to reflect `lru_drop` decision. |
 
 ---
 
