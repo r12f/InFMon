@@ -127,6 +127,11 @@ The `reason` attribute on `infmon.flow-rule.drops` is a closed enum. v1 values:
 |---------------------|------------------------------------------------------------------|
 | `eviction_failed`   | LRU eviction could not free a slot for a new key.                |
 
+> **Note:** Earlier drafts exposed additional drop reasons (`table_full`,
+> `parse_error`, `rate_limit`, `key_rejected`). These are now internal to the
+> backend and are not surfaced in the OTLP exporter. Spec 002 §8 is the
+> authoritative reference for backend-internal drop accounting.
+
 > Earlier drafts listed `budget_exceeded_runtime`; in v1 the CRUD plane is
 > single-threaded and budget overcommit is rejected synchronously at `add`
 > time (Spec 002 §7.2), so this reason is reserved for a future revision.

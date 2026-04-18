@@ -5,7 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of `infmon-backend` (VPP plugin). Linear-probing flow table with offset-based descriptors, memory ordering, epoch-based RCU, scratch cap, alloc-failed recovery; internal identifiers use `flow_rule*` per Spec 002 mental model; per-worker scratch-triple and §6 emit format use `flow_rule_index` (u32 handle), keeping the 24 B/entry estimate. |
-| 0.2     | 2026-04-18 | Riff (r12f)  | Remove IPFIX from out-of-scope bullet — OTLP is the only v1 exporter. |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Remove IPFIX from out-of-scope bullet — OTLP is the only v1 exporter. Drop ERSPAN II (`0x88BE`) support; only ERSPAN III (`0x22EB`) is parsed (see spec 003). |
 
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`003-erspan-and-packet-parsing`](003-erspan-and-packet-parsing.md)
 - **Related:** [`006-exporter-otlp`](006-exporter-otlp.md), [`007-cli`](007-cli.md)

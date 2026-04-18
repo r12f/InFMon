@@ -179,6 +179,11 @@ operator.
 | `/var/lib/infmon/`                              | infmon:infmon  | 0750 | Reserved for future state (currently empty).              |
 | `/usr/share/doc/infmon-frontend/changelog.gz`   | root           | 0644 |                                                           |
 
+> **Config file note:** `config.yaml` is owned by the `infmon-backend` package
+> (§5.1). The frontend reads it via the shared path `/etc/infmon/config.yaml`
+> but does not ship its own copy. The `infmon-frontend` package should declare
+> `Depends: infmon-backend` to ensure the config file is present.
+
 Postinst creates a system user `infmon` (group `infmon`) via `adduser
 --system --group --no-create-home --home /var/lib/infmon infmon`. The
 call is idempotent (`adduser --system` is a no-op if the user already

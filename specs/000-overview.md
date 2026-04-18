@@ -98,17 +98,17 @@ packets         |     v                                         |
                 |            ^                                  |
                 +------------|----------------------------------+
                              |  local UDS, loopback only
-                       +-----+------+
-                       | infmonctl |
-                       |  (Rust)    |
-                       +------------+
+                      +--------------+
+                      |  infmonctl   |
+                      |   (Rust)     |
+                      +--------------+
 ```
 
 | Component         | Language | Test framework | Purpose                                      |
 |-------------------|----------|----------------|----------------------------------------------|
 | `infmon-backend`  | C/C++    | gtest          | VPP plugin: ERSPAN decap, parse, flow table  |
 | `infmon-frontend` | Rust     | cargo test     | Snapshot/aggregate, exporter drivers, API    |
-| `infmon-cli`     | Rust     | cargo test     | Operator/admin CLI over the frontend API     |
+| `infmonctl` (crate: `infmon-cli`) | Rust     | cargo test     | Operator/admin CLI over the frontend API     |
 | `tests/`          | mixed    | pytest + pcap  | E2E real-packet replay (see *E2E execution* below) |
 
 > **Backend language note.** "C/C++" here means: production VPP plugin code
@@ -336,7 +336,7 @@ explanations of each rule.
    vs. gRPC. Decided in spec 004. *Default:* shared-memory ring (lowest
    overhead on DPU).
 3. ~~**Flow table eviction policy** — LRU, time-based, or hybrid.~~ **Resolved:**
-   `lru_drop` per spec 002 §6.
+   LRU eviction (`lru_drop`) per spec 002 §6.
 4. **Distro target** — Ubuntu 22.04 only, or also DOCA's recommended base?
    Decided in spec 008. *Default:* Ubuntu 22.04 arm64.
 5. **Frontend API authn/authz** — v1 ships with UNIX-group-based access on a
