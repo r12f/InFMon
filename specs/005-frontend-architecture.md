@@ -296,7 +296,7 @@ Mechanism:
 | Policy            | Behavior                                                                 | When to use                          |
 |-------------------|--------------------------------------------------------------------------|--------------------------------------|
 | `drop_oldest`     | Pop oldest queued tick, push new one. Bumps `frontend_drops_total{reason="overflow_old"}`.  | **Default.** Freshness wins.         |
-|| `drop_newest`     | Discard the just-produced tick. Bumps `..reason="overflow_new"`.         | Exporters that prefer monotonic seq. |
+| `drop_newest`      | Discard the just-produced tick. Bumps `..reason="overflow_new"`.         | Exporters that prefer monotonic seq. |
 
 A `block_one_tick` policy was considered and rejected for v1: any
 poller-side blocking starves *all* exporters of the next tick, which
