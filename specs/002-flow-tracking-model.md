@@ -7,6 +7,7 @@
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
 | 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
 | 0.3     | 2026-04-18 | bf3 (agent) | Add `mirror_src_ip` to v1 field set as the only outer-header field allowed in a flow-rule key. |
+| 0.4     | 2026-04-18 | bf3 (agent) | Address PR #5 review: tighten `name` regex to ≥ 2 chars and motivate 31-char cap; `max_keys` positive (not non-negative); spell out DSCP extraction as `(tos>>2)&0x3F`; promote 64-byte cap to MUST and cross-reference §5.3; document LRU recency on insert and tie-breaking; clarify `show` returns `last_seen_ns` (max across resident flows); spell out file-load vs per-`add` budget enforcement; remove `budget_exceeded_runtime` drop reason for v1 (single-threaded CRUD); note TOML/YAML singular/plural is syntactic only. |
 
 Tracking issue: DPU-8 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
@@ -37,13 +38,18 @@ A **flow-rule** is:
 flow-rule := (name, ordered_field_list, max_keys, eviction_policy)
 ```
 
-- **name** — short identifier, `^[a-z0-9][a-z0-9_-]{0,30}$`. Used in
-  exported metric labels and CLI references. Unique per backend instance.
+- **name** — short identifier, `^[a-z0-9][a-z0-9_-]{1,30}$` (i.e. 2–31
+  characters). Used in exported metric labels and CLI references. Unique
+  per backend instance. The 31-character cap is chosen to stay well
+  under common downstream attribute-length limits (OTLP attribute
+  values, VPP node-name tables) without being so short that it
+  constrains operator naming; tighten in a future rev if a concrete
+  downstream limit demands it.
 - **ordered_field_list** — non-empty, ordered tuple of fields drawn from
   the v1 field set (§3). Order is significant: it defines the byte
   layout of the key (§4) and therefore the hash. Reordering produces a
   different flow-rule even with the same field set.
-- **max_keys** — non-negative integer; upper bound on the number of
+- **max_keys** — positive integer (≥ 1); upper bound on the number of
   distinct keys held simultaneously for this flow-rule. Required.
 - **eviction_policy** — what to do when a new key arrives at a full
   flow-rule. v1 supports a single policy (§6); the field exists so future
@@ -80,7 +86,7 @@ after ERSPAN decapsulation per Spec 003 — with one named exception
 | `src_ip`         | 16 B (v4 mapped to v6)  | inner IPv4 / IPv6 SA         | IPv4 stored as `::ffff:a.b.c.d` for layout uniformity   |
 | `dst_ip`         | 16 B (v4 mapped to v6)  | inner IPv4 / IPv6 DA         | same mapping rule                                       |
 | `ip_proto`       | 1 B                     | inner IPv4.protocol / IPv6.next_header (after extension headers) | 0–255         |
-| `dscp`           | 1 B (low 6 bits used)   | inner IPv4.tos>>2 / IPv6.tc>>2 | upper 2 bits zero                                     |
+| `dscp`           | 1 B (low 6 bits used)   | inner IPv4.tos / IPv6.tc, extracted as `(tos >> 2) & 0x3F` (resp. `(tc >> 2) & 0x3F`) | upper 2 bits zero |
 | `mirror_src_ip`  | 16 B (v4 mapped to v6)  | **outer** GRE/ERSPAN source IP, surfaced by Spec 003 as `mirror_src_ip` | The **only** outer-header field allowed in a flow-rule key. Identifies the mirroring device. Same v4-mapped-v6 layout rule. Opt-in: include it in a flow-rule's field list to break flows out per source device. |
 
 A flow-rule MUST list at least one field. There is no implicit field; if
@@ -123,8 +129,9 @@ Canonical encodings (v1):
 - `dscp`: 1 byte, value in `0..=63`, upper bits zeroed.
 
 Total key width is fixed per flow-rule and computable from the field list
-alone. Implementations SHOULD reject configurations whose key width
-exceeds 64 bytes (room for L4 fields in v2 without revisiting this cap).
+alone. Implementations MUST reject configurations whose key width
+exceeds 64 bytes (room for L4 fields in v2 without revisiting this cap);
+this is restated as a normative validation rule in §5.3 rule 5.
 
 The hash function used to index the flow store is owned by Spec 004;
 this spec only fixes the *input* (the bytes above, in this order).
@@ -135,6 +142,12 @@ Flow-rules are configured via a static file loaded at backend start.
 TOML is the canonical format; YAML is accepted but converted to the same
 internal representation. The CLI (Spec 007) is a thin wrapper that
 mutates this same schema and asks the backend to reload.
+
+The TOML form uses `[[flow-rule]]` (singular, idiomatic TOML for an
+array-of-tables) and the YAML form uses `flow-rules:` (plural,
+idiomatic YAML for a list). Both names refer to the same internal
+collection; the singular/plural difference is a syntactic convention
+of the two formats, not two different schemas.
 
 ### 5.1 TOML
 
@@ -199,6 +212,13 @@ already at `max_keys`:
 3. Increment the per-flow-rule counter `infmon_tracker_evictions_total`
    (label: `flow-rule=<name>`).
 
+A key's "recency" is set to the packet timestamp on insertion (i.e. on
+the first packet that creates it) and updated to the packet timestamp
+on every subsequent hit. If multiple resident keys share the same
+`last_seen_ns` (e.g. a burst arriving in the same poll cycle), the
+choice of which to evict is **implementation-defined**; v1 imposes no
+tie-breaking ordering.
+
 If the eviction itself fails (e.g. data structure invariant violation),
 the packet is dropped and `infmon_tracker_drops_total` is incremented
 instead — the flow-rule never silently corrupts.
@@ -228,7 +248,7 @@ spec defines only the operations and their semantics.
 | `add`    | `infmon-cli flow add <spec>`     | full flow-rule definition (name, fields, max_keys, eviction_policy) | created flow-rule, or error           | Fails if name exists. |
 | `rm`     | `infmon-cli flow rm <name>`      | flow-rule name                              | ok / `not_found`                    | Drops all flows for that flow-rule. |
 | `list`   | `infmon-cli flow list`           | —                                         | array of flow-rule definitions        | Cheap; no flow data. |
-| `show`   | `infmon-cli flow show <name>`    | flow-rule name                              | flow-rule definition + live stats: `bucket_count`, `evictions_total`, `drops_total`, `last_packet_ns` | Stats are best-effort snapshots. |
+| `show`   | `infmon-cli flow show <name>`    | flow-rule name                              | flow-rule definition + live stats: `bucket_count`, `evictions_total`, `drops_total`, `last_seen_ns` (the maximum `last_seen_ns` across this flow-rule's resident flows; absent if there are none) | Stats are best-effort snapshots. |
 
 ### 7.1 Semantics
 
@@ -246,6 +266,16 @@ spec defines only the operations and their semantics.
 - `list` and `show` are read-only and lock-free on the data plane.
 - The static config file (§5) is applied via the same `add`/`rm`
   primitives at startup; there is no separate "bulk load" path.
+  Concretely: the loader first runs the §5.3 validation rules over the
+  whole file (so order-independent failures — duplicate names, unknown
+  fields, the total `max_keys` budget in rule 6 — are reported up
+  front), then issues `add` calls one at a time. Each `add` also
+  re-checks the running budget, so the same `budget_exceeded` error
+  (§7.2) can be produced by a CLI `flow add` that would push the
+  cumulative `max_keys` past rule 6's limit. This means file-order does
+  **not** affect whether a valid file loads, but it does affect the
+  order of error reporting if the validator is bypassed (e.g. a future
+  partial-reload path).
 
 ### 7.2 Errors
 
@@ -256,7 +286,11 @@ A small, closed set:
 - `invalid_spec` — any §5.3 validation failure; carries a human-readable
   reason.
 - `budget_exceeded` — would exceed the backend's total `max_keys`
-  budget.
+  budget (§5.3 rule 6). Returned both at config-file load and from a
+  CLI `flow add` whose `max_keys` would push the cumulative total past
+  the budget; runtime `add` therefore enforces the same invariant as
+  the file validator and operators cannot silently overcommit between
+  reloads.
 - `internal` — anything else; carries a correlation id for log lookup.
 
 ## 8. Observability
@@ -266,7 +300,13 @@ Per flow-rule, the backend exports (mechanism: Spec 006):
 - `infmon_tracker_buckets{flow-rule}` — gauge, current key count.
 - `infmon_tracker_evictions_total{flow-rule}` — counter (§6).
 - `infmon_tracker_drops_total{flow-rule, reason}` — counter; `reason` ∈
-  `{"eviction_failed", "budget_exceeded_runtime"}`.
+  `{"eviction_failed"}`. (Earlier drafts also listed a
+  `budget_exceeded_runtime` reason; in v1 the CRUD plane is
+  single-threaded, so cumulative-budget overcommit can only happen at
+  `add` time and is rejected synchronously via `budget_exceeded`
+  (§7.2). The runtime drop reason is therefore not emitted in v1 and
+  is reserved for a future revision in which concurrent admin paths
+  could let a packet observe a momentary over-budget state.)
 - `infmon_tracker_packets_total{flow-rule}` — counter, packets accounted
   into this flow-rule (i.e. that successfully landed in a flow).
 - `infmon_tracker_bytes_total{flow-rule}` — counter.
