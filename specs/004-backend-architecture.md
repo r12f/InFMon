@@ -5,6 +5,7 @@
 | Version | Date       | Author      | Changes        |
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
+| 0.2     | 2026-04-18 | bf3 (agent) | Rename `tracker` → `flow-rule`, `bucket` → `flow`. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
@@ -141,9 +142,9 @@ struct infmon_slot {
   correlates the two fields with anything outside the same row, and the
   snapshot mechanism (§7) provides the only consistency boundary it needs.
 - Slot occupancy transitions (`free → occupied`, `occupied → tombstone`)
-  are gated by a per-bucket-group seqlock so that the snapshot reader can
+  are gated by a per-flow-group seqlock so that the snapshot reader can
   detect a torn read of `(key_hash, key_offset, key_len)` and retry. A
-  bucket group is 8 contiguous slots (one cache line of metadata per
+  flow group is 8 contiguous slots (one cache line of metadata per
   group).
 - Insertions on the data path use compare-and-swap on `flags`. On
   contention we retry up to `INFMON_INSERT_RETRY` (default 4) times; on
