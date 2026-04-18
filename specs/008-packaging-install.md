@@ -9,7 +9,6 @@
 
 | Field    | Value                                                                                  |
 | -------- | -------------------------------------------------------------------------------------- |
-| Tracking | DPU-14 (parent: DPU-4 — EPIC InFMon)                                                   |
 | Repo     | https://github.com/r12f/InFMon                                                         |
 | Depends  | spec 000 (overview), spec 004 (backend architecture)                                   |
 | Affects  | spec 005 (frontend), spec 007 (CLI), spec 001 (CI — build job will produce the .deb)   |
