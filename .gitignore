@@ -1,6 +1,10 @@
 # ---------------------------------------------------------------------------
 # Rust
 # ---------------------------------------------------------------------------
+# Cargo.lock policy: this repository will host both binary and library crates.
+# Convention: check in `Cargo.lock` for binaries, ignore for libraries. Today
+# we have no published library crates, so `Cargo.lock` is committed. Update
+# this comment (and the ignore list) when that changes.
 target/
 **/*.rs.bk
 Cargo.lock.bak
@@ -85,8 +89,20 @@ vpp-api/
 Thumbs.db
 
 # ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+
+# ---------------------------------------------------------------------------
 # Logs / coverage / misc
 # ---------------------------------------------------------------------------
+# Note: blanket `*.log` is intentional today; if/when we add log fixtures
+# under tests/, add a more specific un-ignore (e.g. `!tests/fixtures/**/*.log`).
 *.log
 *.gcda
 *.gcno

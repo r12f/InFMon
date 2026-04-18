@@ -3,7 +3,10 @@
 This directory holds design specs, RFCs, and protocol documents for InFMon.
 
 Add one Markdown file per spec. Suggested naming: `NNNN-short-title.md`
-(e.g. `0001-architecture-overview.md`). Each spec should include:
+(e.g. `0001-architecture-overview.md`). Use the next available number;
+if multiple specs are in flight, the reviewer assigns the final number
+at merge time to avoid conflicts. Gaps are allowed (do not renumber
+once a spec is merged). Each spec should include:
 
 - **Status** (draft / accepted / superseded)
 - **Context** — the problem being solved

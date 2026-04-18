@@ -13,7 +13,9 @@ This repository hosts the full stack:
 ## Status
 
 🚧 Early scaffolding. APIs, schemas, and component boundaries are still
-being defined under [`specs/`](./specs/). Expect breaking changes.
+being defined under [`specs/`](./specs/). Expect breaking changes. Roadmap
+and active work are tracked in [GitHub Issues](https://github.com/r12f/InFMon/issues)
+(see the bootstrap issue [DPU-5](https://github.com/r12f/InFMon/issues)).
 
 ## Repository layout
 
@@ -48,7 +50,9 @@ directory once available.
 2. Branch from `main`.
 3. Submit a PR — all changes require review from a code owner
    (see [`CODEOWNERS`](./CODEOWNERS)) and must pass required CI checks.
-4. Sign off your commits (`git commit -s`).
+4. Sign off your commits (`git commit -s`). The DCO sign-off is enforced
+   by the `dco` CI check (added in PR #10 / DPU-15) so missing sign-offs
+   block merge.
 
 ## License
 
