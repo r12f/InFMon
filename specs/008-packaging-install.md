@@ -5,6 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the `.deb` packaging contract for Ubuntu aarch64 on BlueField-3. Version-locked deps, source/format declared, postrm cross-package fix, equivs preferred over `--force-depends`, GPG verification note, version-skew check, CLI stability marking, explicit cmake + cargo rules; PartOf and compat file dropped per PR #9 review. |
+| 0.2     | 2026-04-18 | BF-3 (bf3)   | Fix systemd unit default: disabled by default instead of enabled. Add `--run` install flag to opt in to enable+start. Update §6 notes, §7.1 install flow, §7.4 maintainer-script summary. Resolves contradiction with spec 000. |
 
 - **Depends on:** [`000-overview`](000-overview.md), [`004-backend-architecture`](004-backend-architecture.md)
 - **Affects:** [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md), [`001-ci-and-precommit`](001-ci-and-precommit.md) (build job produces the `.deb`)
@@ -281,9 +282,15 @@ Notes:
   unit name would silently break for operators who run a renamed VPP
   unit. The optional drop-in shown in the unit comment lets operators
   on the canonical `vpp.service` opt in to auto-restart coupling.
-- The unit is installed enabled-by-default via `dh_installsystemd`'s
-  default behaviour; operators who do not want it auto-started can
-  `systemctl disable infmon-frontend` after install.
+- The unit is installed **disabled by default** — `dh_installsystemd
+  --no-enable --no-start` prevents the service from starting or being
+  enabled on first install. Operators who want the service to start
+  immediately can pass `--run` to the installer script
+  (`dpkg --configure -D infmon-frontend -- --run`, or the equivalent
+  `apt` invocation documented in `debian/README.Debian`), which causes
+  the postinst to `systemctl enable --now infmon-frontend`. This
+  conservative default avoids surprising operators on a production DPU
+  where VPP may not be ready yet.
 
 There is **no** unit for `infmon-backend` — the backend is a VPP plugin,
 not a service. Its lifecycle is VPP's.
@@ -301,8 +308,8 @@ apt install infmon
   └─ postinst (frontend):
        creates infmon user/group (idempotent)
        creates /var/log/infmon, /var/lib/infmon
-       deb-systemd-helper enable infmon-frontend.service
-       deb-systemd-invoke start infmon-frontend.service
+       (service is NOT enabled or started by default)
+       if --run flag was passed: systemctl enable --now infmon-frontend.service
   └─ postinst (backend):
        prints NOTICE asking operator to restart VPP
 ```
@@ -387,7 +394,7 @@ data-plane). Removing InFMon must never put that traffic at risk.
 | Script        | Package           | Action                                                                                                                          |
 | ------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `postinst`    | `infmon-backend`  | Print NOTICE about `systemctl restart vpp`. No file changes beyond what `dpkg` already did.                                     |
-| `postinst`    | `infmon-frontend` | Create user, dirs; `deb-systemd-helper enable`; `deb-systemd-invoke start`.                                                     |
+| `postinst`    | `infmon-frontend` | Create user, dirs; service is **not** enabled or started by default. If `--run` flag is passed, `systemctl enable --now infmon-frontend.service`. |
 | `prerm`       | `infmon-frontend` | `deb-systemd-invoke stop infmon-frontend.service`.                                                                              |
 | `postrm`      | `infmon-frontend` | On `purge`: remove `/var/log/infmon`, `/var/lib/infmon`, the `infmon` user, the frontend's own conffiles, then `rmdir --ignore-fail-on-non-empty /etc/infmon`. On `remove`: nothing. Never touches files owned by `infmon-backend`. |
 | `postrm`     | `infmon-backend`  | Print NOTICE that `infmon.so` is gone and operator should restart VPP if they want to unload it now.                            |
