@@ -1,10 +1,13 @@
 # Spec 003 — ERSPAN and Packet Parsing
 
+## Version history
+
+| Version | Date       | Author      | Changes        |
+| ------- | ---------- | ----------- | -------------- |
+| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
+
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
-| Status   | Draft                                                         |
-| Owner    | bf3 (agent)                                                   |
-| Reviewer | @banidoru                                                     |
 | Tracking | DPU-9 (parent: DPU-4 — EPIC InFMon)                           |
 | Repo     | https://github.com/r12f/InFMon                                |
 
