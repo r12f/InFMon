@@ -2,21 +2,13 @@
 
 ## Version history
 
-| Version | Date       | Author      | Changes        |
-| ------- | ---------- | ----------- | -------------- |
-| 0.1     | 2026-04-18 | r12f        | Initial draft. |
-| 0.2     | 2026-04-18 | r12f        | Rename tracker->flow-rule, bucket->flow. |
-| 0.3     | 2026-04-18 | r12f        | Add `mirror_src_ip` to v1 field set as the only outer-header field allowed in a flow-rule key. |
-| 0.4     | 2026-04-18 | r12f        | Address PR #5 review: tighten `name` regex to ≥ 2 chars and motivate 31-char cap; `max_keys` positive (not non-negative); spell out DSCP extraction as `(tos>>2)&0x3F`; promote 64-byte cap to MUST and cross-reference §5.3; document LRU recency on insert and tie-breaking; clarify `show` returns `last_seen_ns` (max across resident flows); spell out file-load vs per-`add` budget enforcement; remove `budget_exceeded_runtime` drop reason for v1 (single-threaded CRUD); note TOML/YAML singular/plural is syntactic only. |
-| 0.5     | 2026-04-18 | r12f       | Add §2.4 mental-model section (one flow-rule generates one flow per distinct key tuple); align CLI examples with the `flow-rule` / `flow` verb split (Spec 007); rename `infmon_tracker_*` metrics to `infmon_flow_rule_*` (and `_buckets`→`_flows`, `bucket_count`→`flow_count`); promote `mirror_src_ip` to part of the recommended default flow-rule (still opt-in for custom flow-rules). |
-| 0.6     | 2026-04-18 | r12f       | Add `mirror_src_ip` canonical encoding to §4; fix `token-flow` rename artifact in §9.4 → `token-bucket`. |
+| Version | Date       | Author       | Changes |
+| ------- | ---------- | ------------ | ------- |
+| 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the flow-rule data model and lifecycle. Establishes flow-rule (matcher) vs flow (one per distinct key tuple), `mirror_src_ip` as the only outer-header field allowed in a key, name regex / `max_keys` / 64-byte caps, LRU recency on insert, file-load vs per-`add` budget enforcement, drop-reason set, `infmon_flow_rule_*` metric names, and §2.4 mental-model section. CLI examples align with the `flow-rule` / `flow` verb split (Spec 007). |
 
-Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
-Depends on: 000-overview (system overview), 003-erspan-and-packet-parsing
-           (defines the parsed inner-packet record this spec keys off of)
-Related: 004-backend-architecture (consumes this model in the VPP plugin),
-         007-cli (exposes the flow-rule CRUD as `flow-rule {add,rm,list,show}`
-         and live flow inspection as `flow {list,show}`)
+- **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
+- **Depends on:** [`000-overview`](000-overview.md), [`003-erspan-and-packet-parsing`](003-erspan-and-packet-parsing.md)
+- **Related:** [`004-backend-architecture`](004-backend-architecture.md), [`007-cli`](007-cli.md)
 
 ## 1. Purpose
 
