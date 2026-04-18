@@ -6,7 +6,7 @@
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
 | 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
-| 0.2     | 2026-04-18 | bf3 (agent) | Rename `flow-rule` → `flow-rule`, `flow` → `flow`. |
+| 0.3     | 2026-04-18 | bf3 (agent) | Add `mirror_src_ip` to v1 field set as the only outer-header field allowed in a flow-rule key. |
 
 Tracking issue: DPU-8 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
@@ -69,21 +69,27 @@ flows carry the minimum needed by the OTLP exporter (Spec 006):
 layout is owned by Spec 004 (backend); this spec only requires that
 *there is one flow per (flow-rule, key)*.
 
-## 3. Field set v1 (L3, inner)
+## 3. Field set v1 (L3, inner + mirror metadata)
 
 All v1 fields are extracted from the **inner** packet headers — i.e.
-after ERSPAN decapsulation per Spec 003. Outer/transport fields are
-intentionally not part of v1.
+after ERSPAN decapsulation per Spec 003 — with one named exception
+(`mirror_src_ip`) covered below.
 
-| Field      | Type / width            | Source                       | Notes                                                   |
-|------------|-------------------------|------------------------------|---------------------------------------------------------|
-| `src_ip`   | 16 B (v4 mapped to v6)  | inner IPv4 / IPv6 SA         | IPv4 stored as `::ffff:a.b.c.d` for layout uniformity   |
-| `dst_ip`   | 16 B (v4 mapped to v6)  | inner IPv4 / IPv6 DA         | same mapping rule                                       |
-| `ip_proto` | 1 B                     | inner IPv4.protocol / IPv6.next_header (after extension headers) | 0–255         |
-| `dscp`     | 1 B (low 6 bits used)   | inner IPv4.tos>>2 / IPv6.tc>>2 | upper 2 bits zero                                     |
+| Field            | Type / width            | Source                       | Notes                                                   |
+|------------------|-------------------------|------------------------------|---------------------------------------------------------|
+| `src_ip`         | 16 B (v4 mapped to v6)  | inner IPv4 / IPv6 SA         | IPv4 stored as `::ffff:a.b.c.d` for layout uniformity   |
+| `dst_ip`         | 16 B (v4 mapped to v6)  | inner IPv4 / IPv6 DA         | same mapping rule                                       |
+| `ip_proto`       | 1 B                     | inner IPv4.protocol / IPv6.next_header (after extension headers) | 0–255         |
+| `dscp`           | 1 B (low 6 bits used)   | inner IPv4.tos>>2 / IPv6.tc>>2 | upper 2 bits zero                                     |
+| `mirror_src_ip`  | 16 B (v4 mapped to v6)  | **outer** GRE/ERSPAN source IP, surfaced by Spec 003 as `mirror_src_ip` | The **only** outer-header field allowed in a flow-rule key. Identifies the mirroring device. Same v4-mapped-v6 layout rule. Opt-in: include it in a flow-rule's field list to break flows out per source device. |
 
 A flow-rule MUST list at least one field. There is no implicit field; if
 you want a flow-rule keyed only on `dscp`, configure it that way.
+
+`mirror_src_ip` is the documented exception to the "inner only" rule: it
+travels with the parser record (Spec 003 §4.5) so flow-rules can attribute
+flows to the device that mirrored them. All other outer fields remain
+unavailable.
 
 ### 3.1 Why IPv4-mapped-IPv6
 
