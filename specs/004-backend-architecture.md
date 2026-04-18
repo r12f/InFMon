@@ -6,7 +6,6 @@
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
 | 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
-| 0.2     | 2026-04-18 | bf3 (agent) | Rename `flow-rule` → `flow-rule`, `flow` → `flow`. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
