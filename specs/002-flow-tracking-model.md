@@ -9,6 +9,7 @@
 | 0.3     | 2026-04-18 | bf3 (agent) | Add `mirror_src_ip` to v1 field set as the only outer-header field allowed in a flow-rule key. |
 | 0.4     | 2026-04-18 | bf3 (agent) | Address PR #5 review: tighten `name` regex to ≥ 2 chars and motivate 31-char cap; `max_keys` positive (not non-negative); spell out DSCP extraction as `(tos>>2)&0x3F`; promote 64-byte cap to MUST and cross-reference §5.3; document LRU recency on insert and tie-breaking; clarify `show` returns `last_seen_ns` (max across resident flows); spell out file-load vs per-`add` budget enforcement; remove `budget_exceeded_runtime` drop reason for v1 (single-threaded CRUD); note TOML/YAML singular/plural is syntactic only. |
 | 0.5     | 2026-04-18 | bf3(agent)| Add §2.4 mental-model section (one flow-rule generates one flow per distinct key tuple); align CLI examples with the `flow-rule` / `flow` verb split (Spec 007); rename `infmon_tracker_*` metrics to `infmon_flow_rule_*` (and `_buckets`→`_flows`, `bucket_count`→`flow_count`); promote `mirror_src_ip` to part of the recommended default flow-rule (still opt-in for custom flow-rules). |
+| 0.6     | 2026-04-18 | bf3(agent)| Add `mirror_src_ip` canonical encoding to §4; fix `token-flow` rename artifact in §9.4 → `token-bucket`. |
 
 Tracking issue: DPU-8 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
@@ -146,6 +147,7 @@ key(T, pkt) = enc(f1, pkt) || enc(f2, pkt) || ... || enc(fn, pkt)
 Canonical encodings (v1):
 
 - `src_ip`, `dst_ip`: 16 bytes, network byte order, IPv4 mapped as in §3.
+- `mirror_src_ip`: 16 bytes, network byte order, IPv4 mapped as in §3.
 - `ip_proto`: 1 byte.
 - `dscp`: 1 byte, value in `0..=63`, upper bits zeroed.
 
@@ -368,7 +370,7 @@ covering correctness and counter semantics.
 
 ### 9.4 Per-flow-rule sampling
 
-A `sample_rate` field on the flow-rule (1-in-N or token-flow) is the
+A `sample_rate` field on the flow-rule (1-in-N or token-bucket) is the
 natural next knob once cardinality control via `max_keys` proves
 insufficient. Out of scope for v1 — call it out here so reviewers don't
 try to bolt it onto §6.
