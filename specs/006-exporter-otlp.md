@@ -4,10 +4,10 @@
 
 | Version | Date       | Author      | Changes        |
 | ------- | ---------- | ----------- | -------------- |
-| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
-| 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
-| 0.3     | 2026-04-18 | bf3 (agent) | Address PR #11 review feedback (clarifications, runtime cap, jitter, naming, drop-reason enum, dynamic host.arch). |
-| 0.4     | 2026-04-18 | bf3 (agent) | Add §1.1 mental-model paragraph (flow-rule = matcher; one flow per distinct key tuple); add `flow.mirror_src_ip` per-flow attribute (opt-in, sourced from Spec 003 §4.2.1); fix `distinct_data_points_per_bucket` → `_per_flow` typo. |
+| 0.1     | 2026-04-18 | r12f        | Initial draft. |
+| 0.2     | 2026-04-18 | r12f        | Rename tracker->flow-rule, bucket->flow. |
+| 0.3     | 2026-04-18 | r12f        | Address PR #11 review feedback (clarifications, runtime cap, jitter, naming, drop-reason enum, dynamic host.arch). |
+| 0.4     | 2026-04-18 | r12f        | Add §1.1 mental-model paragraph (flow-rule = matcher; one flow per distinct key tuple); add `flow.mirror_src_ip` per-flow attribute (opt-in, sourced from Spec 003 §4.2.1); fix `distinct_data_points_per_bucket` → `_per_flow` typo. |
 
 Tracking issue: DPU-12 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
