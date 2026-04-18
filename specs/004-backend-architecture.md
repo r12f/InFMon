@@ -160,10 +160,14 @@ struct infmon_slot {
   the contribution from this packet (the packet itself still goes to
   `drop`, like every other packet — InFMon never forwards).
 - Table full → the `lru_drop` eviction policy (spec 002 §6) applies:
-  evict the least-recently-updated key, drop its residual counters,
-  increment `infmon_flow_rule_evictions_total`, and insert the new key.
+  evict the least-recently-updated key (tracked via a `last_updated`
+  timestamp stored in each slot, adding 8 B per entry to the §5.1
+  layout), silently drop its residual counters (v1 simplification —
+  consistent with the "drop" semantics in the `lru_drop` name; flushing
+  evicted counters before discard is deferred to v2), increment
+  `infmon_flow_rule_evictions_total`, and insert the new key.
   If eviction itself fails, the contribution is dropped and
-  `counter_insert_retry_exhausted` is incremented.
+  `counter_eviction_failed` is incremented.
 
 ### 5.3 Width
 
@@ -377,7 +381,9 @@ The plugin exposes the following error counters via the standard VPP
 | `inner_parse_failed`          | Inner L2/L3/L4 parse error after decap.              |
 | `flow_rule_no_match`           | Packet matched zero flow_rules (informational).       |
 | `counter_insert_retry_exhausted` | CAS retries exceeded `INFMON_INSERT_RETRY`.        |
-| `counter_table_full`          | Table reached `max_keys_per_flow_rule`; `lru_drop` eviction triggered (spec 002 §6). |
+| `counter_eviction_failed`     | LRU eviction attempted but the replacement CAS failed (distinct from `counter_insert_retry_exhausted` which covers non-eviction inserts). |
+| `counter_table_full`          | Table reached `max_keys_per_flow_rule`; `lru_drop` eviction attempted (spec 002 §6). Fires when the table is full **and** an eviction is initiated — not when the eviction succeeds or fails (those are tracked by `infmon_flow_rule_evictions_total` and `counter_eviction_failed` respectively). |
+| `infmon_flow_rule_evictions_total` | Number of successful LRU evictions performed.    |
 | `snapshot_alloc_failed`       | Could not allocate replacement table (OOM in stats segment). |
 
 **`snapshot_alloc_failed` recovery contract.** If step 2 of §7.2 fails,

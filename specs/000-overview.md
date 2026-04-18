@@ -334,7 +334,7 @@ explanations of each rule.
 2. **Snapshot transport** — shared memory ring vs. local Unix-domain socket
    vs. gRPC. Decided in spec 002. *Default:* shared-memory ring (lowest
    overhead on DPU).
-3. **Flow table eviction policy** — `lru_drop` (decided in spec 002 §6).
+3. ~~**Flow table eviction policy**~~ — **Resolved:** `lru_drop` (decided in spec 002 §6).
 4. **Distro target** — Ubuntu 22.04 only, or also DOCA's recommended base?
    Decided in spec 005. *Default:* Ubuntu 22.04 arm64.
 5. **Frontend API authn/authz** — v1 ships with UNIX-group-based access on a
