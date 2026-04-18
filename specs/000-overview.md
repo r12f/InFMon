@@ -151,7 +151,7 @@ packets         |     v                                         |
 4. **Match & key.** L2–L4 parser produces a flow key (5-tuple + VRF/VNI when
    available) and per-packet metadata (length, TCP flags, timestamp).
 5. **Update.** Flow table lookup; on hit, update counters in place; on miss,
-   insert a new flow record (with eviction policy per spec 003 to be written).
+   insert a new flow record (with eviction policy per spec 002 to be written).
 6. **Snapshot.** Frontend periodically reads the backend's exposed snapshot
    (lock-free / RCU-style; details in spec 002) and builds an aggregate view.
 7. **Export.** Frontend pushes records to configured exporters and serves
