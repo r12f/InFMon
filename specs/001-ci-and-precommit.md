@@ -9,6 +9,9 @@
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
+| Status   | Draft                                                         |
+| Owner    | @r12f (human owner of record; @banidoru is required reviewer per CODEOWNERS — see §7) |
+| Reviewer | @banidoru                                                     |
 | Tracking | DPU-7 (parent: DPU-4 — EPIC InFMon)                           |
 | Repo     | https://github.com/r12f/InFMon                                |
 
