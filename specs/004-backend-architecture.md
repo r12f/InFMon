@@ -8,6 +8,7 @@
 | 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
 | 0.3     | 2026-04-18 | bf3 (agent) | Address PR #7 review: linear probing, offset-based descriptors, memory ordering, epoch-based RCU, scratch cap, alloc-failed recovery. |
 | 0.4     | 2026-04-18 | bf3(agent)| Rename internal identifiers `flow_def*` → `flow_rule*` to match the spec-002 mental model (a flow_rule generates one flow per distinct key tuple); clarify Terminology section accordingly. |
+| 0.5     | 2026-04-18 | bf3(agent)| Use `flow_rule_index` (the u32 handle) instead of `flow_rule_id` (u128 UUID) in the per-worker scratch-triple description and §6 emit format — the 24 B/entry estimate only adds up with the index. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
@@ -97,7 +98,7 @@ Per-node responsibilities:
 
 - **`infmon-flow-match`** — For each active `flow_rule`, parses just the
   fields required by that definition's key + filter expression, evaluates
-  the filter, and emits one `(flow_rule_id, key_hash, key_blob)` triple per
+  the filter, and emits one `(flow_rule_index, key_hash, key_blob)` triple per
   matching `(packet, flow_rule)` pair into a stack-allocated scratch vector.
   A packet that matches no `flow_rule` exits via `drop` with no work done.
   See spec 002 for the key/filter language.
@@ -337,7 +338,7 @@ The crucial properties:
   `VLIB_FRAME_SIZE × max_active_flow_rules` and lives in per-thread TLS;
   no allocation occurs per frame. To bound TLS footprint, v1 caps
   `max_active_flow_rules` at **64** (a hard `static_assert` in the
-  plugin); at the v1 entry size of ≈24 B per `(flow_rule_id, key_hash,
+  plugin); at the v1 entry size of ≈24 B per `(flow_rule_index, key_hash,
   key_blob_ptr)` triple this gives a per-worker scratch of
   `256 × 64 × 24 ≈ 384 KiB`, comfortably below the default 8 MiB VPP
   worker stack/TLS budget. Lifting the cap requires either shrinking
