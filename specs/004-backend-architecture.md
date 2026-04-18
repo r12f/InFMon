@@ -1,12 +1,14 @@
-# Spec 004 — Backend Architecture (VPP plugin)
+# 004 — Backend Architecture (VPP plugin)
 
 ## Version history
 
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of `infmon-backend` (VPP plugin). Linear-probing flow table with offset-based descriptors, memory ordering, epoch-based RCU, scratch cap, alloc-failed recovery; internal identifiers use `flow_rule*` per Spec 002 mental model; per-worker scratch-triple and §6 emit format use `flow_rule_index` (u32 handle), keeping the 24 B/entry estimate. |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Remove IPFIX from out-of-scope bullet — OTLP is the only v1 exporter. |
 
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`003-erspan-and-packet-parsing`](003-erspan-and-packet-parsing.md)
+- **Related:** [`006-exporter-otlp`](006-exporter-otlp.md), [`007-cli`](007-cli.md)
 
 ## 1. Motivation
 
@@ -46,7 +48,7 @@ In-scope:
 
 Out of scope (deferred to later specs):
 
-- Wire format of OTLP / IPFIX exports — spec 006.
+- Wire format of OTLP exports — spec 006.
 - Frontend aggregation logic, REST surface, auth — spec 005.
 - CLI UX — spec 007.
 - Persistence of flow definitions across reboots — v2.
@@ -74,7 +76,7 @@ in the worker thread that owns the input device's RX queue; no inter-thread
 hand-off occurs on the data path.
 
 ```text
-  dpdk-input  ──►  infmon-erspan-decap  ──►  infmon-flow-match  ──►  infmon-counter  ──►  drop
+ dpdk-input  ──►  infmon-erspan-decap  ──►  infmon-flow-match  ──►  infmon-counter  ──►  drop
                        │  (no-decap)              │  (no-match)              │  (counted)
                        └──►  drop                 └──►  drop                 └──►  drop
 ```
@@ -82,7 +84,7 @@ hand-off occurs on the data path.
 Per-node responsibilities:
 
 - **`infmon-erspan-decap`** — Validates outer L2/L3, recognises GRE proto
-  `0x88BE` (ERSPAN II) / `0x22EB` (ERSPAN III), strips the outer headers
+  `0x22EB` (ERSPAN III), strips the outer headers
   according to spec 003, and rewrites `vlib_buffer_t.current_data` /
   `current_length` so the inner Ethernet frame is at the head of the buffer.
   Non-ERSPAN packets and malformed encapsulations go to `drop` with a
