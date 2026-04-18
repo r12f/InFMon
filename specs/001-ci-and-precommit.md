@@ -1,10 +1,13 @@
-# Spec 001 — CI and Pre-commit
+# 001 — CI and Pre-commit
 
 ## Version history
 
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft. Defines local pre-commit contract, GH Actions workflows, x86 vs aarch64 split, and the §11 changelog of review fixes from PR #4 (banidoru). |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Align VPP version from 24.02 → 24.10 across §4.3, §4.4, §5 to match deployment floor in specs 004/008. Resolve open question §9.2. |
+
+- **Related:** [`000-overview`](000-overview.md)
 
 ## 1. Motivation
 
@@ -163,7 +166,7 @@ minimal in v1; expand only when there's a concrete bug it would have caught.
 
 ### 4.3 `cpp-test.yml`
 
-- Runner: `ubuntu-24.04` host, container `ligato/vpp-base:24.02` (see §5).
+- Runner: `ubuntu-24.04` host, container `ligato/vpp-base:24.10` (see §5).
 - Steps:
   1. Checkout.
   2. The base image already provides `cmake`, `ninja-build`, `g++`, `clang`,
@@ -190,12 +193,12 @@ Cross-compilation smoke test: prove the BF-3 target builds; do not run tests
     `cargo build --workspace --target aarch64-unknown-linux-gnu --release`.
     Linker: `aarch64-linux-gnu-gcc` from `gcc-aarch64-linux-gnu`.
     `cross` is acceptable as an alternative.
-  - C/C++: cross-toolchain in container
-    `ligato/vpp-base:24.02-arm64` (multi-arch tag) **strongly preferred**
-    over `--platform linux/arm64` build via `docker buildx`. The
-    buildx/QEMU path emulates every compiler invocation and a full backend
-    build can blow well past the §8 8-min warm target. Compile only;
-    do **not** invoke `ctest`.
+  - C/C++: cross-toolchain in container `ligato/vpp-base:24.10-arm64`
+    (multi-arch tag) **strongly preferred** over
+    `--platform linux/arm64` build via `docker buildx`. The buildx/QEMU
+    path emulates every compiler invocation and a full backend build can
+    blow well past the §8 8-min warm target. Compile only; do **not**
+    invoke `ctest`.
   - **Time budget for the QEMU fallback path**: if QEMU buildx is used,
     the spec accepts up to **20 min wall-time** for `cross-build`
     (vs. 8 min for the native cross-toolchain path) — implementers
@@ -220,7 +223,7 @@ Cross-compilation smoke test: prove the BF-3 target builds; do not run tests
 
 ## 5. Container image for VPP-in-CI
 
-**Proposal: use `ligato/vpp-base:24.02` (Debian-based, VPP 24.02 LTS) as the
+**Proposal: use `ligato/vpp-base:24.10` (Debian-based, VPP 24.10 LTS) as the
 primary CI image for `cpp-test` and `cross-build`.**
 
 Reasoning:
@@ -246,7 +249,7 @@ If `ligato/vpp-base` becomes unmaintained, fallback is a thin Dockerfile in
 published to `ghcr.io/r12f/infmon-vpp-dev`.
 
 Additionally — independent of upstream maintenance status — the
-implementation MUST mirror the pinned `ligato/vpp-base:24.02` digest to
+implementation MUST mirror the pinned `ligato/vpp-base:24.10` digest to
 `ghcr.io/r12f/infmon-vpp-dev` from day one (via a scheduled weekly job or a
 one-shot `ci/mirror-image.sh`). CI consumes the `ghcr.io` mirror, not Docker
 Hub, so a Docker Hub outage or rate-limit hit doesn't hard-block PRs. The
@@ -315,8 +318,7 @@ Targets: warm CI (full cache hit) ≤ 4 min for `lint`, ≤ 6 min for `rust-test
 
 1. **Self-hosted runner on `r12f-bf3`?** Would unlock optional E2E in CI.
    Defer until v1 ships and we feel the pain.
-2. **Pin VPP LTS to 24.02 vs. 24.06?** 24.02 is current LTS at spec time;
-   confirm with @banidoru before implementation.
+2. **~~Pin VPP LTS to 24.02 vs. 24.06?~~** Resolved: aligned to 24.10 to match the deployment floor in specs 004/008.
 3. **Use `cross` vs. raw cross-compiler for Rust aarch64?** Both work;
    defaulting to raw cross-compiler keeps the dependency surface smaller.
 4. **VPP feature-flag name and `cargo` exclusion form for `rust-test.yml`?**

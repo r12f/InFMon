@@ -1,10 +1,11 @@
-# Spec 002 — Flow tracking model
+# 002 — Flow tracking model
 
 ## Version history
 
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the flow-rule data model and lifecycle. Establishes flow-rule (matcher) vs flow (one per distinct key tuple), `mirror_src_ip` as the only outer-header field allowed in a key, name regex / `max_keys` / 64-byte caps, LRU recency on insert, file-load vs per-`add` budget enforcement, drop-reason set, `infmon_flow_rule_*` metric names, and §2.4 mental-model section. CLI examples align with the `flow-rule` / `flow` verb split (Spec 007). |
+| 0.2     | 2026-04-18 | Riff (r12f)  | Rename CLI binary references from `infmon-cli` to `infmonctl`. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
 - **Depends on:** [`000-overview`](000-overview.md), [`003-erspan-and-packet-parsing`](003-erspan-and-packet-parsing.md)
@@ -153,40 +154,14 @@ this spec only fixes the *input* (the bytes above, in this order).
 ## 5. Configuration schema
 
 Flow-rules are configured via a static file loaded at backend start.
-TOML is the canonical format; YAML is accepted but converted to the same
-internal representation. The CLI (Spec 007) is a thin wrapper that
+YAML is the canonical format. The CLI (Spec 007) is a thin wrapper that
 mutates this same schema and asks the backend to reload.
 
-The TOML form uses `[[flow-rule]]` (singular, idiomatic TOML for an
-array-of-tables) and the YAML form uses `flow-rules:` (plural,
-idiomatic YAML for a list). Both names refer to the same internal
-collection; the singular/plural difference is a syntactic convention
-of the two formats, not two different schemas.
-
-### 5.1 TOML
-
-```toml
-# /etc/infmon/flows.toml
-
-# Recommended default flow-rule: 5-tuple-ish L3 keyed per mirroring source.
-# Including `mirror_src_ip` keeps flows from different mirroring devices
-# distinct even when their inner traffic happens to collide on 5-tuple.
-[[flow-rule]]
-name             = "by_5tuple_l3"
-fields           = ["mirror_src_ip", "src_ip", "dst_ip", "ip_proto", "dscp"]
-max_keys         = 1_048_576           # 2^20
-eviction_policy  = "lru_drop"          # only value supported in v1
-
-[[flow-rule]]
-name             = "by_dscp"
-fields           = ["dscp"]
-max_keys         = 64
-eviction_policy  = "lru_drop"
-```
-
-### 5.2 YAML (equivalent)
+### 5.1 YAML
 
 ```yaml
+# /etc/infmon/config.yaml (flow-rules section)
+
 flow-rules:
   - name: by_5tuple_l3
     fields: [mirror_src_ip, src_ip, dst_ip, ip_proto, dscp]
@@ -255,17 +230,17 @@ operators can size `max_keys` against observed eviction rate.
 
 ## 7. CRUD API surface
 
-The backend exposes a small management API consumed by `infmon-cli`
+The backend exposes a small management API consumed by `infmonctl`
 (Spec 007) and by the config loader. Transport is owned by Spec 004
 (likely a Unix socket carrying length-prefixed protobuf or JSON); this
 spec defines only the operations and their semantics.
 
 | Op       | CLI                              | Input                                     | Output                              | Notes |
 |----------|----------------------------------|-------------------------------------------|-------------------------------------|-------|
-| `add`    | `infmon-cli flow-rule add <spec>`     | full flow-rule definition (name, fields, max_keys, eviction_policy) | created flow-rule, or error           | Fails if name exists. |
-| `rm`     | `infmon-cli flow-rule rm <name>`      | flow-rule name                              | ok / `not_found`                    | Drops all flows for that flow-rule. |
-| `list`   | `infmon-cli flow-rule list`           | —                                         | array of flow-rule definitions        | Cheap; no flow data. |
-| `show`   | `infmon-cli flow-rule show <name>`    | flow-rule name                              | flow-rule definition + live stats: `flow_count`, `evictions_total`, `drops_total`, `last_seen_ns` (the maximum `last_seen_ns` across this flow-rule's resident flows; absent if there are none) | Stats are best-effort snapshots. |
+| `add`    | `infmonctl flow-rule add <spec>`     | full flow-rule definition (name, fields, max_keys, eviction_policy) | created flow-rule, or error           | Fails if name exists. |
+| `rm`     | `infmonctl flow-rule rm <name>`      | flow-rule name                              | ok / `not_found`                    | Drops all flows for that flow-rule. |
+| `list`   | `infmonctl flow-rule list`           | —                                         | array of flow-rule definitions        | Cheap; no flow data. |
+| `show`   | `infmonctl flow-rule show <name>`    | flow-rule name                              | flow-rule definition + live stats: `flow_count`, `evictions_total`, `drops_total`, `last_seen_ns` (the maximum `last_seen_ns` across this flow-rule's resident flows; absent if there are none) | Stats are best-effort snapshots. |
 
 ### 7.1 Semantics
 

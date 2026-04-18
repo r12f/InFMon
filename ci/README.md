@@ -15,13 +15,13 @@ Implementation of the `lint` / `rust-test` / `cpp-test` / `cross-build` /
 
 ## Container image
 
-`cpp-test` and the C/C++ leg of `cross-build` use **`ligato/vpp-base:24.02`**
+`cpp-test` and the C/C++ leg of `cross-build` use **`ligato/vpp-base:24.10`**
 (see [spec §5][spec]). The image is referenced by tag in workflows today; pin
 by digest after the first successful run on `main`:
 
 ```bash
-docker pull ligato/vpp-base:24.02
-docker inspect --format='{{index .RepoDigests 0}}' ligato/vpp-base:24.02
+docker pull ligato/vpp-base:24.10
+docker inspect --format='{{index .RepoDigests 0}}' ligato/vpp-base:24.10
 # Replace the `image:` line in cpp-test.yml + cross-build.yml with the digest.
 ```
 
