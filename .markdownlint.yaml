@@ -1,0 +1,20 @@
+# markdownlint configuration for InFMon.
+# Reference: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+default: true
+
+# Allow long lines in tables and code blocks; specs use wide reference tables.
+MD013:
+  line_length: 120
+  code_blocks: false
+  tables: false
+  headings: true
+
+# Permit duplicate headings under different parents (we use "## 1." style).
+MD024:
+  siblings_only: true
+
+# Allow inline HTML for badges and details/summary blocks in READMEs.
+MD033: false
+
+# First line need not be a top-level heading (some docs lead with metadata tables).
+MD041: false

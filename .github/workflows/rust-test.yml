@@ -1,0 +1,58 @@
+name: rust-test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: rust-test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+
+jobs:
+  rust-test:
+    name: rust-test
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo / target cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-test-x86_64
+
+      # The Rust workspace may not yet exist (we're in spec-implementation
+      # territory). Detect a Cargo.toml at the root before invoking cargo so
+      # the job is meaningful from day one without false-failing the gate.
+      - name: Detect Cargo workspace
+        id: detect
+        run: |
+          if [ -f Cargo.toml ]; then
+            echo "have_workspace=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_workspace=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Cargo.toml at repo root yet; rust-test is a no-op until the Rust workspace lands."
+          fi
+
+      - name: cargo build
+        if: steps.detect.outputs.have_workspace == 'true'
+        run: cargo build --workspace --all-targets --locked
+
+      - name: cargo test
+        if: steps.detect.outputs.have_workspace == 'true'
+        run: cargo test --workspace --all-features --locked
+
+      - name: cargo doc
+        if: steps.detect.outputs.have_workspace == 'true'
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --workspace --no-deps
