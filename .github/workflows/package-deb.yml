@@ -1,0 +1,123 @@
+name: package-deb
+
+# Native arm64 build of InFMon .deb packages (BlueField-3 target)
+# per spec 008. Runs on GitHub's native arm64 runner. Produces three
+# binary packages + the meta package and uploads them as workflow
+# artefacts.
+#
+# This workflow is intentionally permissive while the source trees
+# are still empty: debian/rules skips the cmake/cargo steps when
+# the corresponding inputs are missing, so this gate verifies the
+# packaging tree itself (control / changelog / scripts / unit file)
+# before the implementations land.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'debian/**'
+      - 'tools/sync-debian-changelog.py'
+      - 'CHANGELOG.md'
+      - 'src/**'
+      - '.github/workflows/package-deb.yml'
+  pull_request:
+    paths:
+      - 'debian/**'
+      - 'tools/sync-debian-changelog.py'
+      - 'CHANGELOG.md'
+      - 'src/**'
+      - '.github/workflows/package-deb.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-deb:
+    name: dpkg-buildpackage (arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate debian/changelog is in sync with CHANGELOG.md
+        run: python3 tools/sync-debian-changelog.py --check
+
+      - name: Run sync script unit tests
+        run: python3 -m unittest discover -s tools/tests -v
+
+      - name: Install build tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            devscripts \
+            equivs \
+            debhelper \
+            dpkg-dev \
+            fakeroot \
+            lintian
+
+      - name: Validate debian/control parses
+        run: dpkg-checkbuilddeps || true   # informational
+
+      - name: Synthesize upstream orig tarball
+        # Source format is `3.0 (quilt)` (non-native), which requires an
+        # upstream tarball at ../<source>_<upstream-version>.orig.tar.gz.
+        # While there is no separate upstream release, build one from the
+        # working tree (excluding debian/ and VCS metadata) so dpkg-source
+        # can produce a source package. This is the standard idiom for
+        # quilt packages tracking an in-tree upstream.
+        run: |
+          set -euo pipefail
+          PKG=$(dpkg-parsechangelog -SSource)
+          UVER=$(dpkg-parsechangelog -SVersion | sed 's/-[^-]*$//')
+          # IMPORTANT: only exclude ./debian and VCS metadata. Anything else
+          # excluded from the orig tarball will be flagged as an unexpected
+          # upstream change by `dpkg-source -b` under format '3.0 (quilt)'.
+          tar --exclude='./debian' --exclude-vcs \
+              -czf "../${PKG}_${UVER}.orig.tar.gz" .
+          ls -la "../${PKG}_${UVER}.orig.tar.gz"
+
+      - name: Build source package
+        env:
+          DEB_BUILD_OPTIONS: "nocheck parallel=2"
+        run: |
+          dpkg-buildpackage -S -us -uc -d
+          ls -la ../
+
+      - name: Build binary .debs
+        env:
+          DEB_BUILD_OPTIONS: "nocheck parallel=2"
+        run: |
+          # -B = binary-only, -d = ignore build-dep check (we don't
+          # have vpp-dev installed and the rules file no-ops the
+          # build steps when the source trees are missing). When the
+          # backend/frontend impls land we will drop -d and install
+          # the real build-deps via mk-build-deps.
+          # TODO(DPU-XX): remove -d and add mk-build-deps step once
+          # VPP build-deps are available in CI.
+          dpkg-buildpackage -B -us -uc -d
+          mkdir -p artifacts
+          mv ../*.deb ../*.changes ../*.buildinfo artifacts/ 2>/dev/null || true
+          ls -la artifacts/
+
+      - name: Run lintian (informational)
+        run: |
+          set +e
+          lintian --no-tag-display-limit --suppress-tags \
+            empty-binary-package,no-manual-page,binary-without-manpage \
+            artifacts/*.changes
+          echo "lintian exit: $?"
+        continue-on-error: true
+
+      - name: Upload .deb artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: infmon-debs-arm64
+          path: |
+            artifacts/*.deb
+            artifacts/*.changes
+            artifacts/*.buildinfo
+          if-no-files-found: warn
+          retention-days: 14

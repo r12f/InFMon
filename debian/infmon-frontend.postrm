@@ -1,0 +1,45 @@
+#!/bin/sh
+# postrm — infmon-frontend
+#
+# Per spec 008 §7.3 / §7.4:
+#   - on `purge`, remove /etc/infmon, /var/log/infmon, /var/lib/infmon,
+#     and the infmon system user/group
+#   - on `remove`, leave operator state alone
+#   - never touch VPP
+
+set -e
+
+INFMON_USER=infmon
+INFMON_GROUP=infmon
+
+case "$1" in
+    purge)
+        # Remove only config files shipped by this package; leave
+        # operator-created files (e.g., custom flow_def YAMLs) alone.
+        rm -f /etc/infmon/frontend.conf /etc/infmon/backend.conf
+        rmdir /etc/infmon/flow_defs.d 2>/dev/null || true
+        rmdir /etc/infmon 2>/dev/null || true
+        rm -f /var/log/infmon/*.log /var/log/infmon/*.log.* 2>/dev/null || true
+        rmdir /var/log/infmon 2>/dev/null || true
+        rm -f /var/lib/infmon/*.db /var/lib/infmon/*.state 2>/dev/null || true
+        rmdir /var/lib/infmon 2>/dev/null || true
+
+        if getent passwd "$INFMON_USER" >/dev/null; then
+            deluser --quiet --system "$INFMON_USER" >/dev/null || true
+        fi
+        if getent group "$INFMON_GROUP" >/dev/null; then
+            delgroup --quiet --system --only-if-empty "$INFMON_GROUP" \
+                >/dev/null || true
+        fi
+        ;;
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

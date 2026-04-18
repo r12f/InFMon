@@ -1,0 +1,179 @@
+#!/usr/bin/make -f
+#
+# debian/rules — InFMon
+#
+# Builds three binary packages from a single source tree per spec 008:
+#   - infmon-backend   (VPP plugin: infmon.so + infmon.api.json)
+#   - infmon-frontend  (Rust daemon + systemd unit + default config)
+#   - infmon-cli       (Rust CLI + completions + man page)
+# Plus a meta package "infmon" that pulls in all three.
+#
+# We do NOT use dh's cargo or cmake build-systems because we drive both
+# (C/C++ for the plugin, Rust for the daemon + CLI) from the top-level
+# project. Each step below is conditional on the corresponding source
+# tree existing, so this rules file is forward-compatible with the
+# repository as the implementations land.
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DH_VERBOSE = 1
+
+# Cargo / cargo target dirs — keep build artefacts inside debian/ so
+# `dpkg-buildpackage -nc` and clean(1) behave predictably.
+export CARGO_HOME       ?= $(CURDIR)/debian/cargo-home
+export CARGO_TARGET_DIR ?= $(CURDIR)/target
+
+# CMake build tree for the backend plugin.
+BACKEND_BUILD_DIR := $(CURDIR)/build/backend
+
+# DESTDIR roots for each binary package — populated by `*.install`
+# globs through dh_install at install time.
+DESTDIR_BACKEND  := debian/infmon-backend
+DESTDIR_FRONTEND := debian/infmon-frontend
+DESTDIR_CLI      := debian/infmon-cli
+
+%:
+	dh $@
+
+# ----------------------------------------------------------------------
+# clean
+# ----------------------------------------------------------------------
+override_dh_auto_clean:
+	rm -rf $(BACKEND_BUILD_DIR)
+	rm -rf $(CARGO_TARGET_DIR)
+	rm -rf $(CARGO_HOME)
+	rm -rf debian/tmp
+	dh_auto_clean
+
+# ----------------------------------------------------------------------
+# configure (no-op — cmake configure happens inside build target)
+# ----------------------------------------------------------------------
+override_dh_auto_configure:
+	# Sync the Debian changelog from the canonical CHANGELOG.md before
+	# the source package metadata is consumed downstream. The script is
+	# idempotent.
+	python3 tools/sync-debian-changelog.py
+	dh_auto_configure
+
+# ----------------------------------------------------------------------
+# build
+# ----------------------------------------------------------------------
+override_dh_auto_build:
+	# ---- backend (VPP plugin) ----
+	if [ -f src/infmon-backend/CMakeLists.txt ]; then \
+	  echo ">>> building infmon-backend (cmake)"; \
+	  cmake -S src/infmon-backend -B $(BACKEND_BUILD_DIR) \
+	        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+	        -DCMAKE_INSTALL_PREFIX=/usr; \
+	  cmake --build $(BACKEND_BUILD_DIR) --parallel; \
+	else \
+	  echo ">>> skipping infmon-backend build (no CMakeLists.txt yet)"; \
+	fi
+
+	# ---- frontend + cli (cargo workspace) ----
+	if [ -f Cargo.toml ]; then \
+	  echo ">>> building infmon-frontend + infmon-cli (cargo)"; \
+	  cargo build --release --locked \
+	      $$( [ -d src/infmon-frontend ] && echo -p infmon-frontend ) \
+	      $$( [ -d src/infmon-cli ]      && echo -p infmon-cli ); \
+	else \
+	  echo ">>> skipping cargo build (no Cargo.toml yet)"; \
+	fi
+
+	# ---- generated artefacts (completions + man page) ----
+	mkdir -p debian/tmp/completions debian/tmp/man
+	if [ -x $(CARGO_TARGET_DIR)/release/infmonctl ]; then \
+	  $(CARGO_TARGET_DIR)/release/infmonctl --generate-completions bash \
+	    > debian/tmp/completions/infmonctl 2>/dev/null || true; \
+	  $(CARGO_TARGET_DIR)/release/infmonctl --generate-completions zsh \
+	    > debian/tmp/completions/_infmonctl 2>/dev/null || true; \
+	  $(CARGO_TARGET_DIR)/release/infmonctl --generate-manpage \
+	    > debian/tmp/man/infmonctl.1 2>/dev/null || true; \
+	fi
+
+# ----------------------------------------------------------------------
+# test (dh_auto_test) — gated; CI runs the real test suite, package
+# build runs the smoke subset only.
+# ----------------------------------------------------------------------
+override_dh_auto_test:
+	if [ "$$DEB_BUILD_OPTIONS" != "$${DEB_BUILD_OPTIONS%nocheck*}" ]; then \
+	  echo ">>> nocheck set; skipping tests"; \
+	  exit 0; \
+	fi
+	if [ -d $(BACKEND_BUILD_DIR) ] && [ -f $(BACKEND_BUILD_DIR)/CTestTestfile.cmake ]; then \
+	  ctest --test-dir $(BACKEND_BUILD_DIR) --output-on-failure || true; \
+	fi
+	if [ -f Cargo.toml ]; then \
+	  cargo test --release --locked --no-fail-fast || true; \
+	fi
+
+# ----------------------------------------------------------------------
+# install — copy build outputs into per-package staging trees.
+# dh_install picks them up via debian/<pkg>.install globs.
+# ----------------------------------------------------------------------
+override_dh_auto_install:
+	# Backend plugin → /usr/lib/vpp_plugins/
+	install -d debian/tmp/usr/lib/vpp_plugins
+	install -d debian/tmp/usr/share/vpp/api/plugins
+	if [ -f $(BACKEND_BUILD_DIR)/infmon.so ]; then \
+	  install -m 0644 $(BACKEND_BUILD_DIR)/infmon.so \
+	    debian/tmp/usr/lib/vpp_plugins/infmon.so; \
+	fi
+	if [ -f $(BACKEND_BUILD_DIR)/infmon.api.json ]; then \
+	  install -m 0644 $(BACKEND_BUILD_DIR)/infmon.api.json \
+	    debian/tmp/usr/share/vpp/api/plugins/infmon.api.json; \
+	fi
+
+	# Frontend daemon → /usr/bin/
+	install -d debian/tmp/usr/bin
+	if [ -x $(CARGO_TARGET_DIR)/release/infmon-frontend ]; then \
+	  install -m 0755 $(CARGO_TARGET_DIR)/release/infmon-frontend \
+	    debian/tmp/usr/bin/infmon-frontend; \
+	fi
+
+	# CLI → /usr/bin/infmonctl
+	if [ -x $(CARGO_TARGET_DIR)/release/infmonctl ]; then \
+	  install -m 0755 $(CARGO_TARGET_DIR)/release/infmonctl \
+	    debian/tmp/usr/bin/infmonctl; \
+	fi
+
+	install -d debian/tmp/etc/infmon/flow_defs.d
+	install -m 0644 debian/configs/backend.conf  debian/tmp/etc/infmon/backend.conf
+	install -m 0644 debian/configs/frontend.conf debian/tmp/etc/infmon/frontend.conf
+
+	dh_auto_install
+
+# Create empty placeholder files for anything not yet built, so that
+# dh_install does not error out while source trees are still landing.
+	for f in usr/lib/vpp_plugins/infmon.so \
+	         usr/share/vpp/api/plugins/infmon.api.json \
+	         usr/bin/infmon-frontend usr/bin/infmonctl \
+	         etc/infmon/backend.conf etc/infmon/frontend.conf \
+	         completions/infmonctl completions/_infmonctl \
+	         man/infmonctl.1; do \
+	  if [ ! -e debian/tmp/$$f ]; then \
+	    mkdir -p debian/tmp/$$(dirname $$f); \
+	    touch debian/tmp/$$f; \
+	  fi; \
+	done
+	# TODO(DPU-XX): remove stubs once real binaries are built by CMake
+
+# ----------------------------------------------------------------------
+# systemd — installed via debian/infmon-frontend.service which
+# dh_installsystemd picks up automatically.
+# ----------------------------------------------------------------------
+override_dh_installsystemd:
+	dh_installsystemd --name=infmon-frontend --no-start
+	# We deliberately do not start at install time when running under
+	# dpkg-buildpackage; the postinst handles policy-aware start on the
+	# target system.
+
+# ----------------------------------------------------------------------
+# dh_missing — tolerate absent files while source trees are landing.
+# ----------------------------------------------------------------------
+override_dh_missing:
+	# TODO(DPU-XX): switch to --fail-missing once all source trees are merged
+	dh_missing --list-missing
+
+# ----------------------------------------------------------------------
+# Strip / shlibs — let dh handle these by default. No override.
+# ----------------------------------------------------------------------

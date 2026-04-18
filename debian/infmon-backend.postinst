@@ -1,0 +1,38 @@
+#!/bin/sh
+# postinst — infmon-backend
+#
+# Per spec 008 §5.1 / §7.1: the backend has no daemon of its own; it is
+# a VPP plugin loaded by the operator's existing VPP. We must NOT
+# restart VPP from this script — that would drop production traffic on
+# a DPU. We only print a NOTICE so the operator knows what to do next.
+
+set -e
+
+case "$1" in
+    configure)
+        cat <<'NOTICE' >&2
+NOTICE: infmon-backend installed.
+
+The InFMon VPP plugin has been installed at:
+    /usr/lib/vpp_plugins/infmon.so
+
+VPP loads plugins from this directory at startup. To activate
+the plugin on a running system, restart VPP when convenient:
+
+    sudo systemctl restart vpp
+
+InFMon does NOT restart VPP automatically — on a DPU this could
+drop production traffic for unrelated services.
+NOTICE
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

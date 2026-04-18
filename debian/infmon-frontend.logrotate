@@ -1,0 +1,13 @@
+/var/log/infmon/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 infmon infmon
+    sharedscripts
+    postrotate
+        systemctl reload infmon-frontend.service >/dev/null 2>&1 || true
+    endscript
+}

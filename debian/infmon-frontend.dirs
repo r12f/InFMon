@@ -1,0 +1,3 @@
+etc/infmon/flow_defs.d
+var/log/infmon
+var/lib/infmon

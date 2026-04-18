@@ -1,0 +1,38 @@
+#!/bin/sh
+# postrm — infmon-backend
+#
+# Per spec 008 §7.4: on remove/purge, just remind the operator that
+# they may want to restart VPP to fully unload the plugin. We never
+# touch VPP itself.
+
+set -e
+
+case "$1" in
+    remove|purge)
+        if [ -d /usr/lib/vpp_plugins ]; then
+            cat <<'NOTICE' >&2
+NOTICE: infmon-backend removed.
+
+The InFMon VPP plugin file has been removed from
+    /usr/lib/vpp_plugins/infmon.so
+
+If VPP is currently running with the plugin loaded, restart it
+when convenient to unload it:
+
+    sudo systemctl restart vpp
+
+VPP itself has NOT been touched.
+NOTICE
+        fi
+        ;;
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

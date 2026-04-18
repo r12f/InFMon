@@ -1,0 +1,3 @@
+usr/bin/infmonctl                                        usr/bin/
+completions/infmonctl                                    usr/share/bash-completion/completions/
+completions/_infmonctl                                   usr/share/zsh/vendor-completions/

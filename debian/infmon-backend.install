@@ -1,0 +1,3 @@
+usr/lib/vpp_plugins/infmon.so          usr/lib/vpp_plugins/
+usr/share/vpp/api/plugins/infmon.api.json  usr/share/vpp/api/plugins/
+etc/infmon/backend.conf                 etc/infmon/
