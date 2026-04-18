@@ -7,6 +7,7 @@
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
 | 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
 | 0.3     | 2026-04-18 | bf3 (agent) | Address PR #7 review: linear probing, offset-based descriptors, memory ordering, epoch-based RCU, scratch cap, alloc-failed recovery. |
+| 0.4     | 2026-04-18 | bf3(agent)| Rename internal identifiers `flow_def*` → `flow_rule*` to match the spec-002 mental model (a flow_rule generates one flow per distinct key tuple); clarify Terminology section accordingly. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
@@ -64,10 +65,11 @@ Out of scope (deferred to later specs):
 
 | Term              | Meaning                                                          |
 | ----------------- | ---------------------------------------------------------------- |
-| **flow_def**      | Operator-supplied definition of *what* counts as a flow — the key fields and an optional pre-filter. See spec 002. |
-| **key**           | Concrete tuple value derived from one packet under a `flow_def`. |
-| **counter row**   | The pair `(packets, bytes)` (each 64-bit) for one `(flow_def, key)`. |
-| **counter table** | Per-`flow_def` hash table mapping `key → counter row`.           |
+| **flow_rule**     | Operator-supplied matcher: the key fields and an optional pre-filter. A flow_rule is a *configuration*, not a counter — see spec 002. |
+| **key**           | Concrete tuple value derived from one packet under a `flow_rule`. |
+| **flow**          | One `(flow_rule, key)` pair tracked in memory. Each flow_rule generates **one flow per distinct key tuple** it observes; a flow owns its own counter row. |
+| **counter row**   | The pair `(packets, bytes)` (each 64-bit) that lives in a flow.   |
+| **counter table** | Per-`flow_rule` hash table mapping `key → flow` (i.e. `key → counter row`). |
 | **snapshot**      | Atomic capture of every counter row in every table at one instant. |
 | **stats segment** | VPP's existing shared-memory region that the frontend mmaps read-only. |
 | **batch**         | A vector of packet buffer indices VPP delivers to a graph node in one call (≤ `VLIB_FRAME_SIZE`, currently 256). |
@@ -93,11 +95,11 @@ Per-node responsibilities:
   Non-ERSPAN packets and malformed encapsulations go to `drop` with a
   per-reason error counter (so the frontend can surface ingress health).
 
-- **`infmon-flow-match`** — For each active `flow_def`, parses just the
+- **`infmon-flow-match`** — For each active `flow_rule`, parses just the
   fields required by that definition's key + filter expression, evaluates
-  the filter, and emits one `(flow_def_id, key_hash, key_blob)` triple per
-  matching `(packet, flow_def)` pair into a stack-allocated scratch vector.
-  A packet that matches no `flow_def` exits via `drop` with no work done.
+  the filter, and emits one `(flow_rule_id, key_hash, key_blob)` triple per
+  matching `(packet, flow_rule)` pair into a stack-allocated scratch vector.
+  A packet that matches no `flow_rule` exits via `drop` with no work done.
   See spec 002 for the key/filter language.
 
 - **`infmon-counter`** — Walks the scratch vector and, for each entry, issues
@@ -114,10 +116,10 @@ place where the data path could plausibly block.
 
 ### 5.1 Layout
 
-For each `flow_def` the plugin owns one **counter table**:
+For each `flow_rule` the plugin owns one **counter table**:
 
 - A bounded-size open-addressing hash table with **linear probing** sized
-  at plugin init from a CLI argument (`max_keys_per_flow_def`, default
+  at plugin init from a CLI argument (`max_keys_per_flow_rule`, default
   `2^20 = 1,048,576`). We deliberately avoid Robin-Hood hashing on the
   data path: Robin-Hood requires displacing existing occupied slots
   during insert, and CAS-swapping a chain of slots cannot be made atomic
@@ -186,7 +188,7 @@ This gives us:
   paths.
 
 Per-table descriptor layout (registered under
-`/infmon/<flow_def_id>/<generation>`). All pointer-shaped fields are
+`/infmon/<flow_rule_id>/<generation>`). All pointer-shaped fields are
 **byte offsets from the stats-segment base**, never raw `void*`: the
 frontend mmaps the segment at an arbitrary virtual address that does
 not match the plugin's, so raw pointers would be unusable across the
@@ -194,8 +196,8 @@ boundary (this is the same convention VPP's own stats segment uses):
 
 | Field                  | Type     | Notes                                       |
 | ---------------------- | -------- | ------------------------------------------- |
-| `flow_def_id`          | `u128`   | UUID of the flow_def (external identity).   |
-| `flow_def_index`       | `u32`    | Internal handle into the flow_def vector (§8); workers index by this, not the UUID. |
+| `flow_rule_id`          | `u128`   | UUID of the flow_rule (external identity).   |
+| `flow_rule_index`       | `u32`    | Internal handle into the flow_rule vector (§8); workers index by this, not the UUID. |
 | `generation`           | `u64`    | Bumped on every snapshot_and_clear (§7).    |
 | `epoch_ns`             | `u64`    | Wall-clock at table creation.               |
 | `slots_offset`         | `u64`    | Byte offset into stats segment to slot array. |
@@ -207,7 +209,7 @@ boundary (this is the same convention VPP's own stats segment uses):
 | `table_full`           | `u64`    | Cumulative.                                 |
 
 Frontends iterate the directory, follow the latest generation pointer per
-`flow_def_id`, and walk slots using the seqlock protocol from §5.2.
+`flow_rule_id`, and walk slots using the seqlock protocol from §5.2.
 
 ## 7. Control surface
 
@@ -227,10 +229,10 @@ binary API rather than invent a side-channel because:
 
 | Message                          | Direction        | Purpose                                        |
 | -------------------------------- | ---------------- | ---------------------------------------------- |
-| `infmon_flow_def_add`            | client → plugin  | Register a new `flow_def`. Returns `flow_def_id`. |
-| `infmon_flow_def_del`            | client → plugin  | Tear down a `flow_def` and free its tables.    |
-| `infmon_flow_def_list`           | client → plugin  | Enumerate active flow_defs.                    |
-| `infmon_flow_def_get`            | client → plugin  | Return the full definition for one id.         |
+| `infmon_flow_rule_add`            | client → plugin  | Register a new `flow_rule`. Returns `flow_rule_id`. |
+| `infmon_flow_rule_del`            | client → plugin  | Tear down a `flow_rule` and free its tables.    |
+| `infmon_flow_rule_list`           | client → plugin  | Enumerate active flow_rules.                    |
+| `infmon_flow_rule_get`            | client → plugin  | Return the full definition for one id.         |
 | `infmon_snapshot_and_clear`      | client → plugin  | Atomic table swap (§7.2). Returns the descriptor of the *retired* table. |
 | `infmon_status`                  | client → plugin  | Per-worker counters (packets seen, drops by reason, table fullness). |
 
@@ -245,12 +247,12 @@ This is the export primitive. Frontends call it once per export interval
 
 **Contract:**
 
-1. Caller invokes `infmon_snapshot_and_clear(flow_def_id)`.
+1. Caller invokes `infmon_snapshot_and_clear(flow_rule_id)`.
 2. Plugin allocates a new, empty counter table (`generation = G+1`) for
-   this `flow_def_id`. Allocation happens off the worker thread; the
+   this `flow_rule_id`. Allocation happens off the worker thread; the
    table is zeroed by a control thread before installation.
 3. Plugin atomically swaps the table pointer published in the
-   `infmon-counter` node's per-flow_def context. The control thread
+   `infmon-counter` node's per-flow_rule context. The control thread
    issues `__atomic_store_n(..., RELEASE)` on the pointer; workers MUST
    load it with `__atomic_load_n(..., ACQUIRE)` (once per frame, not
    per packet — see §8). The release/acquire pair guarantees the new
@@ -305,10 +307,10 @@ The crucial properties:
   match → count). All counter updates are atomic, so multiple workers
   may legally hit the same row concurrently; the relaxed atomics ensure
   this stays cheap.
-- `flow_def` definitions are read-mostly. They are stored in an
-  RCU-protected vector indexed by an internal `flow_def_index` (`u32`)
-  — the externally visible `flow_def_id` is a `u128` UUID and is
-  resolved to its `flow_def_index` by a control-plane lookup at
+- `flow_rule` definitions are read-mostly. They are stored in an
+  RCU-protected vector indexed by an internal `flow_rule_index` (`u32`)
+  — the externally visible `flow_rule_id` is a `u128` UUID and is
+  resolved to its `flow_rule_index` by a control-plane lookup at
   registration time; on the data path workers only ever use the integer
   index, so per-packet dispatch is an O(1) array index, not a UUID
   hash. The control thread publishes a new vector pointer with
@@ -318,7 +320,7 @@ The crucial properties:
   worker that observes the new pointer also observes the new vector's
   contents. Old vectors are retired through the **same epoch-counter
   RCU machinery** as table retirement (§7.2 step 6) — explicitly **not**
-  `vlib_worker_thread_barrier_*` — so flow_def add/remove imposes no
+  `vlib_worker_thread_barrier_*` — so flow_rule add/remove imposes no
   worker stall on production traffic.
 - We require RX-queue → worker pinning (set via VPP's standard
   `dpdk { dev … { workers <list> } }` config). Without pinning the
@@ -332,10 +334,10 @@ The crucial properties:
   nodes (process two packets per inner iteration with software prefetch
   of `+2` and `+3`), which is the standard VPP pattern.
 - The match-emit scratch vector is sized
-  `VLIB_FRAME_SIZE × max_active_flow_defs` and lives in per-thread TLS;
+  `VLIB_FRAME_SIZE × max_active_flow_rules` and lives in per-thread TLS;
   no allocation occurs per frame. To bound TLS footprint, v1 caps
-  `max_active_flow_defs` at **64** (a hard `static_assert` in the
-  plugin); at the v1 entry size of ≈24 B per `(flow_def_id, key_hash,
+  `max_active_flow_rules` at **64** (a hard `static_assert` in the
+  plugin); at the v1 entry size of ≈24 B per `(flow_rule_id, key_hash,
   key_blob_ptr)` triple this gives a per-worker scratch of
   `256 × 64 × 24 ≈ 384 KiB`, comfortably below the default 8 MiB VPP
   worker stack/TLS budget. Lifting the cap requires either shrinking
@@ -350,7 +352,7 @@ The crucial properties:
 
 These are the numbers the implementation must hit on a single
 BlueField-3 ARM core (Cortex-A78AE @ 2.75 GHz, 64 B cache lines, DPDK
-25.11, VPP 24.10) with one RX queue, one `flow_def`, and a key set
+25.11, VPP 24.10) with one RX queue, one `flow_rule`, and a key set
 small enough to fit in L2 (~1024 keys):
 
 | Workload                                  | Target               | Stretch              |
@@ -376,9 +378,9 @@ The plugin exposes the following error counters via the standard VPP
 | `erspan_unknown_proto`        | Outer header parsed but ERSPAN type unrecognised.    |
 | `erspan_truncated`            | Buffer too short for declared ERSPAN header.         |
 | `inner_parse_failed`          | Inner L2/L3/L4 parse error after decap.              |
-| `flow_def_no_match`           | Packet matched zero flow_defs (informational).       |
+| `flow_rule_no_match`           | Packet matched zero flow_rules (informational).       |
 | `counter_insert_retry_exhausted` | CAS retries exceeded `INFMON_INSERT_RETRY`.        |
-| `counter_table_full`          | Table reached `max_keys_per_flow_def`.               |
+| `counter_table_full`          | Table reached `max_keys_per_flow_rule`.               |
 | `snapshot_alloc_failed`       | Could not allocate replacement table (OOM in stats segment). |
 
 **`snapshot_alloc_failed` recovery contract.** If step 2 of §7.2 fails,
