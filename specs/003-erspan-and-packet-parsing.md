@@ -69,6 +69,10 @@ Out of scope (deliberately):
 - Buffer contract: the parser receives a single contiguous DPDK mbuf segment.
   Multi-segment mbufs are linearised by the VPP input node before the parser
   runs (the input node is out of scope here; it is mentioned for clarity).
+  If a multi-segment mbuf nonetheless reaches the parser, the contract is
+  violated; the parser MUST drop the packet and increment
+  `mbuf_not_contiguous` (see §6) rather than risk a silent overread. Debug
+  builds also assert.
 - The parser is a **pure function of bytes**: no allocations, no syscalls, no
   per-packet logging, no cross-packet state.
 
@@ -89,31 +93,55 @@ infrastructure.
 
 | Layer    | Action                                                                                                              |
 | -------- | ------------------------------------------------------------------------------------------------------------------- |
-| Ethernet | skip 14 B; if EtherType = `0x8100`, skip 4 more B (single VLAN tag). QinQ (two stacked tags): drop, `outer_qinq_unsupported`. |
+| Ethernet | skip 14 B; if EtherType = `0x8100`, skip 4 more B (single VLAN tag). QinQ (two stacked tags): drop, `outer_qinq_unsupported`. Any EtherType other than `0x0800` (IPv4), `0x86DD` (IPv6), or `0x8100` (single VLAN) — including MPLS (`0x8847`/`0x8848`), ARP (`0x0806`), QinQ outer S-tag (`0x88A8`), etc. — is dropped, `outer_ethertype_unsupported`. |
 | IPv4     | require version=4, IHL ≥ 5, protocol = `47` (GRE). Skip `IHL*4` bytes. Checksum NOT verified.                       |
-| IPv6     | require version=6, next-header = `47`. Extension headers: drop, `outer_v6_ext_unsupported`.                         |
-| GRE      | require version=0, protocol = `0x22EB`. Length = 4 B base + 4 B if `S` flag set. `C` or `K` flag set: drop, `gre_unexpected_flags`. Other proto: drop, `gre_bad_proto`. |
+| IPv6     | require version=6. Extension headers: parse and skip Hop-by-Hop Options (next-header `0`) and Destination Options (next-header `60`) using their `Hdr Ext Len` field; these are commonly inserted by infrastructure and silently dropping them would lose mirrored traffic. Any other extension header (Routing, Fragment, AH, ESP, Mobility, …) → drop, `outer_v6_ext_unsupported`. After skipping allowed options, the final next-header MUST be `47` (GRE). |
+| GRE      | require version=0, protocol = `0x22EB`. Length = 4 B base + 4 B if `S` flag set. Flag handling is a strict allowlist: only the `S` bit (sequence) MAY be set; any other non-zero flag bit (`C`, `K`, `R`, or any reserved/recursion bit) → drop, `gre_unexpected_flags`. Non-zero GRE version → drop, `gre_bad_version`. Other proto (with version=0 and only `S` set) → drop, `gre_bad_proto`. |
 
 ### 4.3 ERSPAN Type III Header
 
-Fixed 12-byte header (per `draft-foschiano-erspan-03`):
+Fixed 12-byte header (per `draft-foschiano-erspan-03`). The diagram below is
+indicative; the authoritative bit ranges are listed underneath:
 
 ```
  0                   1                   2                   3
  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|Ver  |  VLAN         | COS |BSO|T|        Session ID            |
+|  Ver  |  VLAN         | COS |BSO|T|        Session ID         |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |                          Timestamp                            |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-|     SGT       |P|FT |Hw ID  |D|Gra|O|        Reserved          |
+|     SGT       |P|  FT |  Hw ID  |D|Gra|O|     Reserved        |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 ```
 
+Authoritative bit layout (word, bit-range, width):
+
+- Word 0 (bits 0–31): `Ver[0:3]` (4), `VLAN[4:15]` (12), `COS[16:18]` (3),
+  `BSO[19:20]` (2), `T[21]` (1), `Session ID[22:31]` (10).
+- Word 1 (bits 32–63): `Timestamp[32:63]` (32).
+- Word 2 (bits 64–95): `SGT[64:79]` (16), `P[80]` (1), `FT[81:85]` (5),
+  `Hw ID[86:91]` (6), `D[92]` (1), `Gra[93:94]` (2), `O[95]` (1),
+  followed by 0 reserved bits in word 2.
+
+(Total: 12 B = 96 bits. Implementations MUST mask/shift from these ranges,
+not from the ASCII art.)
+
 Validate `Ver == 2`. Otherwise drop, counter `erspan_bad_version`.
+
+The ERSPAN `T` bit (truncated-by-source) is **not consumed**; truncation
+status is derived solely from the length comparison in §5 (`inner_len <
+declared_inner_len`). Even when `T == 1` and lengths indicate a complete
+inner packet, `inner_truncated` remains `false`. This keeps truncation
+semantics single-sourced.
 
 If `O = 1`, an 8-byte **Platform-Specific Sub-Header** follows. The parser
 **skips** it as opaque bytes. Its contents are NOT exposed.
+
+The 32-bit ERSPAN **Timestamp** field is also **NOT** propagated downstream,
+for the same reasons given for the Session ID in §4.4 (it describes mirror
+infrastructure, not the mirrored flow). The parser may use it locally for
+debugging but MUST scrub it from any struct it hands onward.
 
 ### 4.4 Session ID — Explicitly NOT Exposed
 
@@ -146,10 +174,19 @@ The parser returns:
   inner length; see §5).
 - `inner_truncated` — bool, true iff `inner_len < declared_inner_len`.
 
-`declared_inner_len` is computed from the **outer IP total length** minus the
+`declared_inner_len` is computed from the outer IP length field minus the
 bytes consumed by outer L3 + GRE + ERSPAN III + (optional) Platform
-Sub-Header. The parser never trusts a length field without bounds-checking it
-against the actual mbuf length.
+Sub-Header. Note the IPv4/IPv6 length-field semantics differ:
+
+- **IPv4:** `declared_inner_len = ipv4.total_length - IHL*4 - gre_len - erspan_len`
+  (IPv4 `Total Length` includes the IP header.)
+- **IPv6:** `declared_inner_len = ipv6.payload_length - v6_ext_len - gre_len - erspan_len`
+  (IPv6 `Payload Length` excludes the 40-byte fixed header; subtract any
+  parsed extension-header bytes from §4.2.)
+
+Where `erspan_len = 12 + (O ? 8 : 0)` and `gre_len = 4 + (S ? 4 : 0)`. The
+parser never trusts a length field without bounds-checking it against the
+actual mbuf length.
 
 ### 4.6 One Inner Encap Layer (Reserved Seam)
 
@@ -166,11 +203,15 @@ typedef enum {
 } infmon_inner_decap_t;
 
 /* Returns 0 on success; sets *out_ptr / *out_len to the de-encapsulated view.
+ * `in_truncated` MUST be propagated from the outer parser so the decap
+ * function can avoid reading past a partially-present inner-encap header
+ * (e.g. a VXLAN/GENEVE/BTH header that didn't survive the mirror snap).
  * Returns nonzero on error (caller drops the packet, increments a per-decap
  * counter). MUST be called at most once per packet. */
 int infmon_inner_decap(infmon_inner_decap_t kind,
-                       const uint8_t *in, uint32_t in_len,
-                       const uint8_t **out_ptr, uint32_t *out_len);
+                       const uint8_t *in, uint32_t in_len, bool in_truncated,
+                       const uint8_t **out_ptr, uint32_t *out_len,
+                       bool *out_truncated);
 ```
 
 Constraints:
@@ -208,13 +249,25 @@ rules:
 2. **Inner L3 fixed header** — required (20 B IPv4, 40 B IPv6). Missing →
    drop, `inner_l3_truncated`. Without it the 5-tuple cannot be formed and the
    record is useless for flow telemetry.
-3. **Inner L4 header** — best-effort:
+3. **Inner L4 header** — best-effort, **TCP and UDP only** in v1:
    - Ports (first 4 B of TCP/UDP): if **fully** present, extract; if
      **partially** present, treat as absent and mark `flow_key_partial = true`
      on the record.
    - TCP flags / window / sequence / ack: extract only fields whose bytes are
      fully present. Missing fields are reported as `unknown` (NOT zero — zero
-     would corrupt aggregates downstream).
+     would corrupt aggregates downstream). The concrete representation is a
+     parallel `valid_fields` bitmask on the parser output struct: each
+     extractable inner-L4 field has a corresponding bit (`PORTS_VALID`,
+     `TCP_FLAGS_VALID`, `TCP_SEQ_VALID`, `TCP_ACK_VALID`,
+     `TCP_WINDOW_VALID`, …); the field's storage value is undefined when its
+     valid-bit is 0 and MUST NOT be read by downstream code. This avoids
+     consumers picking ad-hoc sentinels (`0xFF…`) that collide with real
+     wire values.
+   - **Other L4 protocols** (SCTP, ICMP/ICMPv6, GRE, ESP, AH, …): no
+     port/flag extraction is attempted in v1. The L3 5-tuple becomes a
+     3-tuple-plus-protocol; `PORTS_VALID` is 0 and `flow_key_partial = true`.
+     The packet is still accepted (counts as `parsed_ok` /
+     `inner_truncated_ok`); a future spec MAY add per-protocol extractors.
 4. **L4 payload** — only the *observed length* (`l4_payload_observed_len`) is
    recorded in v1. Content is not inspected.
 
@@ -236,9 +289,12 @@ infrastructure. The parser **never panics**, **never logs per packet**, and
 | `parsed_ok`                   | accepted, full inner packet present                               |
 | `inner_truncated_ok`          | accepted with `inner_truncated = true` and a usable 5-tuple        |
 | `outer_qinq_unsupported`      | dropped: stacked VLAN on outer                                    |
-| `outer_v6_ext_unsupported`    | dropped: outer IPv6 extension headers present                     |
+| `outer_ethertype_unsupported` | dropped: outer EtherType ∉ {`0x0800`, `0x86DD`, `0x8100`}         |
+| `outer_v6_ext_unsupported`    | dropped: outer IPv6 extension header other than Hop-by-Hop / Destination Options |
 | `outer_truncated`             | dropped: outer headers do not fit in the mbuf                     |
-| `gre_unexpected_flags`        | dropped: GRE C or K flag set                                      |
+| `mbuf_not_contiguous`         | dropped: multi-segment mbuf reached the parser (contract violation) |
+| `gre_unexpected_flags`        | dropped: GRE flag bit other than `S` set (includes `C`, `K`, `R`, reserved) |
+| `gre_bad_version`             | dropped: GRE version field ≠ 0                                    |
 | `gre_bad_proto`               | dropped: GRE protocol ≠ `0x22EB`                                  |
 | `erspan_bad_version`          | dropped: ERSPAN Ver ≠ 2                                           |
 | `erspan_truncated`            | dropped: ERSPAN III (or Platform Sub-Header) does not fit         |
@@ -250,10 +306,15 @@ infrastructure. The parser **never panics**, **never logs per packet**, and
 
 RoCEv2 carries the InfiniBand transport over UDP/4791. When InFMon eventually
 needs RoCEv2 telemetry, the BTH (Base Transport Header, 12 B) will be parsed
-**inside** the inner-decap hook (`INFMON_DECAP_ROCEV2`), turning the inner
-view from `Eth | IP | UDP | BTH | …` into `BTH | …`. The hook signature in
-§4.6 already accommodates this — it returns a fresh `(ptr, len)` pair — and
-the "single extra layer" rule means BTH peeling consumes that one allowance.
+**inside** the inner-decap hook (`INFMON_DECAP_ROCEV2`). The hook consumes
+the inner Ethernet/IP/UDP/BTH headers and returns the **BTH payload** as the
+new inner-packet view (the BTH itself is parsed for its fields but, like
+other transport headers, is removed from the returned view); BTH-derived
+fields are surfaced separately in the RoCEv2 record. Conceptually the view
+goes from `Eth | IP | UDP | BTH | payload` to `payload`. The hook signature
+in §4.6 already accommodates this — it returns a fresh `(ptr, len)` pair —
+and the "single extra layer" rule means BTH peeling consumes that one
+allowance.
 
 Out of scope for this spec (will be a future spec):
 
@@ -275,7 +336,11 @@ Stored under `tests/pcaps/erspan/`:
 - `erspan3_full.pcap` — full inner packet, no truncation.
 - `erspan3_with_seq.pcap` — GRE `S` flag set.
 - `erspan3_o_bit.pcap` — Platform-Specific Sub-Header present.
-- `erspan3_trunc128.pcap` — BF-3-style 128 B snap.
+- `erspan3_o_bit_truncated.pcap` — `O = 1` with the mbuf truncated **inside**
+  the 8-byte Platform-Specific Sub-Header (key bounds-check case for §5.1).
+- `erspan3_ipv6_full.pcap` — IPv6 outer transport, full inner packet.
+- `erspan3_ipv6_trunc128.pcap` — IPv6 outer with BF-3-style 128 B snap.
+- `erspan3_trunc128.pcap` — BF-3-style 128 B snap (IPv4 outer).
 - `erspan3_trunc_outer.pcap` — outer-header truncation (must drop).
 - `erspan3_bad_version.pcap` — Ver=1 (must drop).
 - `erspan3_qinq.pcap` — outer QinQ (must drop).
@@ -294,9 +359,12 @@ Stored under `tests/pcaps/erspan/`:
 
 ### 8.3 Fuzz Target
 
-A libFuzzer harness over the entire parser, max input length 256 B, run in CI
-for a bounded budget per PR. Asserts no out-of-bounds read and no infinite
-loop. Crashes are saved as new corpus entries.
+A libFuzzer harness over the entire parser, default max input length 2048 B
+(configurable via the harness `LLVMFuzzerCustomMutator` / size arg so the
+fuzzer can exercise both the BF-3 ~128 B snap regime *and* full-MTU jumbo
+mirrors that exceed the snap), run in CI for a bounded budget per PR.
+Asserts no out-of-bounds read and no infinite loop. Crashes are saved as new
+corpus entries.
 
 ### 8.4 Out of CI
 
