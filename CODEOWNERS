@@ -1,0 +1,7 @@
+# InFMon code owners
+#
+# @banidoru is the required reviewer on every path in this repository.
+# Add more specific rules below as the codebase grows; later rules take
+# precedence over earlier ones in GitHub's CODEOWNERS resolution.
+
+* @banidoru

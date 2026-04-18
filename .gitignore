@@ -1,0 +1,95 @@
+# ---------------------------------------------------------------------------
+# Rust
+# ---------------------------------------------------------------------------
+target/
+**/*.rs.bk
+Cargo.lock.bak
+*.pdb
+
+# ---------------------------------------------------------------------------
+# C / C++
+# ---------------------------------------------------------------------------
+# Object / archive / shared lib artifacts
+*.o
+*.obj
+*.ko
+*.a
+*.la
+*.lo
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exp
+*.ilk
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug info
+*.dSYM/
+*.su
+*.idb
+
+# Precompiled headers
+*.gch
+*.pch
+
+# Dependency files
+*.d
+
+# Build trees
+build/
+build-*/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+Makefile.in
+.deps/
+.libs/
+autom4te.cache/
+config.log
+config.status
+configure.scan
+
+# ---------------------------------------------------------------------------
+# VPP build artifacts
+# ---------------------------------------------------------------------------
+build-root/
+build-data/
+install-*/
+*.deb
+*.rpm
+vpp-api/
+.ccache/
+*.api.json
+*.api.h
+*.api.c
+*_test.api.vapi.json
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Logs / coverage / misc
+# ---------------------------------------------------------------------------
+*.log
+*.gcda
+*.gcno
+*.gcov
+coverage/
+lcov.info
