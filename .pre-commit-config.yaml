@@ -1,0 +1,98 @@
+# Pre-commit hooks for InFMon.
+#
+# See specs/001-ci-and-precommit.md §3 for the contract these hooks implement.
+# All hooks listed here are mirrored by the `lint` GitHub Actions workflow so
+# that local and CI verdicts agree.
+#
+# Run locally with:  pre-commit run --all-files
+#                    (or: make lint)
+
+minimum_pre_commit_version: "3.5.0"
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  # ---------------------------------------------------------------------------
+  # Generic hygiene
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # ---------------------------------------------------------------------------
+  # Markdown
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.41.0
+    hooks:
+      - id: markdownlint
+        args: [--config, .markdownlint.yaml]
+
+  # ---------------------------------------------------------------------------
+  # C / C++  -- formatting + static analysis on changed files only (fast).
+  # The full-tree cppcheck sweep runs in `cpp-test.yml`.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.8
+    hooks:
+      - id: clang-format
+        types_or: [c, c++]
+        args: [--style=file]
+
+  - repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+      - id: cppcheck
+        args:
+          - --enable=warning,performance,portability
+          - --error-exitcode=1
+          - --inline-suppr
+          - --suppressions-list=.cppcheck-suppressions
+          - --std=c11
+          - --language=c
+
+  # ---------------------------------------------------------------------------
+  # Rust -- delegated to local cargo so we use the workspace toolchain.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt
+        description: "cargo fmt --all -- --check"
+        entry: cargo fmt --all -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: clippy
+        name: clippy
+        description: "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+        entry: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      # DCO sign-off enforcement on the working commit message.
+      - id: dco-signoff
+        name: DCO Signed-off-by trailer
+        description: "Reject commit messages without a Signed-off-by: trailer."
+        entry: ci/check-dco.sh
+        language: script
+        stages: [commit-msg]
+
+  # ---------------------------------------------------------------------------
+  # Conventional Commits -- commit-msg stage.
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.18.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ["@commitlint/config-conventional@19.2.2"]
