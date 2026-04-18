@@ -1,0 +1,39 @@
+#!/bin/sh
+# postrm — infmon-frontend
+#
+# Per spec 008 §7.3 / §7.4:
+#   - on `purge`, remove /etc/infmon, /var/log/infmon, /var/lib/infmon,
+#     and the infmon system user/group
+#   - on `remove`, leave operator state alone
+#   - never touch VPP
+
+set -e
+
+INFMON_USER=infmon
+INFMON_GROUP=infmon
+
+case "$1" in
+    purge)
+        rm -rf /etc/infmon
+        rm -rf /var/log/infmon
+        rm -rf /var/lib/infmon
+
+        if getent passwd "$INFMON_USER" >/dev/null; then
+            deluser --quiet --system "$INFMON_USER" >/dev/null || true
+        fi
+        if getent group "$INFMON_GROUP" >/dev/null; then
+            delgroup --quiet --system --only-if-empty "$INFMON_GROUP" \
+                >/dev/null || true
+        fi
+        ;;
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        ;;
+    *)
+        echo "postrm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

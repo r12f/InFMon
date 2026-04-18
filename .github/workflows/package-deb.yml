@@ -1,0 +1,122 @@
+name: package-deb
+
+# Cross-build the InFMon .deb packages for arm64 (BlueField-3 target)
+# per spec 008. Produces three binary packages + the meta package and
+# uploads them as workflow artefacts.
+#
+# This workflow is intentionally permissive while the source trees
+# under src/ are still empty: debian/rules skips the cmake/cargo
+# steps when the corresponding inputs are missing, so this gate
+# verifies the packaging tree itself (control / changelog / scripts /
+# unit file) before the implementations land.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'debian/**'
+      - 'tools/sync-debian-changelog.py'
+      - 'CHANGELOG.md'
+      - 'src/**'
+      - '.github/workflows/package-deb.yml'
+  pull_request:
+    paths:
+      - 'debian/**'
+      - 'tools/sync-debian-changelog.py'
+      - 'CHANGELOG.md'
+      - 'src/**'
+      - '.github/workflows/package-deb.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-deb:
+    name: dpkg-buildpackage (arm64)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate debian/changelog is in sync with CHANGELOG.md
+        run: python3 tools/sync-debian-changelog.py --check
+
+      - name: Run sync script unit tests
+        run: python3 -m unittest discover -s tools/tests -v
+
+      - name: Install host tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            devscripts \
+            equivs \
+            debhelper \
+            dpkg-dev \
+            fakeroot \
+            lintian \
+            qemu-user-static \
+            binfmt-support \
+            sbuild \
+            schroot \
+            debootstrap
+
+      - name: Set up arm64 cross toolchain
+        run: |
+          sudo dpkg --add-architecture arm64
+          # Restrict the default sources to amd64/i386 so apt does not
+          # try to fetch arm64 from the wrong mirror.
+          sudo sed -i 's/^deb /deb [arch=amd64,i386] /' /etc/apt/sources.list
+          sudo tee /etc/apt/sources.list.d/arm64.list >/dev/null <<'EOF'
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main universe
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main universe
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security main universe
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            crossbuild-essential-arm64
+
+      - name: Validate debian/control parses
+        run: dpkg-checkbuilddeps -a arm64 || true   # informational
+
+      - name: Build source package
+        env:
+          DEB_BUILD_OPTIONS: "nocheck parallel=2"
+        run: |
+          dpkg-buildpackage -S -us -uc -d
+          ls -la ../
+
+      - name: Cross-build binary .debs for arm64
+        env:
+          DEB_BUILD_OPTIONS: "nocheck parallel=2"
+        run: |
+          # -B = binary-only, -d = ignore build-dep check (we don't
+          # have vpp-dev installed and the rules file no-ops the
+          # build steps when the source trees are missing). When the
+          # backend/frontend impls land we will drop -d and install
+          # the real build-deps via mk-build-deps.
+          dpkg-buildpackage -B -us -uc -d -aarm64
+          mkdir -p artifacts
+          mv ../*.deb ../*.changes ../*.buildinfo artifacts/ 2>/dev/null || true
+          ls -la artifacts/
+
+      - name: Run lintian (informational)
+        run: |
+          set +e
+          lintian --no-tag-display-limit --suppress-tags \
+            empty-binary-package,no-manual-page,binary-without-manpage \
+            artifacts/*.changes
+          echo "lintian exit: $?"
+        continue-on-error: true
+
+      - name: Upload .deb artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: infmon-debs-arm64
+          path: |
+            artifacts/*.deb
+            artifacts/*.changes
+            artifacts/*.buildinfo
+          if-no-files-found: warn
+          retention-days: 14

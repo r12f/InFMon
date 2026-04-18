@@ -1,0 +1,97 @@
+InFMon for Debian / Ubuntu
+==========================
+
+This document covers Debian-specific install / upgrade / removal
+considerations for InFMon. See specs/008-packaging-install.md in the
+upstream tree for the full packaging contract.
+
+Target platform
+---------------
+
+The published .deb packages target Ubuntu Server 22.04 LTS for arm64,
+running on a NVIDIA BlueField-3 DPU. Other DPDK/VPP-capable arm64
+systems may also work but are not part of CI.
+
+Installing VPP from fd.io
+-------------------------
+
+InFMon depends on upstream VPP >= 24.10. If your system does not
+already have VPP installed, add the fd.io apt repository before
+installing infmon:
+
+    curl -fsSL https://packagecloud.io/fdio/release/gpgkey \
+      | sudo gpg --dearmor -o /usr/share/keyrings/fdio-archive-keyring.gpg
+    echo "deb [signed-by=/usr/share/keyrings/fdio-archive-keyring.gpg] \
+      https://packagecloud.io/fdio/release/ubuntu jammy main" \
+      | sudo tee /etc/apt/sources.list.d/fdio.list
+    sudo apt update
+    sudo apt install infmon
+
+InFMon does NOT add the fd.io repo for you. Silently editing
+/etc/apt/sources.list.d/ from a maintainer script would be hostile;
+see spec 008 §4.2.
+
+Co-existing with a custom / locally-built VPP
+---------------------------------------------
+
+Some BlueField-3 reference images (notably NVIDIA's) ship a VPP that
+was built from source rather than installed via apt. In that case the
+declared dependency on `vpp (>= 24.10)` may not be satisfied even
+though VPP is in fact present.
+
+Two options:
+
+  1. Build a local `vpp` .deb whose Provides:/Version: satisfies the
+     dependency, install it once, then `apt install infmon`.
+
+  2. Force install via:
+
+         sudo apt install --no-install-recommends infmon-backend
+         # or, if apt refuses outright:
+         sudo dpkg --force-depends -i infmon-backend_*.deb
+
+Either way, ensure /usr/lib/vpp_plugins/ on the target system is the
+plugin directory your VPP build actually scans. If it is not, copy
+/usr/lib/vpp_plugins/infmon.so into the right place by hand.
+
+A `dpkg-divert`-based override is on the roadmap for v2 (spec 008 §10).
+
+Restarting VPP
+--------------
+
+InFMon's maintainer scripts NEVER restart VPP. The backend plugin is
+copied into /usr/lib/vpp_plugins/ on install / upgrade, and removed on
+remove / purge, but VPP itself is left strictly alone. Restart it by
+hand when convenient:
+
+    sudo systemctl restart vpp
+
+This is intentional. On a DPU, VPP may be carrying production traffic
+for unrelated services; the package manager does not get to make that
+decision for you. See spec 008 §7.
+
+Removal vs purge
+----------------
+
+`apt remove`:
+
+  - Stops and disables infmon-frontend.service.
+  - Removes binaries and the plugin .so.
+  - Leaves /etc/infmon, /var/log/infmon, /var/lib/infmon, and the
+    `infmon` system user untouched.
+
+`apt purge`:
+
+  - Everything from `remove`, plus
+  - Removes /etc/infmon, /var/log/infmon, /var/lib/infmon, and the
+    `infmon` system user/group.
+  - Still leaves VPP itself alone.
+
+Hugepages
+---------
+
+The frontend reads the VPP stats segment, which lives in hugepages.
+Hugepages provisioning is the operator's responsibility (typically
+already done by the VPP install or by the BF-3 reference image).
+
+ -- InFMon maintainers <r12f.code@gmail.com>  Sat, 18 Apr 2026 09:00:00 +0000

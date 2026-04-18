@@ -1,0 +1,23 @@
+#!/bin/sh
+# prerm — infmon-frontend
+#
+# Per spec 008 §7.4. dh_installsystemd's #DEBHELPER# block stops the
+# unit on remove; we keep this script around for the explicit summary
+# trail and any future hooks (e.g. flushing in-memory state).
+
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        ;;
+    failed-upgrade)
+        ;;
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

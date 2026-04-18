@@ -1,0 +1,9 @@
+infmon (0.0.1~unreleased-1) UNRELEASED; urgency=medium
+
+  * Added: Debian packaging tree (`debian/`) producing three binary `.deb`s
+  * Added: systemd unit `infmon-frontend.service` (Type=notify, hardened,
+  * Added: Maintainer scripts that strictly leave VPP alone on install,
+  * Added: `tools/sync-debian-changelog.py`: regenerates `debian/changelog`
+  * Added: GitHub Actions workflow `package-deb.yml`: cross-builds the `.deb`s
+
+ -- InFMon maintainers <r12f.code@gmail.com>  Thu, 01 Jan 2026 00:00:00 +0000

@@ -1,0 +1,39 @@
+[Unit]
+Description=InFMon flow-telemetry frontend
+Documentation=https://github.com/r12f/InFMon
+After=vpp.service network-online.target
+Wants=network-online.target
+# We cannot Require= vpp.service because some operators run a custom
+# VPP unit name (e.g. vpp-bf3.service). BindsTo= would be wrong for the
+# same reason. The frontend retries on the binary-API socket itself.
+PartOf=vpp.service
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/infmon-frontend --config /etc/infmon/frontend.conf
+Restart=on-failure
+RestartSec=2s
+User=infmon
+Group=infmon
+# The frontend reads the VPP stats segment and talks to the binary-API
+# Unix socket. Both live under /run/vpp by default.
+SupplementaryGroups=vpp
+RuntimeDirectory=infmon
+RuntimeDirectoryMode=0750
+StateDirectory=infmon
+StateDirectoryMode=0750
+LogsDirectory=infmon
+LogsDirectoryMode=0750
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+# Stats segment is a hugepages-backed mmap; we need access but not write.
+ReadOnlyPaths=/dev/hugepages
+# Frontend opens its own listening socket; if that ever requires
+# CAP_NET_BIND_SERVICE for port < 1024 we will revisit.
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

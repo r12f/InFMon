@@ -1,0 +1,53 @@
+#!/bin/sh
+# postinst — infmon-frontend
+#
+# Per spec 008 §5.2 / §7.1:
+#   - create the system user/group `infmon` (idempotent)
+#   - create /var/log/infmon and /var/lib/infmon with correct ownership
+#   - dh_installsystemd's #DEBHELPER# block handles enable + start
+
+set -e
+
+INFMON_USER=infmon
+INFMON_GROUP=infmon
+INFMON_HOME=/var/lib/infmon
+
+case "$1" in
+    configure)
+        if ! getent group "$INFMON_GROUP" >/dev/null; then
+            addgroup --system "$INFMON_GROUP"
+        fi
+        if ! getent passwd "$INFMON_USER" >/dev/null; then
+            adduser --system \
+                    --ingroup "$INFMON_GROUP" \
+                    --no-create-home \
+                    --home "$INFMON_HOME" \
+                    --shell /usr/sbin/nologin \
+                    --gecos "InFMon flow telemetry" \
+                    "$INFMON_USER"
+        fi
+
+        # /var/log/infmon and /var/lib/infmon are also covered by the
+        # systemd unit's LogsDirectory= and StateDirectory=, but creating
+        # them here means they exist correctly even when the unit is
+        # disabled.
+        for d in /var/log/infmon /var/lib/infmon; do
+            if [ ! -d "$d" ]; then
+                install -d -o "$INFMON_USER" -g "$INFMON_GROUP" -m 0750 "$d"
+            else
+                chown "$INFMON_USER":"$INFMON_GROUP" "$d" || true
+                chmod 0750 "$d" || true
+            fi
+        done
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

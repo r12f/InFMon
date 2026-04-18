@@ -1,0 +1,79 @@
+Source: infmon
+Section: net
+Priority: optional
+Maintainer: InFMon maintainers <r12f.code@gmail.com>
+Uploaders: r12f <r12f.code@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake,
+ pkg-config,
+ vpp-dev (>= 24.10),
+ libvppinfra-dev (>= 24.10),
+ cargo (>= 1.75),
+ rustc (>= 1.75),
+ clang,
+ python3,
+Standards-Version: 4.6.2
+Homepage: https://github.com/r12f/InFMon
+Vcs-Browser: https://github.com/r12f/InFMon
+Vcs-Git: https://github.com/r12f/InFMon.git
+Rules-Requires-Root: no
+
+Package: infmon-backend
+Architecture: arm64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ vpp (>= 24.10),
+ vpp-plugin-core (>= 24.10),
+Recommends: vpp-dpdk-dev-mlx (>= 24.10)
+Description: InFMon flow telemetry — VPP backend plugin
+ InFMon is a high-performance network flow monitoring system built around
+ a VPP-based dataplane and a Rust control plane.
+ .
+ This package contains the InFMon VPP plugin (infmon.so) and its API
+ definition. The plugin is loaded by the operator's existing VPP
+ installation; this package does not start or restart VPP itself.
+
+Package: infmon-frontend
+Architecture: arm64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ adduser,
+ lsb-base,
+Recommends:
+ infmon-backend (= ${source:Version}),
+Description: InFMon flow telemetry — frontend daemon
+ InFMon is a high-performance network flow monitoring system built around
+ a VPP-based dataplane and a Rust control plane.
+ .
+ This package contains the infmon-frontend daemon, its default
+ configuration, and the systemd unit. The daemon attaches to the VPP
+ stats segment and binary API and exports flow telemetry per the
+ frontend REST contract.
+
+Package: infmon-cli
+Architecture: arm64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: InFMon flow telemetry — command-line client
+ InFMon is a high-performance network flow monitoring system built around
+ a VPP-based dataplane and a Rust control plane.
+ .
+ This package contains the infmonctl command-line client. It talks to
+ the infmon-frontend over its REST API and does not require VPP to be
+ installed locally.
+
+Package: infmon
+Architecture: arm64
+Depends:
+ ${misc:Depends},
+ infmon-backend (= ${source:Version}),
+ infmon-frontend (= ${source:Version}),
+ infmon-cli (= ${source:Version}),
+Description: InFMon flow telemetry — meta package
+ This is a meta package that pulls in the full InFMon stack:
+ infmon-backend (the VPP plugin), infmon-frontend (the daemon), and
+ infmon-cli (the command-line client).
