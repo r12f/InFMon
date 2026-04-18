@@ -6,6 +6,7 @@
 | ------- | ---------- | ----------- | -------------- |
 | 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
 | 0.2     | 2026-04-18 | bf3 (agent) | Surface `mirror_src_ip` (outer GRE source IP) to downstream as the only outer-header value that crosses the parser boundary. ERSPAN session ID still stripped. |
+| 0.3     | 2026-04-18 | bf3(agent)| Add §4.2.1 explicit outer-IPv4/IPv6 source-IP extraction → `mirror_src_ip` as a parsed field exposed to flow-keys (Spec 002). ERSPAN session ID remains dropped. Align prose with the flow-rule/flow split. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
@@ -90,10 +91,13 @@ Out of scope (deliberately):
 [ outer L2 ] -> [ outer L3 ] -> [ GRE ] -> [ ERSPAN III ] -> [ INNER PACKET ] -> downstream
 ```
 
-Outer headers exist only to locate the inner packet. **No field from any outer
-header is propagated downstream**, including source/destination IP of the
-mirror transport. Telemetry must describe the mirrored flow, not the mirror
-infrastructure.
+Outer headers exist almost entirely to locate the inner packet. With **one
+named exception** — the outer L3 source IP, surfaced as `mirror_src_ip`
+(§4.2.1) — **no field from any outer header is propagated downstream**.
+Telemetry describes the mirrored flow; the only piece of mirror-infrastructure
+identity that crosses the parser boundary is the IP address of the device
+that performed the mirror, because flow-rules (Spec 002) need it to attribute
+flows to a mirroring source.
 
 ### 4.2 Outer Header Skip
 
@@ -103,6 +107,35 @@ infrastructure.
 | IPv4     | require version=4, IHL ≥ 5, protocol = `47` (GRE). Skip `IHL*4` bytes. Checksum NOT verified.                       |
 | IPv6     | require version=6. Extension headers: parse and skip Hop-by-Hop Options (next-header `0`) and Destination Options (next-header `60`) using their `Hdr Ext Len` field; these are commonly inserted by infrastructure and silently dropping them would lose mirrored traffic. Any other extension header (Routing, Fragment, AH, ESP, Mobility, …) → drop, `outer_v6_ext_unsupported`. After skipping allowed options, the final next-header MUST be `47` (GRE). |
 | GRE      | require version=0, protocol = `0x22EB`. Length = 4 B base + 4 B if `S` flag set. Flag handling is a strict allowlist: only the `S` bit (sequence) MAY be set; any other non-zero flag bit (`C`, `K`, `R`, or any reserved/recursion bit) → drop, `gre_unexpected_flags`. Non-zero GRE version → drop, `gre_bad_version`. Other proto (with version=0 and only `S` set) → drop, `gre_bad_proto`. |
+
+### 4.2.1 Outer source IP extraction → `mirror_src_ip`
+
+Before the outer headers are skipped past, the parser **copies out the outer
+L3 source address** as the parsed field `mirror_src_ip`. This is the single
+authoritative place where that extraction happens.
+
+- For an outer **IPv4** header, take the 4-byte `Source Address` (IPv4 SA)
+  and store it in `mirror_src_ip` as `{family = v4, addr = SA}`.
+- For an outer **IPv6** header, take the 16-byte `Source Address` (IPv6 SA)
+  and store it in `mirror_src_ip` as `{family = v6, addr = SA}`.
+- The outer **destination IP, TTL/hop-limit, ToS/TC, flow label, and any
+  other outer-header field** are NOT extracted and NOT exposed.
+- The ERSPAN session ID remains explicitly stripped (§4.4); `mirror_src_ip`
+  is not a back door for it.
+
+`mirror_src_ip` is then carried alongside the inner-packet view all the way
+to the flow-tracking layer. It is the only outer-header value any downstream
+stage may key off of, and Spec 002 lists it in the v1 flow-key field set as
+`mirror_src_ip` (opt-in per flow-rule, included in the recommended default
+flow-rule). Its representation when stored in a key is fixed by Spec 002
+§3 (16 B, IPv4 mapped to v6); the parser hands it to the flow layer in the
+tagged-union form described under §4.5 and the flow layer applies the
+mapping when assembling the key bytes.
+
+The extraction is unconditional: every successfully parsed ERSPAN frame
+carries a `mirror_src_ip` value. Flow-rules that don't list it simply
+ignore it; there is no separate "extract on demand" path, which keeps the
+parser branch-free with respect to flow-rule configuration.
 
 ### 4.3 ERSPAN Type III Header
 
