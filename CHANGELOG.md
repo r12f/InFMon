@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - Initial repository scaffolding.
 - Apache-2.0 `LICENSE`.
 - `README.md` with high-level project description and link to `specs/`.

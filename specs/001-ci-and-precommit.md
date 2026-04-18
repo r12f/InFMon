@@ -67,7 +67,10 @@ run in the `lint` GH Action (§4.1) so local and CI verdicts agree.
 
 Notes:
 
-- `clippy` runs in pre-commit using `cargo clippy --workspace --all-targets --all-features -- -D warnings` (same form as the table; `--all-features` matters because §4.2 feature-gates VPP-dependent code).
+- `clippy` runs in pre-commit using
+  `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+  (same form as the table; `--all-features` matters because §4.2
+  feature-gates VPP-dependent code).
 - `cppcheck` runs only on changed C/C++ files in the local hook (fast); the CI
   job runs it across the full tree. **Tradeoff**: local pre-commit can pass while
   CI fails on untouched files (e.g. when a header change exposes a latent issue
@@ -183,9 +186,21 @@ Cross-compilation smoke test: prove the BF-3 target builds; do not run tests
 
 - Runner: `ubuntu-24.04`.
 - Targets:
-  - Rust: `aarch64-unknown-linux-gnu` via `cargo build --workspace --target aarch64-unknown-linux-gnu --release`. Linker: `aarch64-linux-gnu-gcc` from `gcc-aarch64-linux-gnu`. `cross` is acceptable as an alternative.
-  - C/C++: cross-toolchain in container `ligato/vpp-base:24.02-arm64` (multi-arch tag) **strongly preferred** over `--platform linux/arm64` build via `docker buildx`. The buildx/QEMU path emulates every compiler invocation and a full backend build can blow well past the §8 8-min warm target. Compile only; do **not** invoke `ctest`.
-  - **Time budget for the QEMU fallback path**: if QEMU buildx is used, the spec accepts up to **20 min wall-time** for `cross-build` (vs. 8 min for the native cross-toolchain path) — implementers SHOULD treat anything beyond that as a CI bug and switch to the cross-toolchain image.
+  - Rust: `aarch64-unknown-linux-gnu` via
+    `cargo build --workspace --target aarch64-unknown-linux-gnu --release`.
+    Linker: `aarch64-linux-gnu-gcc` from `gcc-aarch64-linux-gnu`.
+    `cross` is acceptable as an alternative.
+  - C/C++: cross-toolchain in container
+    `ligato/vpp-base:24.02-arm64` (multi-arch tag) **strongly preferred**
+    over `--platform linux/arm64` build via `docker buildx`. The
+    buildx/QEMU path emulates every compiler invocation and a full backend
+    build can blow well past the §8 8-min warm target. Compile only;
+    do **not** invoke `ctest`.
+  - **Time budget for the QEMU fallback path**: if QEMU buildx is used,
+    the spec accepts up to **20 min wall-time** for `cross-build`
+    (vs. 8 min for the native cross-toolchain path) — implementers
+    SHOULD treat anything beyond that as a CI bug and switch to the
+    cross-toolchain image.
 - Cache: `Swatinem/rust-cache@v2` with target key suffix; `~/.ccache`.
 - Failure modes worth calling out:
   - Missing VPP aarch64 headers → fail loudly with a hint to update §5.

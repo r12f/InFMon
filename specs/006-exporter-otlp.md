@@ -8,7 +8,9 @@
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md)
-- **Related:** [`004-backend-architecture`](004-backend-architecture.md), [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md)
+- **Related:** [`004-backend-architecture`](004-backend-architecture.md),
+  [`005-frontend-architecture`](005-frontend-architecture.md),
+  [`007-cli`](007-cli.md)
 
 ## 1. Purpose
 
@@ -91,7 +93,7 @@ OTLP-native way to express "this counter started accumulating at time T".
 - Cumulative is the OTLP default and what most collector pipelines (Prometheus
   remote-write, Mimir, Cortex) prefer.
 - The backend owns the flow lifetime; the exporter is stateless. Cumulative
-  + a stable `start_time_unix_nano` lets a collector compute deltas without
+  - a stable `start_time_unix_nano` lets a collector compute deltas without
   the exporter having to track previous-export state.
 - On flow eviction (Spec 002 §6) the counter is gone. Receivers that
   compute deltas will see a counter reset; OTLP Sum semantics handle that
@@ -437,7 +439,7 @@ relevant; they do **not** carry flow-rule or flow attributes.
 > transform (`.` → `_`, `Sum` cumulative → `_total` suffix). Implementers
 > emit the dot form; operators reading dashboards may see the underscore
 > form depending on their downstream pipeline.
-
+>
 > **Why `export_duration` is a Gauge in v1.** A single gauge per export
 > loses tail-latency information (p50/p99) that a Histogram or Summary
 > would expose. v1 ships a Gauge to keep self-observability cheap and

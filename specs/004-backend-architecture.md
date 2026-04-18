@@ -73,7 +73,7 @@ The plugin registers four nodes wired in a single linear path. All four run
 in the worker thread that owns the input device's RX queue; no inter-thread
 hand-off occurs on the data path.
 
-```
+```text
   dpdk-input  ──►  infmon-erspan-decap  ──►  infmon-flow-match  ──►  infmon-counter  ──►  drop
                        │  (no-decap)              │  (no-match)              │  (counted)
                        └──►  drop                 └──►  drop                 └──►  drop
@@ -121,7 +121,7 @@ For each `flow_rule` the plugin owns one **counter table**:
   under lock-free CAS and remains cache-friendly.
 - Slot layout (cache-line aligned, 64 B):
 
-```
+```c
 struct infmon_slot {
     u64  key_hash;          // 0  full 64-bit hash of key_blob
     u64  packets;           // 8  atomic, monotonic

@@ -28,7 +28,7 @@ keep that bounded and predictable.
 
 A **flow-rule** is:
 
-```
+```text
 flow-rule := (name, ordered_field_list, max_keys, eviction_policy)
 ```
 
@@ -131,7 +131,7 @@ For a flow-rule `T = [f1, f2, ..., fn]` the key is the concatenation of
 each field's canonical encoding, in order, with no padding between
 fields:
 
-```
+```text
 key(T, pkt) = enc(f1, pkt) || enc(f2, pkt) || ... || enc(fn, pkt)
 ```
 

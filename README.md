@@ -19,7 +19,7 @@ and active work are tracked in
 
 ## Repository layout
 
-```
+```text
 .
 ├── specs/                  Design specs, RFCs, and protocol documents
 ├── src/
