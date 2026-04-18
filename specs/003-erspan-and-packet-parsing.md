@@ -2,15 +2,9 @@
 
 ## Version history
 
-| Version | Date       | Author      | Changes        |
-| ------- | ---------- | ----------- | -------------- |
-| 0.1     | 2026-04-18 | r12f        | Initial draft. |
-| 0.2     | 2026-04-18 | r12f        | Surface `mirror_src_ip` (outer GRE source IP) to downstream as the only outer-header value that crosses the parser boundary. ERSPAN session ID still stripped. |
-| 0.3     | 2026-04-18 | r12f       | Add §4.2.1 explicit outer-IPv4/IPv6 source-IP extraction → `mirror_src_ip` as a parsed field exposed to flow-keys (Spec 002). ERSPAN session ID remains dropped. Align prose with the flow-rule/flow split. |
-
-| Field    | Value                                                         |
-| -------- | ------------------------------------------------------------- |
-| Repo     | https://github.com/r12f/InFMon                                |
+| Version | Date       | Author       | Changes |
+| ------- | ---------- | ------------ | ------- |
+| 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft. Defines ERSPAN III over GRE decap, parser boundary (mirror transport vs user packet), and §4.2.1 explicit outer-IPv4/IPv6 source-IP extraction → `mirror_src_ip` as the only outer-header value crossing the parser boundary into flow-keys (Spec 002). ERSPAN session ID is dropped. |
 
 ## 1. Motivation
 
