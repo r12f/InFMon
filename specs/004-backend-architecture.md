@@ -7,12 +7,11 @@
 | 0.1     | 2026-04-18 | r12f        | Initial draft. |
 | 0.2     | 2026-04-18 | r12f        | Rename tracker->flow-rule, bucket->flow. |
 | 0.3     | 2026-04-18 | r12f        | Address PR #7 review: linear probing, offset-based descriptors, memory ordering, epoch-based RCU, scratch cap, alloc-failed recovery. |
-| 0.4     | 2026-04-18 | bf3(agent)| Rename internal identifiers `flow_def*` → `flow_rule*` to match the spec-002 mental model (a flow_rule generates one flow per distinct key tuple); clarify Terminology section accordingly. |
-| 0.5     | 2026-04-18 | bf3(agent)| Use `flow_rule_index` (the u32 handle) instead of `flow_rule_id` (u128 UUID) in the per-worker scratch-triple description and §6 emit format — the 24 B/entry estimate only adds up with the index. |
+| 0.4     | 2026-04-18 | r12f       | Rename internal identifiers `flow_def*` → `flow_rule*` to match the spec-002 mental model (a flow_rule generates one flow per distinct key tuple); clarify Terminology section accordingly. |
+| 0.5     | 2026-04-18 | r12f       | Use `flow_rule_index` (the u32 handle) instead of `flow_rule_id` (u128 UUID) in the per-worker scratch-triple description and §6 emit format — the 24 B/entry estimate only adds up with the index. |
 
 | Field    | Value                                                         |
 | -------- | ------------------------------------------------------------- |
-| Tracking | DPU-10 (parent: DPU-4 — EPIC InFMon)                          |
 | Repo     | https://github.com/r12f/InFMon                                |
 | Depends  | spec 000 (overview), spec 002 (flow tracking model), spec 003 (ERSPAN parsing) |
 
