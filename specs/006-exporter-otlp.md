@@ -1,6 +1,11 @@
 # Spec 006 — OTLP exporter (v1)
 
-Status: Draft
+## Version history
+
+| Version | Date       | Author      | Changes        |
+| ------- | ---------- | ----------- | -------------- |
+| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft. |
+
 Tracking issue: DPU-12 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
 Depends on: 000-overview (system overview),
