@@ -20,6 +20,11 @@ echo "Applying branch protection to ${REPO}@${BRANCH}…"
 
 # NB: required_status_checks.contexts MUST match the `name:` of each workflow
 # job exactly. Update both this script and the workflow file together.
+#
+# `enforce_admins` is intentionally `false`: repo admins can bypass required
+# checks for genuine emergency hotfixes (spec 001 §7). Any admin override is
+# visible in the PR/commit history, and the team is expected to follow up
+# with a normal PR. Flip to `true` if/when we want strict enforcement.
 gh api \
     --method PUT \
     -H "Accept: application/vnd.github+json" \

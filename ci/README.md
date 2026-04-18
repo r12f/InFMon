@@ -11,7 +11,7 @@ Implementation of the `lint` / `rust-test` / `cpp-test` / `cross-build` /
 | `../.github/workflows/*.yml`     | GitHub Actions: `lint`, `rust-test`, `cpp-test`, `cross-build`, `dco`.   |
 | `check-dco.sh`                   | `commit-msg` hook: rejects commits missing a `Signed-off-by:` trailer.   |
 | `branch-protection.sh`           | Idempotent script that applies branch protection to `main` via `gh`.     |
-| `apt-packages.txt`               | Cache-key input for any apt installs in CI.                              |
+| `apt-packages.txt`               | Canonical list of apt packages installed in CI jobs (reserved as a future `hashFiles()` cache-key input — not yet wired into any workflow). |
 
 ## Container image
 
