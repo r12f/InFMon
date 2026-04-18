@@ -269,6 +269,10 @@ src/exporters/
 └── otlp/                 # the v1 exporter (Spec 006)
 ```
 
+Directory names are short (`core/`, `exporter/`, etc.) but Cargo crate
+names use an `infmon-` prefix (e.g. `infmon-core`, `infmon-exporter`)
+to avoid workspace-level collisions.
+
 Adding an exporter is: new crate under `src/exporters/`, depend on
 `exporter`, `inventory::submit!` a registration, declare the
 crate as a dep of `bin`. No changes to the loop or the trait.
@@ -299,9 +303,10 @@ Mechanism:
 
 A `block_one_tick` policy was considered and rejected for v1: any
 poller-side blocking starves *all* exporters of the next tick, which
-contradicts the hard rule above. If we ever need bounded backpressure,
-it will be implemented as a per-exporter retry on the exporter thread,
-never as a poller block.
+contradicts the hard rule above. `drop_oldest` was also considered but
+deferred — v1 ships with `drop_newest` only. If we ever need bounded
+backpressure, it will be implemented as a per-exporter retry on the
+exporter thread, never as a poller block.
 
 The poller's `snapshot_and_clear` against the backend always runs,
 regardless of exporter health. If every exporter is overflowing, the
