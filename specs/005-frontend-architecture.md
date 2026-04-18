@@ -4,6 +4,7 @@
 
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
+| 0.2     | 2026-04-18 | BF-3 (bf3)   | Unify config path to `/etc/infmon/config.yaml` (YAML); rename `timeout_ms` → `export_timeout` to align with spec 006. |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Consolidated from v0.1–v0.6. Initial draft of `infmon-frontend` (Rust). Task model, `interval_ns` defined on tick 1, single-reader enforcement, reload-rollback failure handling, stop exit code, complete tracker→flow-rule rename (`FlowRuleStats`/`FlowRuleCounters`/`FlowRuleDef`/`FlowStatsSnapshot`), metric prefix cleanup, YAML config, `polling_interval_ms`, `InFMonStatsClient`/`InFMonControlClient`, control-plane `flow_rule_*` methods, and §3.0 mental-model paragraph. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
@@ -171,7 +172,7 @@ The frontend reads two pieces of config at start (and at reload):
 2. **Exporter config** — per-exporter blocks, keyed by exporter type:
 
 ```yaml
-# /etc/infmon/frontend.yaml
+# /etc/infmon/config.yaml
 
 frontend:
   polling_interval_ms: 1000           # v1: only 1000 is supported
@@ -183,7 +184,7 @@ exporters:
   - type: "otlp"
     name: "primary"                    # unique within frontend
     endpoint: "http://collector.local:4317"
-    timeout_ms: 800                    # exporter-side deadline; independent
+    export_timeout: "800ms"              # exporter-side deadline; independent
                                        # of tick interval. See note below.
     queue_depth: 2                     # see §7
     on_overflow: "drop_oldest"         # drop_oldest | drop_newest
@@ -193,14 +194,14 @@ exporters:
 move to sub-second cadence without a config break. Validation is
 all-or-nothing: a bad exporter block fails the whole reload (§9.2).
 
-`timeout_ms` is the deadline applied to a single `Exporter::export`
+`export_timeout` is the deadline applied to a single `Exporter::export`
 call by the dispatcher and is **decoupled from the tick interval**:
 each exporter runs on its own thread (§4) and a slow tick on one
 exporter does not delay the poller's next `snapshot_and_clear`. The
-only relationship between them is operational — if `timeout_ms`
+only relationship between them is operational — if `export_timeout`
 routinely approaches or exceeds `tick_interval`, channels will fill
 and `on_overflow` will fire, which shows up in `frontend_drops_total`.
-Pick `timeout_ms` based on the exporter's expected p99, not the tick
+Pick `export_timeout` based on the exporter's expected p99, not the tick
 period.
 
 ## 6. Exporter trait
@@ -219,7 +220,7 @@ pub trait Exporter: Send + Sync + 'static {
 
     /// Called once per tick with the shared aggregate.
     ///
-    /// MUST return within the configured `timeout_ms`. A `Pending`
+    /// MUST return within the configured `export_timeout`. A `Pending`
     /// future at deadline is cancelled and counted as a failure.
     fn export(&self, agg: Arc<FlowStatsSnapshot>)
         -> BoxFuture<'_, Result<(), ExporterError>>;
@@ -237,7 +238,7 @@ pub trait Exporter: Send + Sync + 'static {
 pub enum ExporterError {
     Transient(anyhow::Error), // network blip, retryable next tick
     Permanent(anyhow::Error), // config-level wrongness; reported & dropped
-    Timeout,                  // exceeded timeout_ms
+    Timeout,                  // exceeded export_timeout
 }
 ```
 
@@ -286,7 +287,7 @@ Mechanism:
   "pop-oldest from the sender side" operation, which `drop_oldest`
   needs. The wrapper keeps the same `Sender` / `Receiver` ergonomics.
 - Each `exporter-N` thread consumes from its channel, awaits
-  `export(agg)` with `timeout_ms`, and increments per-exporter
+  `export(agg)` with `export_timeout`, and increments per-exporter
   counters (§10).
 - When the channel is full at push time, the poller applies the
   exporter's `on_overflow` policy:
@@ -313,7 +314,7 @@ a labelled counter, never a process-wide queue.**
 
 Per tick, per exporter, the dispatcher records exactly one of:
 
-- `ok` — `export` returned `Ok(())` within `timeout_ms`.
+- `ok` — `export` returned `Ok(())` within `export_timeout`.
 - `transient` — `Err(Transient)` or `Err(Timeout)`. Logged at
   `WARN` with rate-limit; bumps `frontend_export_failures_total`
   with `reason` label. Next tick is attempted normally.
@@ -419,11 +420,11 @@ restart it explicitly via `systemctl restart infmon-frontend`.
 
 ### 9.1 `start`
 
-1. Parse `frontend.yaml`. Refuse to start on any validation error
+1. Parse `config.yaml`. Refuse to start on any validation error
    (closed error set, mirrors Spec 002 §7.2: `invalid_spec`,
    `name_exists`, …).
 2. Open `InFMonStatsClient` and `InFMonControlClient` to the backend. Refuse to
-   start if the backend is not reachable within `startup_timeout_ms`
+   start if the backend is not reachable within `startup_export_timeout`
    (default 5000). The asymmetry with §8.3 (where runtime
    disconnects are tolerated indefinitely) is intentional: at start
    we have no exporters spawned yet and no useful work to do, so
@@ -446,7 +447,7 @@ restart it explicitly via `systemctl restart infmon-frontend`.
 
 Triggered by `SIGHUP` or `InFMonControlClient::reload()`.
 
-1. Re-read `frontend.yaml`. Validate exporter and flow blocks
+1. Re-read `config.yaml`. Validate exporter and flow blocks
    independently. Any error → reload aborted, old config still
    running, error returned to the caller.
 2. Diff flow-rule definitions and apply via `flow_rule_add` / `flow_rule_rm`

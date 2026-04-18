@@ -4,6 +4,7 @@
 
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
+| 0.2     | 2026-04-18 | BF-3 (bf3)   | Unify config path to `/etc/infmon/config.yaml`; convert TOML config block to YAML. |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of the v1 OpenTelemetry (OTLP) exporter. Defines OTLP metric mapping for flow-rule and flow state from Spec 002, runtime cap, jitter, naming, drop-reason enum, dynamic `host.arch`, §1.1 mental-model paragraph, and the `flow.mirror_src_ip` per-flow attribute (opt-in, sourced from Spec 003 §4.2.1). Identifier `distinct_data_points_per_flow`. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
@@ -194,40 +195,41 @@ lifetime.
 
 ## 6. Endpoint and transport configuration
 
-The exporter is configured in the same `infmon-frontend` config file
+The exporter is configured in `/etc/infmon/config.yaml`
 (format owned by Spec 005). The OTLP block:
 
-### 6.1 TOML
+### 6.1 YAML
 
-```toml
-[exporter.otlp]
-enabled            = true
-protocol           = "grpc"            # "grpc" | "http_protobuf"
-endpoint           = "otel-collector.infra.local:4317"
-                                       # gRPC default 4317, http/protobuf default 4318
-insecure           = false             # true => plaintext (TCP, not mTLS)
-ca_file            = "/etc/infmon/tls/ca.pem"      # optional; system trust if unset
-cert_file          = "/etc/infmon/tls/client.pem"  # optional client mTLS
-key_file           = "/etc/infmon/tls/client.key"  # optional client mTLS;
-                                       # PEM-encoded; PKCS#8 unencrypted private
-                                       # key (RSA or EC P-256/P-384). PKCS#1 RSA
-                                       # is also accepted on rustls; encrypted
-                                       # keys are rejected at startup.
-compression        = "gzip"            # "none" | "gzip"
-export_interval    = "10s"             # how often to take a snapshot and ship
-export_timeout     = "5s"              # per-request timeout
-max_batch_points   = 8192              # see §7
-queue_size         = 4                 # see §7
-max_export_points_per_tick = 2_000_000 # see §8.2; runtime safety cap
+```yaml
+# /etc/infmon/config.yaml  (exporter section)
 
-[exporter.otlp.headers]
-# arbitrary key=value, sent on every request (gRPC metadata or HTTP headers)
-"x-tenant" = "dpu-east-1"
-
-[exporter.otlp.resource]
-# operator-set resource attributes, merged on top of §5 defaults
-"infmon.dpu.id"       = "bf3-rack17-u4"
-"infmon.dpu.platform" = "bluefield-3"
+exporter:
+  otlp:
+    enabled: true
+    protocol: "grpc"                     # "grpc" | "http_protobuf"
+    endpoint: "otel-collector.infra.local:4317"
+                                         # gRPC default 4317, http/protobuf default 4318
+    insecure: false                      # true => plaintext (TCP, not mTLS)
+    ca_file: "/etc/infmon/tls/ca.pem"    # optional; system trust if unset
+    cert_file: "/etc/infmon/tls/client.pem"  # optional client mTLS
+    key_file: "/etc/infmon/tls/client.key"   # optional client mTLS;
+                                         # PEM-encoded; PKCS#8 unencrypted private
+                                         # key (RSA or EC P-256/P-384). PKCS#1 RSA
+                                         # is also accepted on rustls; encrypted
+                                         # keys are rejected at startup.
+    compression: "gzip"                  # "none" | "gzip"
+    export_interval: "10s"               # how often to take a snapshot and ship
+    export_timeout: "5s"                 # per-request timeout
+    max_batch_points: 8192               # see §7
+    queue_size: 4                        # see §7
+    max_export_points_per_tick: 2000000  # see §8.2; runtime safety cap
+    headers:
+      # arbitrary key: value, sent on every request (gRPC metadata or HTTP headers)
+      x-tenant: "dpu-east-1"
+    resource:
+      # operator-set resource attributes, merged on top of §5 defaults
+      infmon.dpu.id: "bf3-rack17-u4"
+      infmon.dpu.platform: "bluefield-3"
 ```
 
 ### 6.2 Defaults
