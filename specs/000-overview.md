@@ -331,12 +331,12 @@ explanations of each rule.
    spec 004. *Default:* IPFIX first (broadest collector support); OTel as a
    fast follow.
 2. **Snapshot transport** — shared memory ring vs. local Unix-domain socket
-   vs. gRPC. Decided in spec 002. *Default:* shared-memory ring (lowest
+   vs. gRPC. Decided in spec 004. *Default:* shared-memory ring (lowest
    overhead on DPU).
 3. **Flow table eviction policy** — LRU, time-based, or hybrid. Decided in
-   spec 003. *Default:* time-based with active/idle timeouts (IPFIX-aligned).
+   spec 002. *Default:* time-based with active/idle timeouts (IPFIX-aligned).
 4. **Distro target** — Ubuntu 22.04 only, or also DOCA's recommended base?
-   Decided in spec 005. *Default:* Ubuntu 22.04 arm64.
+   Decided in spec 008. *Default:* Ubuntu 22.04 arm64.
 5. **Frontend API authn/authz** — v1 ships with UNIX-group-based access on a
    UDS (see Component Map note). Should we add a token or mTLS layer for
    multi-tenant DPU scenarios? Tracked for a post-v1 spec. *Default:* keep
