@@ -387,10 +387,13 @@ The exporter MUST enforce these, independently of the backend:
    `2_000_000`). If a tick would emit more, the exporter ships
    approximately the cap-many points using a **per-flow-rule proportional
    allocation**: each flow-rule gets a budget of
-   `floor(cap × flow_rule_flows / total_flows)` points (with any
-   leftover from rounding distributed in flow-rule-name order), then
-   each flow-rule emits its first `budget` flows in iteration order
-   (stable per snapshot) and **drops the rest**, bumping
+   `floor(effective_cap × flow_rule_flows / total_flows)` flows, where
+   `effective_cap = floor(cap / points_per_flow)` (currently 3: packets,
+   bytes, last_seen) so the total emitted point count never exceeds the
+   configured cap. Any leftover from rounding is distributed in
+   flow-rule-name order. Each flow-rule then emits its first `budget`
+   flows in iteration order (stable per snapshot) and **drops the rest**,
+   bumping
    `infmon_exporter_points_dropped_total{reason="export_cap"}`. The
    proportional split avoids the O(n log n) global sort by
    `last_seen_ns` that an earlier draft required, and keeps each
