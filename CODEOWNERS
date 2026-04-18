@@ -8,7 +8,7 @@
 
 # TODO: As the codebase grows and dedicated teams form, split ownership
 # per-component. Examples (uncomment and adjust when applicable):
-#   src/infmon-backend/  @backend-team
-#   src/infmon-frontend/ @frontend-team
-#   src/infmon-cli/      @cli-team
+#   backend/  @backend-team
+#   frontend/ @frontend-team
+#   cli/      @cli-team
 #   specs/               @architecture-team
