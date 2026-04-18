@@ -1,0 +1,14 @@
+# Extra apt packages installed in CI on top of the base runner / container
+# image. One package per line; comments allowed. Cache key in
+# `.github/workflows/*.yml` is keyed on a hash of this file.
+
+# Cross-compile for aarch64 (BlueField-3) — used by cross-build.yml.
+gcc-aarch64-linux-gnu
+g++-aarch64-linux-gnu
+
+# Static analysis used by pre-commit and the cpp-test full-tree sweep.
+cppcheck
+
+# clang-format binary used by pre-commit when developers run hooks locally
+# without the mirror repo.
+clang-format

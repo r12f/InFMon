@@ -1,0 +1,83 @@
+name: cpp-test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: cpp-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpp-test:
+    name: cpp-test
+    runs-on: ubuntu-22.04
+    # VPP-in-CI image; see specs/001-ci-and-precommit.md §5.
+    # NOTE: pin by digest once first green run is recorded.
+    container:
+      image: ligato/vpp-base:24.02
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y --no-install-recommends \
+              cmake ninja-build g++ clang libgtest-dev ccache pkg-config
+
+      - name: Verify VPP dev headers
+        run: |
+          if [ ! -d /usr/include/vpp ]; then
+            echo "::error::VPP dev headers missing under /usr/include/vpp."
+            exit 1
+          fi
+
+      - name: ccache cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache-${{ hashFiles('src/infmon-backend/**/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-
+
+      - name: Detect backend source
+        id: detect
+        run: |
+          if [ -f src/infmon-backend/CMakeLists.txt ]; then
+            echo "have_backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_backend=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::src/infmon-backend/CMakeLists.txt not present yet; cpp-test is a no-op until the backend lands."
+          fi
+
+      - name: Configure
+        if: steps.detect.outputs.have_backend == 'true'
+        run: |
+          cmake -S src/infmon-backend -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        if: steps.detect.outputs.have_backend == 'true'
+        run: cmake --build build
+
+      - name: cppcheck (full tree)
+        if: steps.detect.outputs.have_backend == 'true'
+        run: |
+          cppcheck \
+              --enable=warning,performance,portability \
+              --error-exitcode=1 \
+              --inline-suppr \
+              --suppressions-list=.cppcheck-suppressions \
+              --std=c11 \
+              src/infmon-backend
+
+      - name: ctest
+        if: steps.detect.outputs.have_backend == 'true'
+        run: ctest --test-dir build --output-on-failure
