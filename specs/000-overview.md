@@ -5,6 +5,7 @@
 | Version | Date       | Author      | Changes |
 | ------- | ---------- | ----------- | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f) | Initial draft. Establishes mission, scope, component map, repo layout, build/release model, glossary (incl. flow / flow-rule), and pointers to the canonical spec template at [`TEMPLATE.md`](TEMPLATE.md). |
+| 0.2     | 2026-04-18 | BF-3 (bf3)  | Fix exporter format references: OTLP is the only v1 exporter (per spec 006). Update cross-references from spec 004 to spec 006, remove IPFIX-first language. |
 
 ---
 
@@ -53,8 +54,8 @@ In-scope for v1:
 > of the opaque inner payload, not extracted into the flow key. This will be
 > revisited in spec 002 (parser).
 - Expose a snapshot/aggregate API consumed by `infmon-frontend`.
-- Ship exporters for at least one standard format (IPFIX or OpenTelemetry —
-  decided in spec 004).
+- Ship an OTLP exporter as the only v1 export format (see
+  [spec 006](006-exporter-otlp.md)).
 - A CLI (`infmon-cli`) for inspection, debugging, and admin.
 - Packaging as a `.deb` for **arm64 / aarch64**, single artifact for v1.
 
@@ -90,7 +91,7 @@ packets         |     v                                         |
                 |            v                                  |
                 |  +-------------------+    +---------------+   |
                 |  | infmon-frontend   |--->| exporters     |---+--> collectors
-                |  | (Rust)            |    | (IPFIX/OTel)  |   |     (off-DPU)
+                |  | (Rust)            |    | (OTLP)        |   |     (off-DPU)
                 |  | - aggregate       |    +---------------+   |
                 |  | - serve API       |                        |
                 |  +---------+---------+                        |
@@ -290,7 +291,7 @@ running Ubuntu 22.04 / DOCA-supported distro).
 - **Aggregate** — Frontend-side reduction of snapshots over a window (e.g.
   top-N talkers, per-VRF totals).
 - **Exporter** — Component that pushes flow records to an external collector
-  in a standard format (IPFIX, OpenTelemetry metrics/logs, etc.).
+  in a standard format (OTLP for v1; see [spec 006](006-exporter-otlp.md)).
 - **Collector** — Off-DPU consumer of exported records.
 - **Frontend** — `infmon-frontend`, the Rust user-space service that owns
   aggregation, exporters, and the API surface for the CLI.
@@ -327,9 +328,8 @@ explanations of each rule.
 
 ## Open Questions
 
-1. **Exporter format for v1** — IPFIX, OpenTelemetry, or both? Decided in
-   spec 004. *Default:* IPFIX first (broadest collector support); OTel as a
-   fast follow.
+1. **Exporter format for v1** — OTLP is the only v1 exporter. Decided in
+   [spec 006](006-exporter-otlp.md).
 2. **Snapshot transport** — shared memory ring vs. local Unix-domain socket
    vs. gRPC. Decided in spec 002. *Default:* shared-memory ring (lowest
    overhead on DPU).
