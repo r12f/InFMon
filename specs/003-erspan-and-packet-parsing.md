@@ -1,4 +1,4 @@
-# Spec 003 — ERSPAN and Packet Parsing
+# 003 — ERSPAN and Packet Parsing
 
 ## Version history
 

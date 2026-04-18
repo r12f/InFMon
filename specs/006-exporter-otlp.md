@@ -1,4 +1,4 @@
-# Spec 006 — OTLP exporter (v1)
+# 006 — OTLP exporter (v1)
 
 ## Version history
 
@@ -120,12 +120,13 @@ Their attribute set is `{flow-rule}` (plus `reason` for `drops`), nothing else.
 
 The `reason` attribute on `infmon.flow-rule.drops` is a closed enum. v1 values:
 
-| `reason`        | Meaning                                                          |
-|-----------------|------------------------------------------------------------------|
-| `table_full`    | Flow table at `max_keys`, no room to admit a new key.            |
-| `parse_error`   | Upstream packet failed parser invariants (Spec 003).             |
-| `rate_limit`    | Per-flow-rule admission rate limit (Spec 002 §8).                |
-| `key_rejected`  | Key violated a flow-rule field constraint (e.g. invalid `dscp`). |
+| `reason`            | Meaning                                                          |
+|---------------------|------------------------------------------------------------------|
+| `eviction_failed`   | LRU eviction could not free a slot for a new key.                |
+
+> Earlier drafts listed `budget_exceeded_runtime`; in v1 the CRUD plane is
+> single-threaded and budget overcommit is rejected synchronously at `add`
+> time (Spec 002 §7.2), so this reason is reserved for a future revision.
 
 The authoritative list lives in Spec 002 §8; this table is a mirror for
 implementer convenience. Any new value MUST be added there first.

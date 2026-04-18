@@ -1,4 +1,4 @@
-# Spec 005 — Frontend architecture (Rust)
+# 005 — Frontend architecture (Rust)
 
 ## Version history
 
@@ -33,7 +33,7 @@ In scope:
 - The exporter trait and plugin framework that lets new exporters land
   without touching the loop.
 - The frontend lifecycle (`start`, `reload`, `stop`) and how it
-  interacts with the backend's reload contract (Spec 004 §x).
+  interacts with the backend's reload contract (Spec 004 §7.2).
 - Backpressure and exporter-failure handling — the rules that keep one
   slow exporter from stalling the others or the backend.
 - The IPC client to the backend: stats-segment reader plus control
@@ -67,7 +67,7 @@ So a `FlowRuleStats` (§3.2) is named after the flow-rule that produced it
 and contains the set of flows currently live for that flow-rule. The CLI
 verb split (Spec 007) follows the same shape: `flow-rule {add,rm,list,show}`
 configures matchers; `flow {list,show}` reads live flows out of the
-frontend's most recent aggregate.
+frontend's most recent snapshot.
 
 ### 3.1 Tick
 
@@ -79,7 +79,7 @@ monotonic timer. Each tick performs, in order:
 3. Fan out the `FlowStatsSnapshot` to every registered exporter.
 4. Drop the `FlowStatsSnapshot`.
 
-The aggregate is **never** retained across ticks. The frontend holds
+The snapshot is **never** retained across ticks. The frontend holds
 no flow state of its own; everything it knows is what the backend
 handed it on the current tick.
 
@@ -121,7 +121,7 @@ FlowStats {
 }
 ```
 
-The aggregate is shared across exporters via `Arc<FlowStatsSnapshot>`;
+The snapshot is shared across exporters via `Arc<FlowStatsSnapshot>`;
 exporters MUST treat it as read-only.
 
 ### 3.3 Exporter
@@ -217,7 +217,7 @@ pub trait Exporter: Send + Sync + 'static {
     /// Operator-assigned instance name, unique per frontend.
     fn name(&self) -> &str;
 
-    /// Called once per tick with the shared aggregate.
+    /// Called once per tick with the shared snapshot.
     ///
     /// MUST return within the configured `timeout_ms`. A `Pending`
     /// future at deadline is cancelled and counted as a failure.
@@ -342,7 +342,7 @@ impl InFMonStatsClient {
     pub fn open(path: &Path) -> Result<Self, IpcError>;
     /// Equivalent to backend's snapshot_and_clear: returns all
     /// flow-rules' flows as of the call, and clears the backend's
-    /// counters atomically (per Spec 004 §x).
+    /// counters atomically (per Spec 004 §7.2).
     pub fn snapshot_and_clear(&self) -> Result<RawSnapshot, IpcError>;
 }
 ```
@@ -409,7 +409,7 @@ socket EOFs, the frontend:
 1. Skips the current tick's snapshot (bumps
    `frontend_backend_disconnects_total`).
 2. Retries `InFMonStatsClient::open` with exponential backoff capped at 5 s.
-3. Continues exporter ticks with empty aggregates so the per-frontend
+3. Continues exporter ticks with empty snapshots so the per-frontend
    liveness signal (`frontend_tick_total`) keeps incrementing.
 
 The frontend never exits because the backend is down. Operators
@@ -430,7 +430,7 @@ restart it explicitly via `systemctl restart infmon-frontend`.
    failing fast surfaces a misconfigured `backend_socket` /
    `stats_segment` to the operator immediately. Once we are running
    and have produced at least one tick, the cost of exiting (losing
-   queued aggregates, restart storms under systemd `Restart=on-failure`)
+   queued snapshots, restart storms under systemd `Restart=on-failure`)
    outweighs the diagnostic value, so we keep retrying instead.
 3. Push the parsed flow definitions to the backend via
    `flow_rule_add` / `flow_rule_rm` so the backend's flow-rule set matches
@@ -530,7 +530,7 @@ Metrics emitted (under `frontend_*`):
 - `frontend_tick_skew_ns` — histogram, `actual - scheduled`
   for each tick. The 1 Hz cadence health signal.
 - `frontend_snapshot_duration_ns` — histogram.
-- `frontend_aggregate_flows` — histogram, flows per tick (renamed from `aggregate_buckets` in v0.4; no backcompat alias).
+- `frontend_snapshot_flows` — histogram, flows per tick (renamed from `aggregate_buckets` in v0.4; no backcompat alias).
 - `frontend_export_duration_ns{exporter}` — histogram.
 - `frontend_export_failures_total{exporter,reason}` — counter;
   `reason` ∈ `{"transient","timeout","permanent"}`.
@@ -548,7 +548,7 @@ operator answer "is the frontend keeping up?" without reading logs.
 | Layer            | Test type      | What it covers                                      |
 |------------------|----------------|-----------------------------------------------------|
 | `frontend-ipc`   | unit (cargo)   | Snapshot decode, control RPC round-trips against an in-process fake backend. |
-| `frontend-core`  | unit (cargo)   | Tick scheduling skew under load; aggregate decode. |
+| `frontend-core`  | unit (cargo)   | Tick scheduling skew under load; snapshot decode. |
 | `frontend-exporter` | unit        | Backpressure policies; permanent-error disables exporter; reload rollback. |
 | `otlp` exporter  | unit + integ   | Wire format vs. an embedded OTLP receiver (Spec 006). |
 | frontend bin     | integration    | `start → reload → stop` against a stub backend that mocks the stats segment and control socket. Lives in `tests/` (Spec 000), not in CI. |
@@ -585,5 +585,5 @@ project-wide policy.
   always-on structured-log fallback per §10
   (`frontend.metrics_log = on_failure`).
 - **Q3.** Do we need a `dry-run` mode that runs the poller and
-  decodes aggregates but skips fan-out, for backend benchmarking?
+  decodes snapshots but skips fan-out, for backend benchmarking?
   Cheap to add; defer to Spec 007 review.

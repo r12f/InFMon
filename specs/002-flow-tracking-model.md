@@ -1,4 +1,4 @@
-# Spec 002 — Flow tracking model
+# 002 — Flow tracking model
 
 ## Version history
 

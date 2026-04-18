@@ -1,10 +1,12 @@
-# Spec 001 — CI and Pre-commit
+# 001 — CI and Pre-commit
 
 ## Version history
 
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft. Defines local pre-commit contract, GH Actions workflows, x86 vs aarch64 split, and the §11 changelog of review fixes from PR #4 (banidoru). |
+
+- **Related:** [`000-overview`](000-overview.md)
 
 ## 1. Motivation
 
