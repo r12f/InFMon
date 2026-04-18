@@ -14,7 +14,11 @@ INFMON_GROUP=infmon
 
 case "$1" in
     purge)
-        rm -rf /etc/infmon
+        # Remove only config files shipped by this package; leave
+        # operator-created files (e.g., custom flow_def YAMLs) alone.
+        rm -f /etc/infmon/frontend.conf /etc/infmon/backend.conf
+        rmdir /etc/infmon/flow_defs.d 2>/dev/null || true
+        rmdir /etc/infmon 2>/dev/null || true
         rm -rf /var/log/infmon
         rm -rf /var/lib/infmon
 

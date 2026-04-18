@@ -48,6 +48,7 @@ import datetime as _dt
 import email.utils
 import os
 import re
+import textwrap
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -109,6 +110,11 @@ def _parse_changelog(md: str) -> List[Tuple[str, str | None, List[Tuple[str, str
         bm = BULLET_RE.match(line)
         if bm:
             cur_bullets.append((cur_subsection, bm.group("text")))
+            continue
+        # Continuation line: indented text that follows a bullet
+        if cur_bullets and line.startswith("  ") and line.strip():
+            section, prev = cur_bullets[-1]
+            cur_bullets[-1] = (section, prev + " " + line.strip())
 
     flush()
     return sections
@@ -159,9 +165,14 @@ def _format_stanza(
     if not bullets:
         bullet_block = "  * (no changelog entries)\n"
     else:
-        bullet_block = "".join(
-            f"  * {section}: {text}\n" for section, text in bullets
-        )
+        lines = []
+        for section, text in bullets:
+            entry = f"  * {section}: {text}"
+            wrapped = textwrap.fill(
+                entry, width=78, subsequent_indent="    ",
+            )
+            lines.append(wrapped + "\n")
+        bullet_block = "".join(lines)
 
     return (
         f"{PKG} ({deb_ver}) {distro}; urgency={URGENCY}\n"

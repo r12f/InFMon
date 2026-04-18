@@ -59,7 +59,7 @@ override_dh_auto_configure:
 # ----------------------------------------------------------------------
 override_dh_auto_build:
 	# ---- backend (VPP plugin) ----
-	@if [ -f src/infmon-backend/CMakeLists.txt ]; then \
+	if [ -f src/infmon-backend/CMakeLists.txt ]; then \
 	  echo ">>> building infmon-backend (cmake)"; \
 	  cmake -S src/infmon-backend -B $(BACKEND_BUILD_DIR) \
 	        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -70,7 +70,7 @@ override_dh_auto_build:
 	fi
 
 	# ---- frontend + cli (cargo workspace) ----
-	@if [ -f Cargo.toml ]; then \
+	if [ -f Cargo.toml ]; then \
 	  echo ">>> building infmon-frontend + infmon-cli (cargo)"; \
 	  cargo build --release --locked \
 	      $$( [ -d src/infmon-frontend ] && echo -p infmon-frontend ) \
@@ -80,8 +80,8 @@ override_dh_auto_build:
 	fi
 
 	# ---- generated artefacts (completions + man page) ----
-	@mkdir -p debian/_staging/completions debian/_staging/man
-	@if [ -x $(CARGO_TARGET_DIR)/release/infmonctl ]; then \
+	mkdir -p debian/_staging/completions debian/_staging/man
+	if [ -x $(CARGO_TARGET_DIR)/release/infmonctl ]; then \
 	  $(CARGO_TARGET_DIR)/release/infmonctl --generate-completions bash \
 	    > debian/_staging/completions/infmonctl 2>/dev/null || true; \
 	  $(CARGO_TARGET_DIR)/release/infmonctl --generate-completions zsh \
@@ -95,14 +95,14 @@ override_dh_auto_build:
 # build runs the smoke subset only.
 # ----------------------------------------------------------------------
 override_dh_auto_test:
-	@if [ "$$DEB_BUILD_OPTIONS" != "$${DEB_BUILD_OPTIONS%nocheck*}" ]; then \
+	if [ "$$DEB_BUILD_OPTIONS" != "$${DEB_BUILD_OPTIONS%nocheck*}" ]; then \
 	  echo ">>> nocheck set; skipping tests"; \
 	  exit 0; \
 	fi
-	@if [ -d $(BACKEND_BUILD_DIR) ] && [ -f $(BACKEND_BUILD_DIR)/CTestTestfile.cmake ]; then \
+	if [ -d $(BACKEND_BUILD_DIR) ] && [ -f $(BACKEND_BUILD_DIR)/CTestTestfile.cmake ]; then \
 	  ctest --test-dir $(BACKEND_BUILD_DIR) --output-on-failure || true; \
 	fi
-	@if [ -f Cargo.toml ]; then \
+	if [ -f Cargo.toml ]; then \
 	  cargo test --release --locked --no-fail-fast || true; \
 	fi
 
@@ -114,24 +114,24 @@ override_dh_auto_install:
 	# Backend plugin → /usr/lib/vpp_plugins/
 	install -d debian/_staging/usr/lib/vpp_plugins
 	install -d debian/_staging/usr/share/vpp/api/plugins
-	@if [ -f $(BACKEND_BUILD_DIR)/infmon.so ]; then \
+	if [ -f $(BACKEND_BUILD_DIR)/infmon.so ]; then \
 	  install -m 0644 $(BACKEND_BUILD_DIR)/infmon.so \
 	    debian/_staging/usr/lib/vpp_plugins/infmon.so; \
 	fi
-	@if [ -f $(BACKEND_BUILD_DIR)/infmon.api.json ]; then \
+	if [ -f $(BACKEND_BUILD_DIR)/infmon.api.json ]; then \
 	  install -m 0644 $(BACKEND_BUILD_DIR)/infmon.api.json \
 	    debian/_staging/usr/share/vpp/api/plugins/infmon.api.json; \
 	fi
 
 	# Frontend daemon → /usr/bin/
 	install -d debian/_staging/usr/bin
-	@if [ -x $(CARGO_TARGET_DIR)/release/infmon-frontend ]; then \
+	if [ -x $(CARGO_TARGET_DIR)/release/infmon-frontend ]; then \
 	  install -m 0755 $(CARGO_TARGET_DIR)/release/infmon-frontend \
 	    debian/_staging/usr/bin/infmon-frontend; \
 	fi
 
 	# CLI → /usr/bin/infmonctl
-	@if [ -x $(CARGO_TARGET_DIR)/release/infmonctl ]; then \
+	if [ -x $(CARGO_TARGET_DIR)/release/infmonctl ]; then \
 	  install -m 0755 $(CARGO_TARGET_DIR)/release/infmonctl \
 	    debian/_staging/usr/bin/infmonctl; \
 	fi

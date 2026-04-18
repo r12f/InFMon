@@ -20,7 +20,7 @@ Vcs-Git: https://github.com/r12f/InFMon.git
 Rules-Requires-Root: no
 
 Package: infmon-backend
-Architecture: arm64
+Architecture: linux-any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
@@ -36,7 +36,7 @@ Description: InFMon flow telemetry — VPP backend plugin
  installation; this package does not start or restart VPP itself.
 
 Package: infmon-frontend
-Architecture: arm64
+Architecture: linux-any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
@@ -54,7 +54,7 @@ Description: InFMon flow telemetry — frontend daemon
  frontend REST contract.
 
 Package: infmon-cli
-Architecture: arm64
+Architecture: linux-any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
@@ -67,7 +67,7 @@ Description: InFMon flow telemetry — command-line client
  installed locally.
 
 Package: infmon
-Architecture: arm64
+Architecture: linux-any
 Depends:
  ${misc:Depends},
  infmon-backend (= ${source:Version}),

@@ -114,6 +114,8 @@ jobs:
           # build steps when the source trees are missing). When the
           # backend/frontend impls land we will drop -d and install
           # the real build-deps via mk-build-deps.
+          # TODO(DPU-XX): remove -d and add mk-build-deps step once
+          # VPP build-deps are available in CI.
           dpkg-buildpackage -B -us -uc -d -aarm64
           mkdir -p artifacts
           mv ../*.deb ../*.changes ../*.buildinfo artifacts/ 2>/dev/null || true

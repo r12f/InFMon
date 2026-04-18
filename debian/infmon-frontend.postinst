@@ -27,6 +27,8 @@ case "$1" in
                     "$INFMON_USER"
         fi
 
+        # Ensure home directory is set correctly on upgrades
+        usermod -d "$INFMON_HOME" "$INFMON_USER" 2>/dev/null || true
         # /var/log/infmon and /var/lib/infmon are also covered by the
         # systemd unit's LogsDirectory= and StateDirectory=, but creating
         # them here means they exist correctly even when the unit is
