@@ -8,19 +8,21 @@
 | 0.2     | 2026-04-18 | bf3 (agent) | Rename tracker->flow-rule, bucket->flow. |
 | 0.3     | 2026-04-18 | bf3 (agent) | Add `mirror_src_ip` to v1 field set as the only outer-header field allowed in a flow-rule key. |
 | 0.4     | 2026-04-18 | bf3 (agent) | Address PR #5 review: tighten `name` regex to ≥ 2 chars and motivate 31-char cap; `max_keys` positive (not non-negative); spell out DSCP extraction as `(tos>>2)&0x3F`; promote 64-byte cap to MUST and cross-reference §5.3; document LRU recency on insert and tie-breaking; clarify `show` returns `last_seen_ns` (max across resident flows); spell out file-load vs per-`add` budget enforcement; remove `budget_exceeded_runtime` drop reason for v1 (single-threaded CRUD); note TOML/YAML singular/plural is syntactic only. |
+| 0.5     | 2026-04-18 | bf3(agent)| Add §2.4 mental-model section (one flow-rule generates one flow per distinct key tuple); align CLI examples with the `flow-rule` / `flow` verb split (Spec 007); rename `infmon_tracker_*` metrics to `infmon_flow_rule_*` (and `_buckets`→`_flows`, `bucket_count`→`flow_count`); promote `mirror_src_ip` to part of the recommended default flow-rule (still opt-in for custom flow-rules). |
 
 Tracking issue: DPU-8 (project InFMon)
 Parent epic: DPU-4 (EPIC: InFMon — flow telemetry service on BF-3)
 Depends on: 000-overview (system overview), 003-erspan-and-packet-parsing
            (defines the parsed inner-packet record this spec keys off of)
 Related: 004-backend-architecture (consumes this model in the VPP plugin),
-         007-cli (exposes the CRUD surface as `flow {add,rm,list,show}`)
+         007-cli (exposes the flow-rule CRUD as `flow-rule {add,rm,list,show}`
+         and live flow inspection as `flow {list,show}`)
 
 ## 1. Purpose
 
-Define the data model and lifecycle of a **flow flow-rule** in InFMon: the
+Define the data model and lifecycle of a **flow-rule** in InFMon: the
 named, configurable thing that turns parsed inner-packet records into
-counter flows. The flow flow-rule is the single seam between
+counter flows. The flow-rule is the single seam between
 *"what the wire just gave us"* (Spec 003) and
 *"what we export"* (Spec 006, OTLP).
 
@@ -75,6 +77,25 @@ flows carry the minimum needed by the OTLP exporter (Spec 006):
 layout is owned by Spec 004 (backend); this spec only requires that
 *there is one flow per (flow-rule, key)*.
 
+### 2.4 Mental model: one flow-rule, many flows
+
+A flow-rule is a **configured matcher** — a key-set plus limits. It
+does not, by itself, hold any packet counters. As mirrored packets
+flow past, the flow-rule observes each packet, computes its key
+(§4), and:
+
+- if no flow exists for that key under this flow-rule yet, it
+  **generates a new flow** and starts counting;
+- if a flow already exists for that key, it updates that flow's
+  counters in place.
+
+So one flow-rule produces **one flow per distinct key tuple it
+observes**, up to `max_keys`. Two flow-rules configured on the same
+backend each maintain their own independent flow set; a packet that
+matches both flow-rules updates one flow under each. This is the
+single mental model the rest of this spec (and Specs 004, 006, 007)
+relies on.
+
 ## 3. Field set v1 (L3, inner + mirror metadata)
 
 All v1 fields are extracted from the **inner** packet headers — i.e.
@@ -87,7 +108,7 @@ after ERSPAN decapsulation per Spec 003 — with one named exception
 | `dst_ip`         | 16 B (v4 mapped to v6)  | inner IPv4 / IPv6 DA         | same mapping rule                                       |
 | `ip_proto`       | 1 B                     | inner IPv4.protocol / IPv6.next_header (after extension headers) | 0–255         |
 | `dscp`           | 1 B (low 6 bits used)   | inner IPv4.tos / IPv6.tc, extracted as `(tos >> 2) & 0x3F` (resp. `(tc >> 2) & 0x3F`) | upper 2 bits zero |
-| `mirror_src_ip`  | 16 B (v4 mapped to v6)  | **outer** GRE/ERSPAN source IP, surfaced by Spec 003 as `mirror_src_ip` | The **only** outer-header field allowed in a flow-rule key. Identifies the mirroring device. Same v4-mapped-v6 layout rule. Opt-in: include it in a flow-rule's field list to break flows out per source device. |
+| `mirror_src_ip`  | 16 B (v4 mapped to v6)  | **outer** GRE/ERSPAN source IP, surfaced by Spec 003 as `mirror_src_ip` | The **only** outer-header field allowed in a flow-rule key. Identifies the mirroring device. Same v4-mapped-v6 layout rule. **Opt-in**, but **included in the recommended default flow-rule** so flows are attributed per mirroring source out of the box. Omit it only when an operator deliberately wants to fold mirrored copies from multiple devices into a single flow. |
 
 A flow-rule MUST list at least one field. There is no implicit field; if
 you want a flow-rule keyed only on `dscp`, configure it that way.
@@ -154,9 +175,12 @@ of the two formats, not two different schemas.
 ```toml
 # /etc/infmon/flows.toml
 
+# Recommended default flow-rule: 5-tuple-ish L3 keyed per mirroring source.
+# Including `mirror_src_ip` keeps flows from different mirroring devices
+# distinct even when their inner traffic happens to collide on 5-tuple.
 [[flow-rule]]
 name             = "by_5tuple_l3"
-fields           = ["src_ip", "dst_ip", "ip_proto", "dscp"]
+fields           = ["mirror_src_ip", "src_ip", "dst_ip", "ip_proto", "dscp"]
 max_keys         = 1_048_576           # 2^20
 eviction_policy  = "lru_drop"          # only value supported in v1
 
@@ -172,7 +196,7 @@ eviction_policy  = "lru_drop"
 ```yaml
 flow-rules:
   - name: by_5tuple_l3
-    fields: [src_ip, dst_ip, ip_proto, dscp]
+    fields: [mirror_src_ip, src_ip, dst_ip, ip_proto, dscp]
     max_keys: 1048576
     eviction_policy: lru_drop
   - name: by_dscp
@@ -209,7 +233,7 @@ already at `max_keys`:
    contents are **dropped**, not flushed — Spec 006 (OTLP) flushes
    continuously, so the loss is bounded by the export interval.
 2. Insert the new key with a fresh flow and apply the current packet.
-3. Increment the per-flow-rule counter `infmon_tracker_evictions_total`
+3. Increment the per-flow-rule counter `infmon_flow_rule_evictions_total`
    (label: `flow-rule=<name>`).
 
 A key's "recency" is set to the packet timestamp on insertion (i.e. on
@@ -220,7 +244,7 @@ choice of which to evict is **implementation-defined**; v1 imposes no
 tie-breaking ordering.
 
 If the eviction itself fails (e.g. data structure invariant violation),
-the packet is dropped and `infmon_tracker_drops_total` is incremented
+the packet is dropped and `infmon_flow_rule_drops_total` is incremented
 instead — the flow-rule never silently corrupts.
 
 "Recently used" means *most recently updated by an incoming packet*.
@@ -245,10 +269,10 @@ spec defines only the operations and their semantics.
 
 | Op       | CLI                              | Input                                     | Output                              | Notes |
 |----------|----------------------------------|-------------------------------------------|-------------------------------------|-------|
-| `add`    | `infmon-cli flow add <spec>`     | full flow-rule definition (name, fields, max_keys, eviction_policy) | created flow-rule, or error           | Fails if name exists. |
-| `rm`     | `infmon-cli flow rm <name>`      | flow-rule name                              | ok / `not_found`                    | Drops all flows for that flow-rule. |
-| `list`   | `infmon-cli flow list`           | —                                         | array of flow-rule definitions        | Cheap; no flow data. |
-| `show`   | `infmon-cli flow show <name>`    | flow-rule name                              | flow-rule definition + live stats: `bucket_count`, `evictions_total`, `drops_total`, `last_seen_ns` (the maximum `last_seen_ns` across this flow-rule's resident flows; absent if there are none) | Stats are best-effort snapshots. |
+| `add`    | `infmon-cli flow-rule add <spec>`     | full flow-rule definition (name, fields, max_keys, eviction_policy) | created flow-rule, or error           | Fails if name exists. |
+| `rm`     | `infmon-cli flow-rule rm <name>`      | flow-rule name                              | ok / `not_found`                    | Drops all flows for that flow-rule. |
+| `list`   | `infmon-cli flow-rule list`           | —                                         | array of flow-rule definitions        | Cheap; no flow data. |
+| `show`   | `infmon-cli flow-rule show <name>`    | flow-rule name                              | flow-rule definition + live stats: `flow_count`, `evictions_total`, `drops_total`, `last_seen_ns` (the maximum `last_seen_ns` across this flow-rule's resident flows; absent if there are none) | Stats are best-effort snapshots. |
 
 ### 7.1 Semantics
 
@@ -297,9 +321,9 @@ A small, closed set:
 
 Per flow-rule, the backend exports (mechanism: Spec 006):
 
-- `infmon_tracker_buckets{flow-rule}` — gauge, current key count.
-- `infmon_tracker_evictions_total{flow-rule}` — counter (§6).
-- `infmon_tracker_drops_total{flow-rule, reason}` — counter; `reason` ∈
+- `infmon_flow_rule_flows{flow-rule}` — gauge, current key count.
+- `infmon_flow_rule_evictions_total{flow-rule}` — counter (§6).
+- `infmon_flow_rule_drops_total{flow-rule, reason}` — counter; `reason` ∈
   `{"eviction_failed"}`. (Earlier drafts also listed a
   `budget_exceeded_runtime` reason; in v1 the CRUD plane is
   single-threaded, so cumulative-budget overcommit can only happen at
@@ -307,9 +331,9 @@ Per flow-rule, the backend exports (mechanism: Spec 006):
   (§7.2). The runtime drop reason is therefore not emitted in v1 and
   is reserved for a future revision in which concurrent admin paths
   could let a packet observe a momentary over-budget state.)
-- `infmon_tracker_packets_total{flow-rule}` — counter, packets accounted
+- `infmon_flow_rule_packets_total{flow-rule}` — counter, packets accounted
   into this flow-rule (i.e. that successfully landed in a flow).
-- `infmon_tracker_bytes_total{flow-rule}` — counter.
+- `infmon_flow_rule_bytes_total{flow-rule}` — counter.
 
 The first two are the load signal: a non-zero, growing
 `evictions_total` means `max_keys` is under-provisioned for the
