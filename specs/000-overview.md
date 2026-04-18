@@ -5,6 +5,7 @@
 | Version | Date       | Author      | Changes |
 | ------- | ---------- | ----------- | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f) | Initial draft. Establishes mission, scope, component map, repo layout, build/release model, glossary (incl. flow / flow-rule), and pointers to the canonical spec template at [`TEMPLATE.md`](TEMPLATE.md). |
+| 0.2     | 2026-04-18 | BF-3 (bf3)  | Fix eviction policy references: §5 step 5 now points to spec 002 (not 003); §open-questions item 3 updated to reflect `lru_drop` decision. |
 
 ---
 
@@ -151,7 +152,7 @@ packets         |     v                                         |
 4. **Match & key.** L2–L4 parser produces a flow key (5-tuple + VRF/VNI when
    available) and per-packet metadata (length, TCP flags, timestamp).
 5. **Update.** Flow table lookup; on hit, update counters in place; on miss,
-   insert a new flow record (with eviction policy per spec 003 to be written).
+   insert a new flow record (with eviction policy per spec 002).
 6. **Snapshot.** Frontend periodically reads the backend's exposed snapshot
    (lock-free / RCU-style; details in spec 002) and builds an aggregate view.
 7. **Export.** Frontend pushes records to configured exporters and serves
@@ -333,8 +334,7 @@ explanations of each rule.
 2. **Snapshot transport** — shared memory ring vs. local Unix-domain socket
    vs. gRPC. Decided in spec 002. *Default:* shared-memory ring (lowest
    overhead on DPU).
-3. **Flow table eviction policy** — LRU, time-based, or hybrid. Decided in
-   spec 003. *Default:* time-based with active/idle timeouts (IPFIX-aligned).
+3. **Flow table eviction policy** — `lru_drop` (decided in spec 002 §6).
 4. **Distro target** — Ubuntu 22.04 only, or also DOCA's recommended base?
    Decided in spec 005. *Default:* Ubuntu 22.04 arm64.
 5. **Frontend API authn/authz** — v1 ships with UNIX-group-based access on a

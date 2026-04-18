@@ -5,6 +5,7 @@
 | Version | Date       | Author       | Changes |
 | ------- | ---------- | ------------ | ------- |
 | 0.1     | 2026-04-18 | Riff (r12f)  | Initial draft of `infmon-backend` (VPP plugin). Linear-probing flow table with offset-based descriptors, memory ordering, epoch-based RCU, scratch cap, alloc-failed recovery; internal identifiers use `flow_rule*` per Spec 002 mental model; per-worker scratch-triple and §6 emit format use `flow_rule_index` (u32 handle), keeping the 24 B/entry estimate. |
+| 0.2     | 2026-04-18 | BF-3 (bf3)   | Fix eviction policy contradiction: §5.2 now adopts `lru_drop` (spec 002 §6) instead of deferring eviction to v2. Updated §11 `counter_table_full` description accordingly. |
 
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`003-erspan-and-packet-parsing`](003-erspan-and-packet-parsing.md)
 
@@ -158,8 +159,11 @@ struct infmon_slot {
   exhaustion we increment a per-table `insert_failed` counter and drop
   the contribution from this packet (the packet itself still goes to
   `drop`, like every other packet — InFMon never forwards).
-- Table full → contribution dropped, `table_full` counter incremented.
-  We deliberately do not evict; eviction policy is a v2 conversation.
+- Table full → the `lru_drop` eviction policy (spec 002 §6) applies:
+  evict the least-recently-updated key, drop its residual counters,
+  increment `infmon_flow_rule_evictions_total`, and insert the new key.
+  If eviction itself fails, the contribution is dropped and
+  `counter_insert_retry_exhausted` is incremented.
 
 ### 5.3 Width
 
@@ -373,7 +377,7 @@ The plugin exposes the following error counters via the standard VPP
 | `inner_parse_failed`          | Inner L2/L3/L4 parse error after decap.              |
 | `flow_rule_no_match`           | Packet matched zero flow_rules (informational).       |
 | `counter_insert_retry_exhausted` | CAS retries exceeded `INFMON_INSERT_RETRY`.        |
-| `counter_table_full`          | Table reached `max_keys_per_flow_rule`.               |
+| `counter_table_full`          | Table reached `max_keys_per_flow_rule`; `lru_drop` eviction triggered (spec 002 §6). |
 | `snapshot_alloc_failed`       | Could not allocate replacement table (OOM in stats segment). |
 
 **`snapshot_alloc_failed` recovery contract.** If step 2 of §7.2 fails,
