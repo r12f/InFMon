@@ -29,8 +29,8 @@ NoNewPrivileges=true
 # Stats segment is a hugepages-backed mmap; grant read-write access
 # so mmap() with PROT_READ succeeds on the hugepage mount.
 ReadWritePaths=/dev/hugepages
-# Frontend opens its own listening socket; if that ever requires
-# CAP_NET_BIND_SERVICE for port < 1024 we will revisit.
+# Frontend opens its own listening socket; CAP_NET_BIND_SERVICE is granted
+# so it can bind to privileged ports (< 1024) if configured.
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 AmbientCapabilities=
 

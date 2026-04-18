@@ -37,7 +37,7 @@ case "$1" in
             if [ ! -d "$d" ]; then
                 install -d -o "$INFMON_USER" -g "$INFMON_GROUP" -m 0750 "$d"
             else
-                chown "$INFMON_USER":"$INFMON_GROUP" "$d" || true
+                chown "$INFMON_USER":"$INFMON_GROUP" "$d" || echo "WARNING: chown $d failed" >&2
                 chmod 0750 "$d" || true
             fi
         done

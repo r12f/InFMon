@@ -19,8 +19,10 @@ case "$1" in
         rm -f /etc/infmon/frontend.conf /etc/infmon/backend.conf
         rmdir /etc/infmon/flow_defs.d 2>/dev/null || true
         rmdir /etc/infmon 2>/dev/null || true
-        rm -rf /var/log/infmon
-        rm -rf /var/lib/infmon
+        rm -f /var/log/infmon/*.log /var/log/infmon/*.log.* 2>/dev/null || true
+        rmdir /var/log/infmon 2>/dev/null || true
+        rm -f /var/lib/infmon/*.db /var/lib/infmon/*.state 2>/dev/null || true
+        rmdir /var/lib/infmon 2>/dev/null || true
 
         if getent passwd "$INFMON_USER" >/dev/null; then
             deluser --quiet --system "$INFMON_USER" >/dev/null || true
