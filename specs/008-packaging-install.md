@@ -4,8 +4,8 @@
 
 | Version | Date       | Author      | Changes                                                                       |
 | ------- | ---------- | ----------- | ----------------------------------------------------------------------------- |
-| 0.1     | 2026-04-18 | bf3 (agent) | Initial draft.                                                                |
-| 0.2     | 2026-04-18 | bf3 (agent) | Address PR #9 review: version-locked deps, drop PartOf, drop compat file, add source/format, postrm cross-pkg fix, equivs over --force-depends, GPG verification note, version-skew check, CLI stability marking, explicit cmake+cargo rules. |
+| 0.1     | 2026-04-18 | r12f        | Initial draft.                                                                |
+| 0.2     | 2026-04-18 | r12f        | Address PR #9 review: version-locked deps, drop PartOf, drop compat file, add source/format, postrm cross-pkg fix, equivs over --force-depends, GPG verification note, version-skew check, CLI stability marking, explicit cmake+cargo rules. |
 
 | Field    | Value                                                                                  |
 | -------- | -------------------------------------------------------------------------------------- |
