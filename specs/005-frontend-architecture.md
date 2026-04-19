@@ -268,11 +268,11 @@ src/frontend/src/
 └── bin/                  # main(), config loading, signal wiring
 ```
 
-Directory names are short (`core/`, `exporter/`, etc.) but Cargo crate
+Directory names are short (`core/`, `exporters/`, etc.) but Cargo crate
 names use an `infmon-` prefix (e.g. `infmon-core`, `infmon-exporter`)
 to avoid workspace-level collisions.
 
-Adding an exporter is: new crate under `src/frontend/src/exporters/`, depend on
+Adding an exporter is: new crate under `src/frontend/exporters/`, depend on
 `exporter`, `inventory::submit!` a registration, declare the
 crate as a dep of `bin`. No changes to the loop or the trait.
 
