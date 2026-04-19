@@ -3,6 +3,7 @@
  * Copyright 2026 Riff
  */
 
+#include <cstring>
 #include <gtest/gtest.h>
 
 extern "C" {
