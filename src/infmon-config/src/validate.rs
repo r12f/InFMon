@@ -14,6 +14,9 @@ pub const KNOWN_EXPORTER_TYPES: &[&str] = &["otlp"];
 /// Valid overflow policies. v1 only supports `drop_newest`.
 pub const VALID_OVERFLOW_POLICIES: &[&str] = &["drop_newest"];
 
+/// Maximum allowed queue_depth per exporter.
+pub const MAX_QUEUE_DEPTH: usize = 10_000;
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ValidationError {
     #[error("duplicate flow-rule name: {0}")]
@@ -54,6 +57,8 @@ pub enum ValidationError {
     DuplicateExporterName(String),
     #[error("exporter '{name}': queue_depth must be >= 1")]
     ZeroQueueDepth { name: String },
+    #[error("exporter '{name}': queue_depth {depth} exceeds maximum {max}")]
+    QueueDepthTooLarge { name: String, depth: usize, max: usize },
     #[error("exporter '{name}': invalid export_timeout format: {value:?}")]
     InvalidExportTimeout { name: String, value: String },
     #[error("exporter '{name}': unknown on_overflow policy '{policy}' (valid: {valid})")]
@@ -207,6 +212,13 @@ pub fn validate_exporter(entry: &ExporterEntry, index: usize) -> Result<(), Vali
     if entry.queue_depth == 0 {
         return Err(ValidationError::ZeroQueueDepth {
             name: entry.name.clone(),
+        });
+    }
+    if entry.queue_depth > MAX_QUEUE_DEPTH {
+        return Err(ValidationError::QueueDepthTooLarge {
+            name: entry.name.clone(),
+            depth: entry.queue_depth,
+            max: MAX_QUEUE_DEPTH,
         });
     }
     match parse_duration_str(&entry.export_timeout) {

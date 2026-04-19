@@ -383,6 +383,20 @@ mod frontend_config_tests {
     }
 
     #[test]
+    fn reject_queue_depth_too_large() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].queue_depth = 10_001;
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::QueueDepthTooLarge {
+                name: "primary".into(),
+                depth: 10_001,
+                max: 10_000,
+            })
+        );
+    }
+
+    #[test]
     fn reject_invalid_export_timeout() {
         let mut config = make_valid_config();
         config.exporters.as_mut().unwrap()[0].export_timeout = "forever".into();
