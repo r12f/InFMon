@@ -280,75 +280,70 @@ pub fn spawn_exporter_thread(
     let name = format!("exporter-{}", exporter.name());
     let thread_name = name.clone();
 
-    let join = thread::Builder::new()
-        .name(thread_name)
-        .spawn(move || {
-            let rt = match tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-            {
-                Ok(rt) => rt,
-                Err(e) => {
-                    log::error!(
-                        "exporter '{}': failed to build tokio runtime: {}",
-                        exporter.name(),
-                        e,
-                    );
-                    return;
-                }
-            };
+    let join = thread::Builder::new().name(thread_name).spawn(move || {
+        let rt = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                log::error!(
+                    "exporter '{}': failed to build tokio runtime: {}",
+                    exporter.name(),
+                    e,
+                );
+                return;
+            }
+        };
 
-            rt.block_on(async {
-                let mut backoff = Duration::from_millis(100);
-                const MAX_BACKOFF: Duration = Duration::from_secs(30);
+        rt.block_on(async {
+            let mut backoff = Duration::from_millis(100);
+            const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
-                while let Some(snap) = rx.recv() {
-                    let result = tokio::time::timeout(export_timeout, exporter.export(snap)).await;
+            while let Some(snap) = rx.recv() {
+                let result = tokio::time::timeout(export_timeout, exporter.export(snap)).await;
 
-                    match result {
-                        Ok(Ok(())) => {
-                            backoff = Duration::from_millis(100); // reset on success
-                        }
-                        Ok(Err(ExporterError::Timeout)) => {
-                            log::warn!(
-                                "exporter '{}' self-reported timeout",
-                                exporter.name(),
-                            );
-                            // Transient-like, apply backoff
-                            tokio::time::sleep(backoff).await;
-                            backoff = (backoff * 2).min(MAX_BACKOFF);
-                        }
-                        Err(_) => {
-                            log::warn!(
-                                "exporter '{}' export exceeded framework deadline ({:?})",
-                                exporter.name(),
-                                export_timeout,
-                            );
-                            // Transient-like, apply backoff
-                            tokio::time::sleep(backoff).await;
-                            backoff = (backoff * 2).min(MAX_BACKOFF);
-                        }
-                        Ok(Err(ExporterError::Transient(e))) => {
-                            log::warn!("exporter '{}' transient error: {}", exporter.name(), e);
-                            tokio::time::sleep(backoff).await;
-                            backoff = (backoff * 2).min(MAX_BACKOFF);
-                        }
-                        Ok(Err(ExporterError::Permanent(e))) => {
-                            log::error!(
-                                "exporter '{}' permanent error: {} — disabling",
-                                exporter.name(),
-                                e,
-                            );
-                            break;
-                        }
+                match result {
+                    Ok(Ok(())) => {
+                        backoff = Duration::from_millis(100); // reset on success
+                    }
+                    Ok(Err(ExporterError::Timeout)) => {
+                        log::warn!("exporter '{}' self-reported timeout", exporter.name(),);
+                        // Transient-like, apply backoff
+                        tokio::time::sleep(backoff).await;
+                        backoff = (backoff * 2).min(MAX_BACKOFF);
+                    }
+                    Err(_) => {
+                        log::warn!(
+                            "exporter '{}' export exceeded framework deadline ({:?})",
+                            exporter.name(),
+                            export_timeout,
+                        );
+                        // Transient-like, apply backoff
+                        tokio::time::sleep(backoff).await;
+                        backoff = (backoff * 2).min(MAX_BACKOFF);
+                    }
+                    Ok(Err(ExporterError::Transient(e))) => {
+                        log::warn!("exporter '{}' transient error: {}", exporter.name(), e);
+                        tokio::time::sleep(backoff).await;
+                        backoff = (backoff * 2).min(MAX_BACKOFF);
+                    }
+                    Ok(Err(ExporterError::Permanent(e))) => {
+                        log::error!(
+                            "exporter '{}' permanent error: {} — disabling",
+                            exporter.name(),
+                            e,
+                        );
+                        break;
                     }
                 }
+            }
 
-                // Flush exporter buffers on shutdown (spec §9.3).
-                exporter.shutdown().await;
-                log::info!("exporter '{}' thread exiting", exporter.name());
-            });
-        })?;
+            // Flush exporter buffers on shutdown (spec §9.3).
+            exporter.shutdown().await;
+            log::info!("exporter '{}' thread exiting", exporter.name());
+        });
+    })?;
 
     Ok(ExporterHandle {
         join: Some(join),
@@ -413,10 +408,7 @@ mod tests {
         // First send succeeds.
         assert!(tx.try_send(snap.clone()).is_ok());
         // Second send should fail (channel full, drop_newest).
-        assert!(matches!(
-            tx.try_send(snap.clone()),
-            Err(TrySendError::Full)
-        ));
+        assert!(matches!(tx.try_send(snap.clone()), Err(TrySendError::Full)));
 
         // Consume and verify.
         let received = rx.recv().unwrap();
