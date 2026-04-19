@@ -50,6 +50,19 @@ target_link_libraries(test_flow_rule PRIVATE infmon_flow_rule GTest::gtest GTest
 target_include_directories(test_flow_rule PRIVATE include)
 add_test(NAME flow_rule COMMAND test_flow_rule)
 
+# --- Counter table library ---
+add_library(infmon_counter_table STATIC
+    src/counter_table.c
+)
+target_include_directories(infmon_counter_table PUBLIC include)
+
+add_executable(test_counter_table
+    test/test_counter_table.cc
+)
+target_link_libraries(test_counter_table PRIVATE infmon_counter_table GTest::gtest GTest::gtest_main)
+target_include_directories(test_counter_table PRIVATE include)
+add_test(NAME counter_table COMMAND test_counter_table)
+
 if(ENABLE_FUZZER)
     add_executable(fuzz_erspan_parser
         test/fuzz_erspan_parser.cc
