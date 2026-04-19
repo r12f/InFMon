@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Comprehensive tests for the ERSPAN III parser.
 
-#include <gtest/gtest.h>
-#include <cstring>
-#include <vector>
 #include <arpa/inet.h>
+#include <cstring>
+#include <gtest/gtest.h>
+#include <vector>
 
 extern "C" {
 #include "infmon/erspan_parser.h"
@@ -13,37 +13,67 @@ extern "C" {
 // ---------------------------------------------------------------------------
 // Helper: packet builder
 // ---------------------------------------------------------------------------
-class PacketBuilder {
-public:
+class PacketBuilder
+{
+  public:
     std::vector<uint8_t> buf;
 
-    void push8(uint8_t v) { buf.push_back(v); }
-    void push16(uint16_t v) { buf.push_back(v >> 8); buf.push_back(v & 0xff); }
-    void push32(uint32_t v) {
+    void push8(uint8_t v)
+    {
+        buf.push_back(v);
+    }
+    void push16(uint16_t v)
+    {
+        buf.push_back(v >> 8);
+        buf.push_back(v & 0xff);
+    }
+    void push32(uint32_t v)
+    {
         buf.push_back((v >> 24) & 0xff);
         buf.push_back((v >> 16) & 0xff);
         buf.push_back((v >> 8) & 0xff);
         buf.push_back(v & 0xff);
     }
-    void pushN(const uint8_t *d, size_t n) { buf.insert(buf.end(), d, d + n); }
-    void pushZeros(size_t n) { buf.insert(buf.end(), n, 0); }
+    void pushN(const uint8_t *d, size_t n)
+    {
+        buf.insert(buf.end(), d, d + n);
+    }
+    void pushZeros(size_t n)
+    {
+        buf.insert(buf.end(), n, 0);
+    }
 
-    size_t size() const { return buf.size(); }
-    uint8_t *data() { return buf.data(); }
-    const uint8_t *data() const { return buf.data(); }
+    size_t size() const
+    {
+        return buf.size();
+    }
+    uint8_t *data()
+    {
+        return buf.data();
+    }
+    const uint8_t *data() const
+    {
+        return buf.data();
+    }
 
     // Patch a big-endian 16-bit value at offset
-    void patch16(size_t off, uint16_t v) {
-        buf[off] = v >> 8; buf[off+1] = v & 0xff;
+    void patch16(size_t off, uint16_t v)
+    {
+        buf[off] = v >> 8;
+        buf[off + 1] = v & 0xff;
     }
-    void patch8(size_t off, uint8_t v) { buf[off] = v; }
+    void patch8(size_t off, uint8_t v)
+    {
+        buf[off] = v;
+    }
 };
 
 // Build outer Ethernet header. Returns offset after it.
-static size_t addOuterEth(PacketBuilder &pb, uint16_t ethertype) {
+static size_t addOuterEth(PacketBuilder &pb, uint16_t ethertype)
+{
     // dst mac
-    uint8_t dst[6] = {0x00,0x11,0x22,0x33,0x44,0x55};
-    uint8_t src[6] = {0x66,0x77,0x88,0x99,0xaa,0xbb};
+    uint8_t dst[6] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
+    uint8_t src[6] = {0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb};
     pb.pushN(dst, 6);
     pb.pushN(src, 6);
     pb.push16(ethertype);
@@ -51,9 +81,10 @@ static size_t addOuterEth(PacketBuilder &pb, uint16_t ethertype) {
 }
 
 // Add 802.1Q VLAN tag before the real ethertype. Call INSTEAD of addOuterEth.
-static size_t addOuterEthVlan(PacketBuilder &pb, uint16_t vlan_id, uint16_t inner_ethertype) {
-    uint8_t dst[6] = {0x00,0x11,0x22,0x33,0x44,0x55};
-    uint8_t src[6] = {0x66,0x77,0x88,0x99,0xaa,0xbb};
+static size_t addOuterEthVlan(PacketBuilder &pb, uint16_t vlan_id, uint16_t inner_ethertype)
+{
+    uint8_t dst[6] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
+    uint8_t src[6] = {0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb};
     pb.pushN(dst, 6);
     pb.pushN(src, 6);
     pb.push16(0x8100); // TPID
@@ -63,9 +94,10 @@ static size_t addOuterEthVlan(PacketBuilder &pb, uint16_t vlan_id, uint16_t inne
 }
 
 // Add QinQ
-static size_t addOuterEthQinQ(PacketBuilder &pb) {
-    uint8_t dst[6] = {0x00,0x11,0x22,0x33,0x44,0x55};
-    uint8_t src[6] = {0x66,0x77,0x88,0x99,0xaa,0xbb};
+static size_t addOuterEthQinQ(PacketBuilder &pb)
+{
+    uint8_t dst[6] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
+    uint8_t src[6] = {0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb};
     pb.pushN(dst, 6);
     pb.pushN(src, 6);
     pb.push16(0x88a8); // outer TPID (QinQ)
@@ -76,33 +108,37 @@ static size_t addOuterEthQinQ(PacketBuilder &pb) {
     return pb.size();
 }
 
-static const uint8_t kSrcIPv4[4] = {10,0,0,1};
-static const uint8_t kDstIPv4[4] = {10,0,0,2};
+static const uint8_t kSrcIPv4[4] = {10, 0, 0, 1};
+static const uint8_t kDstIPv4[4] = {10, 0, 0, 2};
 
 // Add outer IPv4. Returns offset of start of IPv4.
 // Caller must patch total_length after building rest.
-static size_t addOuterIPv4(PacketBuilder &pb, size_t *ip_start_out) {
+static size_t addOuterIPv4(PacketBuilder &pb, size_t *ip_start_out)
+{
     size_t ip_start = pb.size();
-    if (ip_start_out) *ip_start_out = ip_start;
-    pb.push8(0x45); // ver=4, ihl=5
-    pb.push8(0x00); // DSCP/ECN
-    pb.push16(0);   // total length - patch later
-    pb.push16(0);   // identification
+    if (ip_start_out)
+        *ip_start_out = ip_start;
+    pb.push8(0x45);    // ver=4, ihl=5
+    pb.push8(0x00);    // DSCP/ECN
+    pb.push16(0);      // total length - patch later
+    pb.push16(0);      // identification
     pb.push16(0x4000); // flags=DF, frag=0
-    pb.push8(64);   // TTL
-    pb.push8(47);   // protocol = GRE
-    pb.push16(0);   // checksum
+    pb.push8(64);      // TTL
+    pb.push8(47);      // protocol = GRE
+    pb.push16(0);      // checksum
     pb.pushN(kSrcIPv4, 4);
     pb.pushN(kDstIPv4, 4);
     return pb.size();
 }
 
-static const uint8_t kSrcIPv6[16] = {0x20,0x01,0x0d,0xb8, 0,0,0,0, 0,0,0,0, 0,0,0,1};
-static const uint8_t kDstIPv6[16] = {0x20,0x01,0x0d,0xb8, 0,0,0,0, 0,0,0,0, 0,0,0,2};
+static const uint8_t kSrcIPv6[16] = {0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+static const uint8_t kDstIPv6[16] = {0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2};
 
-static size_t addOuterIPv6(PacketBuilder &pb, size_t *ip_start_out) {
+static size_t addOuterIPv6(PacketBuilder &pb, size_t *ip_start_out)
+{
     size_t ip_start = pb.size();
-    if (ip_start_out) *ip_start_out = ip_start;
+    if (ip_start_out)
+        *ip_start_out = ip_start;
     pb.push32(0x60000000); // ver=6, tc=0, flow=0
     pb.push16(0);          // payload length - patch later
     pb.push8(47);          // next header = GRE
@@ -113,7 +149,9 @@ static size_t addOuterIPv6(PacketBuilder &pb, size_t *ip_start_out) {
 }
 
 // Add GRE header. Returns offset after GRE.
-static size_t addGRE(PacketBuilder &pb, uint16_t flags_ver = 0x0000, uint16_t proto = 0x22EB, bool add_seq = false) {
+static size_t addGRE(PacketBuilder &pb, uint16_t flags_ver = 0x0000, uint16_t proto = 0x22EB,
+                     bool add_seq = false)
+{
     pb.push16(flags_ver);
     pb.push16(proto);
     if (add_seq) {
@@ -124,7 +162,8 @@ static size_t addGRE(PacketBuilder &pb, uint16_t flags_ver = 0x0000, uint16_t pr
 
 // Add ERSPAN III header (12 bytes). ver=2 in top nibble of word0.
 // Returns offset after ERSPAN.
-static size_t addERSPANIII(PacketBuilder &pb, bool o_bit = false) {
+static size_t addERSPANIII(PacketBuilder &pb, bool o_bit = false)
+{
     // Word 0: ver(4) | vlan(12) | cos(3) | bso(2) | t(1) | session_id(10)
     // ver=2 => top nibble = 0x2
     uint32_t word0 = 0x20000000; // ver=2, rest zero
@@ -133,7 +172,8 @@ static size_t addERSPANIII(PacketBuilder &pb, bool o_bit = false) {
     pb.push32(0x12345678);
     // Word 2: sgt(16) | p(1) | ft(5) | hw_id(6) | d(1) | gra(2) | o(1)
     uint32_t word2 = 0;
-    if (o_bit) word2 |= 0x00000001; // O bit is LSB
+    if (o_bit)
+        word2 |= 0x00000001; // O bit is LSB
     pb.push32(word2);
     if (o_bit) {
         // 8-byte platform specific sub-header
@@ -144,17 +184,19 @@ static size_t addERSPANIII(PacketBuilder &pb, bool o_bit = false) {
 }
 
 // Inner Ethernet + IPv4 + TCP (full)
-static size_t addInnerEthIPv4TCP(PacketBuilder &pb, size_t *inner_start_out = nullptr) {
-    if (inner_start_out) *inner_start_out = pb.size();
+static size_t addInnerEthIPv4TCP(PacketBuilder &pb, size_t *inner_start_out = nullptr)
+{
+    if (inner_start_out)
+        *inner_start_out = pb.size();
     // Inner Ethernet
-    uint8_t idst[6] = {0xaa,0xbb,0xcc,0xdd,0xee,0xff};
-    uint8_t isrc[6] = {0x11,0x22,0x33,0x44,0x55,0x66};
+    uint8_t idst[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+    uint8_t isrc[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
     pb.pushN(idst, 6);
     pb.pushN(isrc, 6);
     pb.push16(0x0800);
 
     // Inner IPv4
-    (void)pb.size(); /* inner IPv4 offset — not needed here */
+    (void) pb.size(); /* inner IPv4 offset — not needed here */
     pb.push8(0x45);
     pb.push8(0x00);
     uint16_t inner_ip_total = 20 + 20; // IPv4 + TCP
@@ -162,32 +204,34 @@ static size_t addInnerEthIPv4TCP(PacketBuilder &pb, size_t *inner_start_out = nu
     pb.push16(0); // id
     pb.push16(0x4000);
     pb.push8(64);
-    pb.push8(6); // TCP
+    pb.push8(6);  // TCP
     pb.push16(0); // checksum
-    uint8_t isrcip[4] = {192,168,1,1};
-    uint8_t idstip[4] = {192,168,1,2};
+    uint8_t isrcip[4] = {192, 168, 1, 1};
+    uint8_t idstip[4] = {192, 168, 1, 2};
     pb.pushN(isrcip, 4);
     pb.pushN(idstip, 4);
 
     // TCP header (20 bytes min)
-    pb.push16(12345); // src port
-    pb.push16(80);    // dst port
+    pb.push16(12345);      // src port
+    pb.push16(80);         // dst port
     pb.push32(0xAABBCCDD); // seq
     pb.push32(0x11223344); // ack
-    pb.push8(0x50); // data offset = 5 (20 bytes), reserved
-    pb.push8(0x12); // flags: SYN+ACK
-    pb.push16(65535); // window
-    pb.push16(0); // checksum
-    pb.push16(0); // urgent
+    pb.push8(0x50);        // data offset = 5 (20 bytes), reserved
+    pb.push8(0x12);        // flags: SYN+ACK
+    pb.push16(65535);      // window
+    pb.push16(0);          // checksum
+    pb.push16(0);          // urgent
 
     return pb.size();
 }
 
 // Inner Ethernet + IPv4 + UDP
-static size_t addInnerEthIPv4UDP(PacketBuilder &pb, size_t *inner_start_out = nullptr) {
-    if (inner_start_out) *inner_start_out = pb.size();
-    uint8_t idst[6] = {0xaa,0xbb,0xcc,0xdd,0xee,0xff};
-    uint8_t isrc[6] = {0x11,0x22,0x33,0x44,0x55,0x66};
+static size_t addInnerEthIPv4UDP(PacketBuilder &pb, size_t *inner_start_out = nullptr)
+{
+    if (inner_start_out)
+        *inner_start_out = pb.size();
+    uint8_t idst[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+    uint8_t isrc[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
     pb.pushN(idst, 6);
     pb.pushN(isrc, 6);
     pb.push16(0x0800);
@@ -200,23 +244,25 @@ static size_t addInnerEthIPv4UDP(PacketBuilder &pb, size_t *inner_start_out = nu
     pb.push8(64);
     pb.push8(17); // UDP
     pb.push16(0);
-    uint8_t isrcip[4] = {192,168,1,1};
-    uint8_t idstip[4] = {192,168,1,2};
+    uint8_t isrcip[4] = {192, 168, 1, 1};
+    uint8_t idstip[4] = {192, 168, 1, 2};
     pb.pushN(isrcip, 4);
     pb.pushN(idstip, 4);
 
-    pb.push16(5353);  // src port
-    pb.push16(53);    // dst port
-    pb.push16(8);     // length
-    pb.push16(0);     // checksum
+    pb.push16(5353); // src port
+    pb.push16(53);   // dst port
+    pb.push16(8);    // length
+    pb.push16(0);    // checksum
     return pb.size();
 }
 
 // Inner Ethernet + IPv4 + ICMP (non-TCP/UDP)
-static size_t addInnerEthIPv4ICMP(PacketBuilder &pb, size_t *inner_start_out = nullptr) {
-    if (inner_start_out) *inner_start_out = pb.size();
-    uint8_t idst[6] = {0xaa,0xbb,0xcc,0xdd,0xee,0xff};
-    uint8_t isrc[6] = {0x11,0x22,0x33,0x44,0x55,0x66};
+static size_t addInnerEthIPv4ICMP(PacketBuilder &pb, size_t *inner_start_out = nullptr)
+{
+    if (inner_start_out)
+        *inner_start_out = pb.size();
+    uint8_t idst[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+    uint8_t isrc[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
     pb.pushN(idst, 6);
     pb.pushN(isrc, 6);
     pb.push16(0x0800);
@@ -229,30 +275,37 @@ static size_t addInnerEthIPv4ICMP(PacketBuilder &pb, size_t *inner_start_out = n
     pb.push8(64);
     pb.push8(1); // ICMP
     pb.push16(0);
-    uint8_t isrcip[4] = {192,168,1,1};
-    uint8_t idstip[4] = {192,168,1,2};
+    uint8_t isrcip[4] = {192, 168, 1, 1};
+    uint8_t idstip[4] = {192, 168, 1, 2};
     pb.pushN(isrcip, 4);
     pb.pushN(idstip, 4);
 
     // ICMP echo
-    pb.push8(8); pb.push8(0); pb.push16(0); pb.push16(1); pb.push16(1);
+    pb.push8(8);
+    pb.push8(0);
+    pb.push16(0);
+    pb.push16(1);
+    pb.push16(1);
     return pb.size();
 }
 
 // Finalize IPv4 total_length field
-static void fixupIPv4Length(PacketBuilder &pb, size_t ip_start) {
-    uint16_t total = (uint16_t)(pb.size() - ip_start);
+static void fixupIPv4Length(PacketBuilder &pb, size_t ip_start)
+{
+    uint16_t total = (uint16_t) (pb.size() - ip_start);
     pb.patch16(ip_start + 2, total);
 }
 
 // Finalize IPv6 payload_length
-static void fixupIPv6Length(PacketBuilder &pb, size_t ip_start) {
-    uint16_t payload = (uint16_t)(pb.size() - ip_start - 40);
+static void fixupIPv6Length(PacketBuilder &pb, size_t ip_start)
+{
+    uint16_t payload = (uint16_t) (pb.size() - ip_start - 40);
     pb.patch16(ip_start + 4, payload);
 }
 
 // Build a standard valid ERSPAN III over GRE over IPv4 with inner TCP
-static PacketBuilder buildValidPacketTCP() {
+static PacketBuilder buildValidPacketTCP()
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -268,13 +321,18 @@ static PacketBuilder buildValidPacketTCP() {
 // Tests
 // ---------------------------------------------------------------------------
 
-class ErspanParserTest : public ::testing::Test {
-protected:
+class ErspanParserTest : public ::testing::Test
+{
+  protected:
     infmon_parsed_packet_t out;
-    void SetUp() override { memset(&out, 0, sizeof(out)); }
+    void SetUp() override
+    {
+        memset(&out, 0, sizeof(out));
+    }
 };
 
-TEST_F(ErspanParserTest, ValidFullERSPANIII_IPv4_TCP) {
+TEST_F(ErspanParserTest, ValidFullERSPANIII_IPv4_TCP)
+{
     auto pb = buildValidPacketTCP();
     auto rc = infmon_parse_erspan(pb.data(), pb.size(), &out);
     EXPECT_EQ(rc, INFMON_PARSE_OK);
@@ -286,7 +344,8 @@ TEST_F(ErspanParserTest, ValidFullERSPANIII_IPv4_TCP) {
     EXPECT_FALSE(out.flow_key_partial);
 }
 
-TEST_F(ErspanParserTest, ValidGRESequenceBit) {
+TEST_F(ErspanParserTest, ValidGRESequenceBit)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -298,7 +357,8 @@ TEST_F(ErspanParserTest, ValidGRESequenceBit) {
     EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_OK);
 }
 
-TEST_F(ErspanParserTest, ValidOBitPlatformSubheader) {
+TEST_F(ErspanParserTest, ValidOBitPlatformSubheader)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -310,7 +370,8 @@ TEST_F(ErspanParserTest, ValidOBitPlatformSubheader) {
     EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_OK);
 }
 
-TEST_F(ErspanParserTest, ValidOverIPv6) {
+TEST_F(ErspanParserTest, ValidOverIPv6)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x86DD);
     size_t ip_start;
@@ -325,7 +386,8 @@ TEST_F(ErspanParserTest, ValidOverIPv6) {
     EXPECT_EQ(memcmp(out.mirror_src_ip.addr.v6, kSrcIPv6, 16), 0);
 }
 
-TEST_F(ErspanParserTest, TruncatedInnerPacket) {
+TEST_F(ErspanParserTest, TruncatedInnerPacket)
+{
     // Build full packet then truncate
     auto pb = buildValidPacketTCP();
     // Truncate: remove last 20 bytes (cut into TCP header)
@@ -334,7 +396,8 @@ TEST_F(ErspanParserTest, TruncatedInnerPacket) {
     EXPECT_TRUE(out.inner_truncated);
 }
 
-TEST_F(ErspanParserTest, OuterQinQ) {
+TEST_F(ErspanParserTest, OuterQinQ)
+{
     PacketBuilder pb;
     addOuterEthQinQ(pb);
     size_t ip_start;
@@ -343,17 +406,21 @@ TEST_F(ErspanParserTest, OuterQinQ) {
     addERSPANIII(pb);
     addInnerEthIPv4TCP(pb);
     fixupIPv4Length(pb, ip_start);
-    EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_OUTER_QINQ_UNSUPPORTED);
+    EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out),
+              INFMON_PARSE_ERR_OUTER_QINQ_UNSUPPORTED);
 }
 
-TEST_F(ErspanParserTest, BadOuterEtherType) {
+TEST_F(ErspanParserTest, BadOuterEtherType)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0806); // ARP
-    pb.pushZeros(60); // some payload
-    EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_OUTER_ETHERTYPE_UNSUPPORTED);
+    pb.pushZeros(60);        // some payload
+    EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out),
+              INFMON_PARSE_ERR_OUTER_ETHERTYPE_UNSUPPORTED);
 }
 
-TEST_F(ErspanParserTest, GREWithKFlag) {
+TEST_F(ErspanParserTest, GREWithKFlag)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -362,10 +429,12 @@ TEST_F(ErspanParserTest, GREWithKFlag) {
     addERSPANIII(pb);
     addInnerEthIPv4TCP(pb);
     fixupIPv4Length(pb, ip_start);
-    EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_GRE_UNEXPECTED_FLAGS);
+    EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out),
+              INFMON_PARSE_ERR_GRE_UNEXPECTED_FLAGS);
 }
 
-TEST_F(ErspanParserTest, BadGREVersion) {
+TEST_F(ErspanParserTest, BadGREVersion)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -377,7 +446,8 @@ TEST_F(ErspanParserTest, BadGREVersion) {
     EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_GRE_BAD_VERSION);
 }
 
-TEST_F(ErspanParserTest, WrongGREProto) {
+TEST_F(ErspanParserTest, WrongGREProto)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -389,7 +459,8 @@ TEST_F(ErspanParserTest, WrongGREProto) {
     EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_GRE_BAD_PROTO);
 }
 
-TEST_F(ErspanParserTest, ERSPANBadVersion) {
+TEST_F(ErspanParserTest, ERSPANBadVersion)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -404,7 +475,8 @@ TEST_F(ErspanParserTest, ERSPANBadVersion) {
     EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_ERSPAN_BAD_VERSION);
 }
 
-TEST_F(ErspanParserTest, TruncatedOuterHeaders) {
+TEST_F(ErspanParserTest, TruncatedOuterHeaders)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     // Only partial IPv4 header (10 bytes instead of 20)
@@ -413,7 +485,8 @@ TEST_F(ErspanParserTest, TruncatedOuterHeaders) {
     EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_OUTER_TRUNCATED);
 }
 
-TEST_F(ErspanParserTest, TruncatedERSPANHeader) {
+TEST_F(ErspanParserTest, TruncatedERSPANHeader)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -426,7 +499,8 @@ TEST_F(ErspanParserTest, TruncatedERSPANHeader) {
     EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_ERSPAN_TRUNCATED);
 }
 
-TEST_F(ErspanParserTest, InnerEthernetTruncated) {
+TEST_F(ErspanParserTest, InnerEthernetTruncated)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -436,10 +510,12 @@ TEST_F(ErspanParserTest, InnerEthernetTruncated) {
     // Only 10 bytes of inner Ethernet (need 14)
     pb.pushZeros(10);
     fixupIPv4Length(pb, ip_start);
-    EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_INNER_ETH_TRUNCATED);
+    EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out),
+              INFMON_PARSE_ERR_INNER_ETH_TRUNCATED);
 }
 
-TEST_F(ErspanParserTest, InnerL3Truncated) {
+TEST_F(ErspanParserTest, InnerL3Truncated)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -447,8 +523,8 @@ TEST_F(ErspanParserTest, InnerL3Truncated) {
     addGRE(pb);
     addERSPANIII(pb);
     // Inner Ethernet (14B) but only partial IPv4 (10 bytes)
-    uint8_t idst[6] = {0xaa,0xbb,0xcc,0xdd,0xee,0xff};
-    uint8_t isrc[6] = {0x11,0x22,0x33,0x44,0x55,0x66};
+    uint8_t idst[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+    uint8_t isrc[6] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
     pb.pushN(idst, 6);
     pb.pushN(isrc, 6);
     pb.push16(0x0800);
@@ -458,7 +534,8 @@ TEST_F(ErspanParserTest, InnerL3Truncated) {
     EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_ERR_INNER_L3_TRUNCATED);
 }
 
-TEST_F(ErspanParserTest, MirrorSrcIPv4Extracted) {
+TEST_F(ErspanParserTest, MirrorSrcIPv4Extracted)
+{
     auto pb = buildValidPacketTCP();
     infmon_parse_erspan(pb.data(), pb.size(), &out);
     EXPECT_EQ(out.mirror_src_ip.family, INFMON_AF_V4);
@@ -468,7 +545,8 @@ TEST_F(ErspanParserTest, MirrorSrcIPv4Extracted) {
     EXPECT_EQ(out.mirror_src_ip.addr.v4[3], 1);
 }
 
-TEST_F(ErspanParserTest, MirrorSrcIPv6Extracted) {
+TEST_F(ErspanParserTest, MirrorSrcIPv6Extracted)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x86DD);
     size_t ip_start;
@@ -482,7 +560,8 @@ TEST_F(ErspanParserTest, MirrorSrcIPv6Extracted) {
     EXPECT_EQ(memcmp(out.mirror_src_ip.addr.v6, kSrcIPv6, 16), 0);
 }
 
-TEST_F(ErspanParserTest, InnerPtrPointsIntoOriginalBuffer) {
+TEST_F(ErspanParserTest, InnerPtrPointsIntoOriginalBuffer)
+{
     auto pb = buildValidPacketTCP();
     infmon_parse_erspan(pb.data(), pb.size(), &out);
     ASSERT_NE(out.inner_ptr, nullptr);
@@ -491,7 +570,8 @@ TEST_F(ErspanParserTest, InnerPtrPointsIntoOriginalBuffer) {
     EXPECT_LT(out.inner_ptr, pb.data() + pb.size());
 }
 
-TEST_F(ErspanParserTest, TCPPortExtraction) {
+TEST_F(ErspanParserTest, TCPPortExtraction)
+{
     auto pb = buildValidPacketTCP();
     infmon_parse_erspan(pb.data(), pb.size(), &out);
     EXPECT_EQ(out.src_port, 12345);
@@ -499,7 +579,8 @@ TEST_F(ErspanParserTest, TCPPortExtraction) {
     EXPECT_TRUE(out.valid_fields & INFMON_VALID_PORTS);
 }
 
-TEST_F(ErspanParserTest, UDPPortExtraction) {
+TEST_F(ErspanParserTest, UDPPortExtraction)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -516,7 +597,8 @@ TEST_F(ErspanParserTest, UDPPortExtraction) {
     EXPECT_EQ(out.inner_ip_proto, 17);
 }
 
-TEST_F(ErspanParserTest, TCPFlagsSeqAckWindow) {
+TEST_F(ErspanParserTest, TCPFlagsSeqAckWindow)
+{
     auto pb = buildValidPacketTCP();
     infmon_parse_erspan(pb.data(), pb.size(), &out);
     EXPECT_TRUE(out.valid_fields & INFMON_VALID_TCP_FLAGS);
@@ -529,7 +611,8 @@ TEST_F(ErspanParserTest, TCPFlagsSeqAckWindow) {
     EXPECT_EQ(out.tcp_window, 65535);
 }
 
-TEST_F(ErspanParserTest, FlowKeyPartialForICMP) {
+TEST_F(ErspanParserTest, FlowKeyPartialForICMP)
+{
     PacketBuilder pb;
     addOuterEth(pb, 0x0800);
     size_t ip_start;
@@ -544,7 +627,8 @@ TEST_F(ErspanParserTest, FlowKeyPartialForICMP) {
     EXPECT_EQ(out.inner_ip_proto, 1);
 }
 
-TEST_F(ErspanParserTest, VLANTaggedOuterFrame) {
+TEST_F(ErspanParserTest, VLANTaggedOuterFrame)
+{
     PacketBuilder pb;
     addOuterEthVlan(pb, 100, 0x0800);
     size_t ip_start;
@@ -556,11 +640,14 @@ TEST_F(ErspanParserTest, VLANTaggedOuterFrame) {
     EXPECT_EQ(infmon_parse_erspan(pb.data(), pb.size(), &out), INFMON_PARSE_OK);
 }
 
-TEST_F(ErspanParserTest, CounterNamesArray) {
+TEST_F(ErspanParserTest, CounterNamesArray)
+{
     // Verify the array has entries and is non-null
     ASSERT_NE(infmon_parse_counter_names, nullptr);
     for (int i = 0; i < INFMON_PARSE_ERR__COUNT; i++) {
-        EXPECT_NE(infmon_parse_counter_names[i], nullptr) << "Counter name at index " << i << " is null";
-        EXPECT_GT(strlen(infmon_parse_counter_names[i]), 0u) << "Counter name at index " << i << " is empty";
+        EXPECT_NE(infmon_parse_counter_names[i], nullptr)
+            << "Counter name at index " << i << " is null";
+        EXPECT_GT(strlen(infmon_parse_counter_names[i]), 0u)
+            << "Counter name at index " << i << " is empty";
     }
 }

@@ -13,48 +13,43 @@
 /* ── Counter names ────────────────────────────────────────────────── */
 
 const char *infmon_parse_counter_names[] = {
-    [INFMON_PARSE_OK]                              = "parsed_ok",
-    [INFMON_PARSE_INNER_TRUNCATED_OK]              = "inner_truncated_ok",
-    [INFMON_PARSE_ERR_OUTER_QINQ_UNSUPPORTED]      = "outer_qinq_unsupported",
-    [INFMON_PARSE_ERR_OUTER_ETHERTYPE_UNSUPPORTED]  = "outer_ethertype_unsupported",
-    [INFMON_PARSE_ERR_OUTER_V6_EXT_UNSUPPORTED]     = "outer_v6_ext_unsupported",
-    [INFMON_PARSE_ERR_OUTER_TRUNCATED]              = "outer_truncated",
-    [INFMON_PARSE_ERR_MBUF_NOT_CONTIGUOUS]          = "mbuf_not_contiguous",
-    [INFMON_PARSE_ERR_GRE_UNEXPECTED_FLAGS]         = "gre_unexpected_flags",
-    [INFMON_PARSE_ERR_GRE_BAD_VERSION]              = "gre_bad_version",
-    [INFMON_PARSE_ERR_GRE_BAD_PROTO]                = "gre_bad_proto",
-    [INFMON_PARSE_ERR_ERSPAN_BAD_VERSION]           = "erspan_bad_version",
-    [INFMON_PARSE_ERR_ERSPAN_TRUNCATED]             = "erspan_truncated",
-    [INFMON_PARSE_ERR_INNER_ETH_TRUNCATED]          = "inner_eth_truncated",
-    [INFMON_PARSE_ERR_INNER_L3_TRUNCATED]           = "inner_l3_truncated",
-    [INFMON_PARSE_ERR_INNER_DOUBLE_ENCAP_DROPPED]   = "inner_double_encap_dropped",
+    [INFMON_PARSE_OK] = "parsed_ok",
+    [INFMON_PARSE_INNER_TRUNCATED_OK] = "inner_truncated_ok",
+    [INFMON_PARSE_ERR_OUTER_QINQ_UNSUPPORTED] = "outer_qinq_unsupported",
+    [INFMON_PARSE_ERR_OUTER_ETHERTYPE_UNSUPPORTED] = "outer_ethertype_unsupported",
+    [INFMON_PARSE_ERR_OUTER_V6_EXT_UNSUPPORTED] = "outer_v6_ext_unsupported",
+    [INFMON_PARSE_ERR_OUTER_TRUNCATED] = "outer_truncated",
+    [INFMON_PARSE_ERR_MBUF_NOT_CONTIGUOUS] = "mbuf_not_contiguous",
+    [INFMON_PARSE_ERR_GRE_UNEXPECTED_FLAGS] = "gre_unexpected_flags",
+    [INFMON_PARSE_ERR_GRE_BAD_VERSION] = "gre_bad_version",
+    [INFMON_PARSE_ERR_GRE_BAD_PROTO] = "gre_bad_proto",
+    [INFMON_PARSE_ERR_ERSPAN_BAD_VERSION] = "erspan_bad_version",
+    [INFMON_PARSE_ERR_ERSPAN_TRUNCATED] = "erspan_truncated",
+    [INFMON_PARSE_ERR_INNER_ETH_TRUNCATED] = "inner_eth_truncated",
+    [INFMON_PARSE_ERR_INNER_L3_TRUNCATED] = "inner_l3_truncated",
+    [INFMON_PARSE_ERR_INNER_DOUBLE_ENCAP_DROPPED] = "inner_double_encap_dropped",
 };
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 
-static inline uint16_t
-read_u16(const uint8_t *p)
+static inline uint16_t read_u16(const uint8_t *p)
 {
-    return (uint16_t)((uint16_t)p[0] << 8 | p[1]);
+    return (uint16_t) ((uint16_t) p[0] << 8 | p[1]);
 }
 
-static inline uint32_t
-read_u32(const uint8_t *p)
+static inline uint32_t read_u32(const uint8_t *p)
 {
-    return (uint32_t)((uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 |
-                      (uint32_t)p[2] << 8  | p[3]);
+    return (uint32_t) ((uint32_t) p[0] << 24 | (uint32_t) p[1] << 16 | (uint32_t) p[2] << 8 | p[3]);
 }
 
 /* ── Inner-decap hook ─────────────────────────────────────────────── */
 
-int
-infmon_inner_decap(infmon_inner_decap_t kind,
-                   const uint8_t *in, uint32_t in_len, bool in_truncated,
-                   const uint8_t **out_ptr, uint32_t *out_len,
-                   bool *out_truncated)
+int infmon_inner_decap(infmon_inner_decap_t kind, const uint8_t *in, uint32_t in_len,
+                       bool in_truncated, const uint8_t **out_ptr, uint32_t *out_len,
+                       bool *out_truncated)
 {
     if (kind != INFMON_DECAP_NONE)
-        return -1;  /* unsupported in v1 */
+        return -1; /* unsupported in v1 */
 
     *out_ptr = in;
     *out_len = in_len;
@@ -64,9 +59,8 @@ infmon_inner_decap(infmon_inner_decap_t kind,
 
 /* ── Main parser ──────────────────────────────────────────────────── */
 
-infmon_parse_result_t
-infmon_parse_erspan(const uint8_t *data, uint32_t len,
-                    infmon_parsed_packet_t *out)
+infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
+                                          infmon_parsed_packet_t *out)
 {
     memset(out, 0, sizeof(*out));
     uint32_t off = 0;
@@ -99,7 +93,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
 
     /* ── Outer L3 ───────────────────────────────────────────────── */
     uint16_t outer_ip_payload_len = 0; /* bytes after IP header(s) */
-    (void)0; /* l3_off removed — not needed */
+    (void) 0;                          /* l3_off removed — not needed */
     uint32_t v6_ext_len = 0;
 
     if (ethertype == 0x0800) {
@@ -115,7 +109,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
         if (ihl < 5)
             return INFMON_PARSE_ERR_OUTER_TRUNCATED;
 
-        uint32_t ip_hdr_len = (uint32_t)ihl * 4;
+        uint32_t ip_hdr_len = (uint32_t) ihl * 4;
         if (len < off + ip_hdr_len)
             return INFMON_PARSE_ERR_OUTER_TRUNCATED;
 
@@ -129,9 +123,8 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
         out->mirror_src_ip.family = INFMON_AF_V4;
         memcpy(out->mirror_src_ip.addr.v4, data + off + 12, 4);
 
-        outer_ip_payload_len = total_length > ip_hdr_len
-                                   ? (uint16_t)(total_length - ip_hdr_len)
-                                   : 0;
+        outer_ip_payload_len =
+            total_length > ip_hdr_len ? (uint16_t) (total_length - ip_hdr_len) : 0;
         off += ip_hdr_len;
 
     } else {
@@ -159,7 +152,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
                 return INFMON_PARSE_ERR_OUTER_TRUNCATED;
             uint8_t ext_next = data[off];
             uint8_t ext_hdr_len_field = data[off + 1];
-            uint32_t ext_len = ((uint32_t)ext_hdr_len_field + 1) * 8;
+            uint32_t ext_len = ((uint32_t) ext_hdr_len_field + 1) * 8;
             if (len < off + ext_len)
                 return INFMON_PARSE_ERR_OUTER_TRUNCATED;
             v6_ext_len += ext_len;
@@ -171,14 +164,14 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
             /* If next_hdr is an unsupported extension type vs non-GRE proto */
             /* Extension headers: Routing(43), Fragment(44), AH(51),
              * ESP(50), Mobility(135) */
-            if (next_hdr == 43 || next_hdr == 44 || next_hdr == 51 ||
-                next_hdr == 50 || next_hdr == 135)
+            if (next_hdr == 43 || next_hdr == 44 || next_hdr == 51 || next_hdr == 50 ||
+                next_hdr == 135)
                 return INFMON_PARSE_ERR_OUTER_V6_EXT_UNSUPPORTED;
             return INFMON_PARSE_ERR_OUTER_ETHERTYPE_UNSUPPORTED;
         }
 
-        outer_ip_payload_len = payload_length > (uint16_t)v6_ext_len
-                                   ? (uint16_t)(payload_length - (uint16_t)v6_ext_len)
+        outer_ip_payload_len = payload_length > (uint16_t) v6_ext_len
+                                   ? (uint16_t) (payload_length - (uint16_t) v6_ext_len)
                                    : 0;
     }
 
@@ -199,7 +192,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
      * Only S (bit 12) is allowed. */
     uint16_t flags = gre_flags_ver & 0xFFF8; /* mask out version bits */
     bool has_seq = (flags & 0x1000) != 0;
-    uint16_t disallowed = flags & ~(uint16_t)0x1000;
+    uint16_t disallowed = flags & ~(uint16_t) 0x1000;
     if (disallowed != 0)
         return INFMON_PARSE_ERR_GRE_UNEXPECTED_FLAGS;
 
@@ -252,9 +245,8 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
     uint32_t decap_len = inner_len;
     bool decap_truncated = truncated;
 
-    if (infmon_inner_decap(INFMON_DECAP_NONE, inner_ptr, inner_len,
-                           truncated, &inner_ptr, &decap_len,
-                           &decap_truncated) != 0)
+    if (infmon_inner_decap(INFMON_DECAP_NONE, inner_ptr, inner_len, truncated, &inner_ptr,
+                           &decap_len, &decap_truncated) != 0)
         return INFMON_PARSE_ERR_INNER_DOUBLE_ENCAP_DROPPED;
 
     inner_len = decap_len;
@@ -285,7 +277,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
         out->inner_ip_proto = inner_ptr[inner_l3_off + 9];
 
         uint8_t inner_ihl = inner_ptr[inner_l3_off] & 0x0F;
-        uint32_t inner_ip_hdr_len = (uint32_t)inner_ihl * 4;
+        uint32_t inner_ip_hdr_len = (uint32_t) inner_ihl * 4;
         if (inner_ip_hdr_len < 20)
             inner_ip_hdr_len = 20;
 
@@ -303,8 +295,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
             }
 
             /* TCP-specific fields */
-            if (out->inner_ip_proto == 6 &&
-                (out->valid_fields & INFMON_VALID_PORTS)) {
+            if (out->inner_ip_proto == 6 && (out->valid_fields & INFMON_VALID_PORTS)) {
                 if (inner_len >= inner_l4_off + 8) {
                     out->tcp_seq = read_u32(inner_ptr + inner_l4_off + 4);
                     out->valid_fields |= INFMON_VALID_TCP_SEQ;
@@ -319,8 +310,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
                     out->valid_fields |= INFMON_VALID_TCP_FLAGS;
                 }
                 if (inner_len >= inner_l4_off + 16) {
-                    out->tcp_window =
-                        read_u16(inner_ptr + inner_l4_off + 14);
+                    out->tcp_window = read_u16(inner_ptr + inner_l4_off + 14);
                     out->valid_fields |= INFMON_VALID_TCP_WINDOW;
                 }
             }
@@ -348,8 +338,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
                 out->flow_key_partial = true;
             }
 
-            if (out->inner_ip_proto == 6 &&
-                (out->valid_fields & INFMON_VALID_PORTS)) {
+            if (out->inner_ip_proto == 6 && (out->valid_fields & INFMON_VALID_PORTS)) {
                 if (inner_len >= inner_l4_off + 8) {
                     out->tcp_seq = read_u32(inner_ptr + inner_l4_off + 4);
                     out->valid_fields |= INFMON_VALID_TCP_SEQ;
@@ -363,8 +352,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
                     out->valid_fields |= INFMON_VALID_TCP_FLAGS;
                 }
                 if (inner_len >= inner_l4_off + 16) {
-                    out->tcp_window =
-                        read_u16(inner_ptr + inner_l4_off + 14);
+                    out->tcp_window = read_u16(inner_ptr + inner_l4_off + 14);
                     out->valid_fields |= INFMON_VALID_TCP_WINDOW;
                 }
             }
@@ -377,8 +365,7 @@ infmon_parse_erspan(const uint8_t *data, uint32_t len,
         out->inner_ptr = inner_ptr;
         out->inner_len = inner_len;
         out->inner_truncated = truncated;
-        return truncated ? INFMON_PARSE_INNER_TRUNCATED_OK
-                         : INFMON_PARSE_OK;
+        return truncated ? INFMON_PARSE_INNER_TRUNCATED_OK : INFMON_PARSE_OK;
     }
 
     out->inner_ptr = inner_ptr;

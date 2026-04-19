@@ -8,4 +8,5 @@
 unknownMacro:src/infmon-backend/*
 
 # Headers in build/ are generated and not ours to fix.
-*:build/*
+# Use specific suppression IDs since wildcard '*' is not supported as an ID.
+unmatchedSuppression:build/*

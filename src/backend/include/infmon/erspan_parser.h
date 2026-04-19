@@ -22,13 +22,13 @@ extern "C" {
 /* ── Error / counter reason codes ─────────────────────────────────── */
 
 typedef enum {
-    INFMON_PARSE_OK = 0,              /* full inner packet present          */
-    INFMON_PARSE_INNER_TRUNCATED_OK,  /* inner truncated but usable         */
+    INFMON_PARSE_OK = 0,             /* full inner packet present          */
+    INFMON_PARSE_INNER_TRUNCATED_OK, /* inner truncated but usable         */
     INFMON_PARSE_ERR_OUTER_QINQ_UNSUPPORTED,
     INFMON_PARSE_ERR_OUTER_ETHERTYPE_UNSUPPORTED,
     INFMON_PARSE_ERR_OUTER_V6_EXT_UNSUPPORTED,
     INFMON_PARSE_ERR_OUTER_TRUNCATED,
-    INFMON_PARSE_ERR_MBUF_NOT_CONTIGUOUS,  /* reserved for VPP integration */
+    INFMON_PARSE_ERR_MBUF_NOT_CONTIGUOUS, /* reserved for VPP integration */
     INFMON_PARSE_ERR_GRE_UNEXPECTED_FLAGS,
     INFMON_PARSE_ERR_GRE_BAD_VERSION,
     INFMON_PARSE_ERR_GRE_BAD_PROTO,
@@ -37,7 +37,7 @@ typedef enum {
     INFMON_PARSE_ERR_INNER_ETH_TRUNCATED,
     INFMON_PARSE_ERR_INNER_L3_TRUNCATED,
     INFMON_PARSE_ERR_INNER_DOUBLE_ENCAP_DROPPED,
-    INFMON_PARSE_ERR__COUNT  /* sentinel */
+    INFMON_PARSE_ERR__COUNT /* sentinel */
 } infmon_parse_result_t;
 
 /* ── Counter names (indexed by infmon_parse_result_t) ─────────────── */
@@ -63,44 +63,44 @@ typedef struct {
 
 /* ── Valid-fields bitmask for inner L4 ────────────────────────────── */
 
-#define INFMON_VALID_PORTS      (1u << 0)
-#define INFMON_VALID_TCP_FLAGS  (1u << 1)
-#define INFMON_VALID_TCP_SEQ    (1u << 2)
-#define INFMON_VALID_TCP_ACK    (1u << 3)
+#define INFMON_VALID_PORTS (1u << 0)
+#define INFMON_VALID_TCP_FLAGS (1u << 1)
+#define INFMON_VALID_TCP_SEQ (1u << 2)
+#define INFMON_VALID_TCP_ACK (1u << 3)
 #define INFMON_VALID_TCP_WINDOW (1u << 4)
 
 /* ── Inner-decap hook types (§4.6) ────────────────────────────────── */
 
 typedef enum {
     INFMON_DECAP_NONE = 0,
-    INFMON_DECAP_VXLAN,   /* future */
-    INFMON_DECAP_GENEVE,  /* future */
-    INFMON_DECAP_ROCEV2,  /* future */
+    INFMON_DECAP_VXLAN,  /* future */
+    INFMON_DECAP_GENEVE, /* future */
+    INFMON_DECAP_ROCEV2, /* future */
 } infmon_inner_decap_t;
 
 /* ── Parser output ────────────────────────────────────────────────── */
 
 typedef struct {
-    const uint8_t *inner_ptr;       /* pointer into original buffer    */
-    uint32_t       inner_len;       /* bytes available                 */
-    bool           inner_truncated; /* inner_len < declared_inner_len  */
+    const uint8_t *inner_ptr; /* pointer into original buffer    */
+    uint32_t inner_len;       /* bytes available                 */
+    bool inner_truncated;     /* inner_len < declared_inner_len  */
 
     infmon_mirror_src_ip_t mirror_src_ip;
 
     /* Inner L4 extracted fields (valid only when corresponding bit set) */
-    uint32_t       valid_fields;    /* bitmask of INFMON_VALID_* */
-    uint16_t       src_port;        /* network byte order */
-    uint16_t       dst_port;        /* network byte order */
-    uint8_t        tcp_flags;
-    uint32_t       tcp_seq;         /* network byte order */
-    uint32_t       tcp_ack;         /* network byte order */
-    uint16_t       tcp_window;      /* network byte order */
+    uint32_t valid_fields; /* bitmask of INFMON_VALID_* */
+    uint16_t src_port;     /* network byte order */
+    uint16_t dst_port;     /* network byte order */
+    uint8_t tcp_flags;
+    uint32_t tcp_seq;    /* network byte order */
+    uint32_t tcp_ack;    /* network byte order */
+    uint16_t tcp_window; /* network byte order */
 
-    bool           flow_key_partial; /* ports missing for TCP/UDP */
+    bool flow_key_partial; /* ports missing for TCP/UDP */
 
     /* Inner L3 info */
-    uint8_t        inner_ip_proto;
-    infmon_af_t    inner_af;
+    uint8_t inner_ip_proto;
+    infmon_af_t inner_af;
 } infmon_parsed_packet_t;
 
 /* ── Main parser entry point ──────────────────────────────────────── */
@@ -115,18 +115,16 @@ typedef struct {
  * @return INFMON_PARSE_OK or INFMON_PARSE_INNER_TRUNCATED_OK on success;
  *         an error code otherwise.
  */
-infmon_parse_result_t
-infmon_parse_erspan(const uint8_t *data, uint32_t len,
-                    infmon_parsed_packet_t *out);
+infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
+                                          infmon_parsed_packet_t *out);
 
 /* ── Inner-decap hook (§4.6) ──────────────────────────────────────── */
 
 /**
  * v1: only INFMON_DECAP_NONE is implemented (identity).
  */
-int infmon_inner_decap(infmon_inner_decap_t kind,
-                       const uint8_t *in, uint32_t in_len, bool in_truncated,
-                       const uint8_t **out_ptr, uint32_t *out_len,
+int infmon_inner_decap(infmon_inner_decap_t kind, const uint8_t *in, uint32_t in_len,
+                       bool in_truncated, const uint8_t **out_ptr, uint32_t *out_len,
                        bool *out_truncated);
 
 #ifdef __cplusplus
