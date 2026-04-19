@@ -39,6 +39,7 @@ impl Default for PollerConfig {
 }
 
 /// Handle to a running poller thread.
+#[must_use = "dropping the handle immediately stops the poller"]
 pub struct PollerHandle {
     join: Option<thread::JoinHandle<()>>,
     stop: Arc<std::sync::atomic::AtomicBool>,
@@ -47,7 +48,13 @@ pub struct PollerHandle {
 impl PollerHandle {
     /// Signal the poller to stop and wait for it to finish.
     pub fn stop(mut self) {
-        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.shutdown();
+    }
+
+    /// Internal: signal stop and join the thread.
+    fn shutdown(&mut self) {
+        self.stop
+            .store(true, std::sync::atomic::Ordering::Release);
         if let Some(h) = self.join.take() {
             let _ = h.join();
         }
@@ -56,10 +63,7 @@ impl PollerHandle {
 
 impl Drop for PollerHandle {
     fn drop(&mut self) {
-        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
-        if let Some(h) = self.join.take() {
-            let _ = h.join();
-        }
+        self.shutdown();
     }
 }
 
@@ -94,9 +98,13 @@ fn monotonic_ns() -> u64 {
         tv_nsec: 0,
     };
     // SAFETY: CLOCK_MONOTONIC is always valid.
-    unsafe {
-        libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts);
+    let ret = unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
+    if ret != 0 {
+        log::error!("clock_gettime(CLOCK_MONOTONIC) failed: {}", ret);
+        return 0;
     }
+    debug_assert!(ts.tv_sec >= 0, "CLOCK_MONOTONIC returned negative tv_sec");
+    debug_assert!(ts.tv_nsec >= 0, "CLOCK_MONOTONIC returned negative tv_nsec");
     ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }
 
@@ -106,9 +114,12 @@ fn wall_clock_ns() -> u64 {
         tv_sec: 0,
         tv_nsec: 0,
     };
-    unsafe {
-        libc::clock_gettime(libc::CLOCK_REALTIME, &mut ts);
+    let ret = unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut ts) };
+    if ret != 0 {
+        log::error!("clock_gettime(CLOCK_REALTIME) failed: {}", ret);
+        return 0;
     }
+    debug_assert!(ts.tv_sec >= 0, "CLOCK_REALTIME returned negative tv_sec");
     ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }
 
@@ -147,10 +158,10 @@ fn decode_snapshot(
         .descriptors
         .into_iter()
         .map(|desc| {
-            // Determine fields from the first slot's key length.
-            // For now, we don't have field metadata in the raw descriptor,
-            // so we pass an empty field list — the decode will be filled
-            // once the backend encodes field metadata into the descriptor.
+            // TODO: field metadata is not yet encoded in the raw descriptor.
+            // Once the backend includes it, populate this from `desc` so that
+            // `decode_key` can produce meaningful flow keys. Until then, all
+            // keys are decoded with an empty schema.
             let fields: Vec<FieldId> = Vec::new();
 
             let flows = desc
@@ -177,6 +188,8 @@ fn decode_snapshot(
                         counters: FlowCounters {
                             packets: slot.packets,
                             bytes: slot.bytes,
+                            // TODO: first_seen_ns is not available in the raw
+                            // slot data. Wire it in once the backend tracks it.
                             first_seen_ns: 0,
                             last_seen_ns: slot.last_update,
                         },
@@ -185,10 +198,13 @@ fn decode_snapshot(
                 .collect();
 
             FlowRuleStats {
-                name: format!("{}", desc.flow_rule_id),
+                name: desc.flow_rule_id.to_string(),
                 fields,
                 flows,
                 counters: FlowRuleCounters {
+                    // TODO: aggregate packet/byte counters are not yet
+                    // available in RawDescriptor. Wire them in once the
+                    // backend exposes per-rule aggregate stats.
                     evictions: 0,
                     drops: desc.insert_failed,
                     packets: 0,
@@ -219,7 +235,7 @@ fn run_loop(
     let mut backoff = Duration::from_millis(100);
     let max_backoff = Duration::from_secs(30);
 
-    while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+    while !stop.load(std::sync::atomic::Ordering::Acquire) {
         let tick_start = monotonic_ns();
 
         // Ensure connected.
@@ -233,35 +249,39 @@ fn run_loop(
                 continue;
             }
             backoff = Duration::from_millis(100);
+            // Reset prev_mono so the first tick after reconnect doesn't
+            // include the entire disconnect duration in interval_ns.
+            prev_mono = 0;
         }
 
         // Perform snapshot.
-        let c = client.as_ref().unwrap();
-        match c.snapshot_and_clear() {
-            Ok(raw) => {
-                tick_id += 1;
-                let wall = wall_clock_ns();
-                let mono = monotonic_ns();
-                let snapshot = decode_snapshot(raw, tick_id, wall, mono, prev_mono);
-                prev_mono = mono;
+        if let Some(c) = client.as_ref() {
+            match c.snapshot_and_clear() {
+                Ok(raw) => {
+                    tick_id += 1;
+                    let wall = wall_clock_ns();
+                    let mono = monotonic_ns();
+                    let snapshot = decode_snapshot(raw, tick_id, wall, mono, prev_mono);
+                    prev_mono = mono;
 
-                let snap = Arc::new(snapshot);
+                    let snap = Arc::new(snapshot);
 
-                // Fan out to exporters.
-                for (i, tx) in senders.iter().enumerate() {
-                    if tx.try_send(snap.clone()).is_err() {
-                        log::warn!(
-                            "exporter {} channel full, dropping snapshot (tick {})",
-                            i,
-                            tick_id
-                        );
+                    // Fan out to exporters.
+                    for (i, tx) in senders.iter().enumerate() {
+                        if tx.try_send(snap.clone()).is_err() {
+                            log::warn!(
+                                "exporter {} channel full, dropping snapshot (tick {})",
+                                i,
+                                tick_id
+                            );
+                        }
                     }
                 }
-            }
-            Err(e) => {
-                log::warn!("snapshot_and_clear failed: {} — disconnecting", e);
-                client = None;
-                continue;
+                Err(e) => {
+                    log::warn!("snapshot_and_clear failed: {} — disconnecting", e);
+                    client = None;
+                    continue;
+                }
             }
         }
 
@@ -281,7 +301,7 @@ fn sleep_interruptible(dur: Duration, stop: &std::sync::atomic::AtomicBool) {
     let check = Duration::from_millis(50);
     let mut remaining = dur;
     while remaining > Duration::ZERO {
-        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+        if stop.load(std::sync::atomic::Ordering::Acquire) {
             return;
         }
         let sleep_time = remaining.min(check);
@@ -333,8 +353,11 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires a real VPP stats segment; InFMonStatsClient::open fails on empty files"]
     fn poller_sends_snapshots_on_real_segment() {
-        // Create a fake stats segment file so InFMonStatsClient::open succeeds.
+        // This test needs a real VPP shared-memory stats segment.
+        // An empty file is not a valid segment, so InFMonStatsClient::open
+        // will fail and the poller enters reconnect backoff.
         let dir = tempfile::TempDir::new().unwrap();
         let sock = dir.path().join("stats.sock");
         std::fs::write(&sock, b"").unwrap();
@@ -363,6 +386,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires a real VPP stats segment; InFMonStatsClient::open fails on empty files"]
     fn backpressure_drops_snapshots() {
         // Channel with capacity 1. If poller ticks faster than we consume,
         // it should drop snapshots without blocking.
