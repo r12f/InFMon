@@ -5,9 +5,9 @@
 
 #include <cstdio>
 #include <cstring>
+#include <gtest/gtest.h>
 #include <string>
 #include <vector>
-#include <gtest/gtest.h>
 
 extern "C" {
 #include "infmon/api_handler.h"
@@ -214,8 +214,7 @@ TEST_F(ApiHandlerTest, GetByNameNullOutputs)
     ASSERT_EQ(infmon_api_flow_rule_add(&ctx_, &r), INFMON_API_OK);
 
     /* Both out params NULL — should still return OK without crashing. */
-    EXPECT_EQ(infmon_api_flow_rule_get_by_name(&ctx_, "rule_zz", nullptr, nullptr),
-              INFMON_API_OK);
+    EXPECT_EQ(infmon_api_flow_rule_get_by_name(&ctx_, "rule_zz", nullptr, nullptr), INFMON_API_OK);
 }
 
 TEST_F(ApiHandlerTest, ListAfterDeleteReflectsRemoval)
