@@ -30,6 +30,25 @@ static infmon_api_result_t map_rule_result(infmon_flow_rule_result_t r)
     }
 }
 
+/** Map snapshot result to API result. */
+static infmon_api_result_t map_snap_result(infmon_snap_result_t r)
+{
+    switch (r) {
+    case INFMON_SNAP_OK:
+        return INFMON_API_OK;
+    case INFMON_SNAP_ALLOC_FAILED:
+        return INFMON_API_ERR_ALLOC_FAILED;
+    case INFMON_SNAP_TOO_MANY_RETIRED:
+        return INFMON_API_ERR_TOO_MANY_RETIRED;
+    case INFMON_SNAP_INVALID_INDEX:
+        return INFMON_API_ERR_NOT_FOUND;
+    case INFMON_SNAP_NULL_TABLE:
+        return INFMON_API_ERR_NULL_TABLE;
+    default:
+        return INFMON_API_ERR_INTERNAL;
+    }
+}
+
 /**
  * Find the index of a rule by name in the set.
  * Returns the index, or (uint32_t) -1 if not found.
@@ -40,6 +59,20 @@ static uint32_t find_rule_index(const infmon_flow_rule_set_t *set, const char *n
     for (uint32_t i = 0; i < n; i++) {
         const infmon_flow_rule_t *r = infmon_flow_rule_get(set, i);
         if (r && strcmp(r->name, name) == 0)
+            return i;
+    }
+    return (uint32_t) -1;
+}
+
+/**
+ * Find the index of a rule by flow_rule_id in the context.
+ * Returns the index, or (uint32_t) -1 if not found.
+ */
+static uint32_t find_rule_index_by_id(const infmon_api_ctx_t *ctx, infmon_flow_rule_id_t id)
+{
+    uint32_t n = infmon_flow_rule_count(ctx->rule_set);
+    for (uint32_t i = 0; i < n; i++) {
+        if (infmon_flow_rule_id_eq(ctx->flow_rule_ids[i], id))
             return i;
     }
     return (uint32_t) -1;
@@ -72,7 +105,12 @@ void infmon_api_ctx_destroy(infmon_api_ctx_t *ctx)
 
 /* ── Operations ──────────────────────────────────────────────────── */
 
-infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx, const infmon_flow_rule_t *rule)
+/**
+ * Internal: add a flow rule, optionally recording its UUID.
+ */
+static infmon_api_result_t flow_rule_add_internal(infmon_api_ctx_t *ctx,
+                                                  const infmon_flow_rule_t *rule,
+                                                  const infmon_flow_rule_id_t *id)
 {
     if (!ctx || !rule)
         return INFMON_API_ERR_INVALID_RULE;
@@ -106,7 +144,24 @@ infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx, const infmon
     }
     ctx->tables[idx] = ct;
 
+    /* 5. Record the flow_rule_id if provided. */
+    if (id) {
+        ctx->flow_rule_ids[idx] = *id;
+    }
+
     return INFMON_API_OK;
+}
+
+infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx, const infmon_flow_rule_t *rule)
+{
+    return flow_rule_add_internal(ctx, rule, NULL);
+}
+
+infmon_api_result_t infmon_api_flow_rule_add_with_id(infmon_api_ctx_t *ctx,
+                                                     const infmon_flow_rule_t *rule,
+                                                     infmon_flow_rule_id_t id)
+{
+    return flow_rule_add_internal(ctx, rule, &id);
 }
 
 infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *name)
@@ -130,11 +185,14 @@ infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *
         ctx->tables[idx] = NULL;
     }
 
-    /* 4. Compact the tables array (rm shifts entries in the set). */
+    /* 4. Compact the tables and flow_rule_ids arrays (rm shifts entries in the set). */
     uint32_t count = infmon_flow_rule_count(ctx->rule_set);
-    for (uint32_t i = idx; i < count; i++)
+    for (uint32_t i = idx; i < count; i++) {
         ctx->tables[i] = ctx->tables[i + 1];
+        ctx->flow_rule_ids[i] = ctx->flow_rule_ids[i + 1];
+    }
     ctx->tables[count] = NULL;
+    memset(&ctx->flow_rule_ids[count], 0, sizeof(ctx->flow_rule_ids[0]));
 
     return INFMON_API_OK;
 }
@@ -182,4 +240,59 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
         }
     }
     return INFMON_API_ERR_NOT_FOUND;
+}
+
+/* ── Snapshot and clear ──────────────────────────────────────────── */
+
+void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t flow_rule_id,
+                                  infmon_api_snap_reply_t *reply)
+{
+    memset(reply, 0, sizeof(*reply));
+
+    if (!ctx) {
+        reply->result = INFMON_API_ERR_INVALID_RULE;
+        return;
+    }
+
+    if (!ctx->snap_mgr) {
+        reply->result = INFMON_API_ERR_NO_SNAPSHOT_MGR;
+        return;
+    }
+
+    /* Resolve flow_rule_id → index. */
+    uint32_t idx = find_rule_index_by_id(ctx, flow_rule_id);
+    if (idx == (uint32_t) -1) {
+        reply->result = INFMON_API_ERR_NOT_FOUND;
+        return;
+    }
+
+    /* Delegate to the snapshot manager. */
+    infmon_snap_reply_t snap_reply;
+    infmon_snapshot_and_clear(ctx->snap_mgr, ctx->tables, idx, INFMON_FLOW_RULE_SET_MAX,
+                             infmon_flow_rule_get(ctx->rule_set, idx)->key_width, &snap_reply);
+
+    reply->result = map_snap_result(snap_reply.result);
+
+    if (snap_reply.result != INFMON_SNAP_OK)
+        return;
+
+    /* Build the descriptor from the retired table. */
+    infmon_counter_table_t *retired = snap_reply.retired_table;
+    infmon_stats_descriptor_t *desc = &reply->descriptor;
+
+    desc->flow_rule_id = flow_rule_id;
+    desc->flow_rule_index = idx;
+    desc->generation = snap_reply.retired_generation;
+    desc->epoch_ns = retired->epoch_ns;
+
+    /* Compute byte offsets relative to stats segment base. */
+    uintptr_t seg_base = ctx->stats_reg ? ctx->stats_reg->segment_base : 0;
+    desc->slots_offset = infmon_stats_offset_of(seg_base, retired->slots);
+    desc->slots_len = retired->num_slots;
+    desc->key_arena_offset = infmon_stats_offset_of(seg_base, retired->key_arena);
+    desc->key_arena_capacity = retired->key_arena_capacity;
+    desc->key_arena_used = retired->key_arena_used;
+    desc->insert_failed = retired->insert_failed;
+    desc->table_full = retired->table_full;
+    desc->active = 1;
 }

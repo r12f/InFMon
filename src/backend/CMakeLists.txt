@@ -99,6 +99,7 @@ target_include_directories(infmon_api_handler PUBLIC include)
 target_link_libraries(infmon_api_handler PUBLIC
     infmon_flow_rule
     infmon_counter_table
+    infmon_snapshot
     infmon_stats_segment
 )
 
@@ -109,6 +110,7 @@ target_link_libraries(test_api_handler PRIVATE
     infmon_api_handler
     infmon_flow_rule
     infmon_counter_table
+    infmon_snapshot
     infmon_stats_segment
     GTest::gtest GTest::gtest_main
 )

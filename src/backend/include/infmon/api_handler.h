@@ -13,6 +13,7 @@
 
 #include "infmon/counter_table.h"
 #include "infmon/flow_rule.h"
+#include "infmon/snapshot.h"
 #include "infmon/stats_segment.h"
 
 #ifdef __cplusplus
@@ -30,6 +31,10 @@ typedef enum {
     INFMON_API_ERR_SET_FULL,
     INFMON_API_ERR_STATS_PUBLISH,
     INFMON_API_ERR_INTERNAL,
+    INFMON_API_ERR_ALLOC_FAILED,
+    INFMON_API_ERR_TOO_MANY_RETIRED,
+    INFMON_API_ERR_NULL_TABLE,
+    INFMON_API_ERR_NO_SNAPSHOT_MGR,
 } infmon_api_result_t;
 
 /* ── Context (caller-owned, long-lived) ──────────────────────────── */
@@ -37,10 +42,24 @@ typedef enum {
 typedef struct {
     infmon_flow_rule_set_t *rule_set;
     infmon_stats_registry_t *stats_reg;
+    infmon_snapshot_mgr_t *snap_mgr; /**< Optional; required for snapshot_and_clear. */
     /* private: Per-rule counter tables, indexed by rule position in the set.
      * Managed internally by add/del; caller must not touch. */
     infmon_counter_table_t *tables[INFMON_FLOW_RULE_SET_MAX];
+    /* Per-rule UUID, indexed in parallel with tables[]. */
+    infmon_flow_rule_id_t flow_rule_ids[INFMON_FLOW_RULE_SET_MAX];
 } infmon_api_ctx_t;
+
+/* ── Snapshot reply ──────────────────────────────────────────────── */
+
+/**
+ * Result of infmon_api_snapshot_and_clear().  On success, the descriptor
+ * is fully populated with retired table metadata.
+ */
+typedef struct {
+    infmon_api_result_t result;
+    infmon_stats_descriptor_t descriptor; /**< Populated on success. */
+} infmon_api_snap_reply_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
 
@@ -61,6 +80,15 @@ void infmon_api_ctx_destroy(infmon_api_ctx_t *ctx);
  * counter table → publish stats descriptor.
  */
 infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx, const infmon_flow_rule_t *rule);
+
+/**
+ * Add a flow rule with an explicit UUID.
+ * Same as infmon_api_flow_rule_add but also records @p id so that
+ * snapshot_and_clear can resolve the ID → index mapping.
+ */
+infmon_api_result_t infmon_api_flow_rule_add_with_id(infmon_api_ctx_t *ctx,
+                                                     const infmon_flow_rule_t *rule,
+                                                     infmon_flow_rule_id_t id);
 
 /**
  * Delete a flow rule by name: unpublish stats → destroy counter table →
@@ -99,6 +127,19 @@ infmon_api_result_t infmon_api_flow_rule_list(const infmon_api_ctx_t *ctx,
 infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx, const char *name,
                                                      const infmon_flow_rule_t **out_rule,
                                                      uint32_t *out_index);
+
+/**
+ * Perform an atomic snapshot_and_clear on the counter table belonging
+ * to the flow rule identified by @p flow_rule_id.
+ *
+ * On success the reply's descriptor is fully populated with the
+ * retired table's metadata (generation, offsets, counters).
+ *
+ * Requires ctx->snap_mgr to be set (returns INFMON_API_ERR_NO_SNAPSHOT_MGR
+ * otherwise).
+ */
+void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t flow_rule_id,
+                                  infmon_api_snap_reply_t *reply);
 
 #ifdef __cplusplus
 }
