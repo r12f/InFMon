@@ -36,7 +36,7 @@ const char *infmon_node_error_strings[] = {
 
 static inline uint16_t read_u16(const uint8_t *p)
 {
-    return (uint16_t)((uint16_t)p[0] << 8 | p[1]);
+    return (uint16_t) ((uint16_t) p[0] << 8 | p[1]);
 }
 
 /* ── Simple FNV-1a 64-bit hash ───────────────────────────────────── */
@@ -63,7 +63,7 @@ infmon_parse_result_t infmon_erspan_decap(const uint8_t *data, uint32_t len,
 
     if (rc == INFMON_PARSE_OK || rc == INFMON_PARSE_INNER_TRUNCATED_OK) {
         /* Compute inner_offset as the difference between inner_ptr and data */
-        out->inner_offset = (uint32_t)(out->parsed.inner_ptr - data);
+        out->inner_offset = (uint32_t) (out->parsed.inner_ptr - data);
         out->inner_len = out->parsed.inner_len;
     }
 
@@ -72,9 +72,8 @@ infmon_parse_result_t infmon_erspan_decap(const uint8_t *data, uint32_t len,
 
 /* ── Flow field extraction ───────────────────────────────────────── */
 
-bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed,
-                                const uint8_t *inner, uint32_t inner_len,
-                                infmon_flow_fields_t *out)
+bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed, const uint8_t *inner,
+                                uint32_t inner_len, infmon_flow_fields_t *out)
 {
     memset(out, 0, sizeof(*out));
 
@@ -105,8 +104,7 @@ bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed,
     if (inner_len < inner_l3_off + 1)
         return false;
 
-    uint16_t inner_et = (inner_l3_off == 14) ? read_u16(inner + 12)
-                                              : read_u16(inner + 16);
+    uint16_t inner_et = (inner_l3_off == 14) ? read_u16(inner + 12) : read_u16(inner + 16);
 
     if (inner_et == 0x0800) {
         /* IPv4 */
@@ -152,8 +150,8 @@ bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed,
 /* ── Flow matching ───────────────────────────────────────────────── */
 
 uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
-                           const infmon_flow_fields_t *fields,
-                           infmon_scratch_t *scratch, uint8_t *key_buf)
+                           const infmon_flow_fields_t *fields, infmon_scratch_t *scratch,
+                           uint8_t *key_buf)
 {
     if (!rules || !fields || !scratch || !key_buf)
         return 0;
@@ -180,7 +178,7 @@ uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
         if (scratch->count < INFMON_FRAME_SIZE * INFMON_MAX_ACTIVE_FLOW_RULES) {
             infmon_scratch_entry_t *e = &scratch->entries[scratch->count++];
             e->flow_rule_index = i;
-            e->key_len = (uint16_t)kw;
+            e->key_len = (uint16_t) kw;
             e->_pad = 0;
             e->key_hash = hash;
             e->key_ptr = key_buf;
@@ -193,9 +191,8 @@ uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
 
 /* ── Counter update ──────────────────────────────────────────────── */
 
-void infmon_counter_update(const infmon_scratch_t *scratch,
-                           infmon_counter_table_t **tables, uint64_t pkt_bytes,
-                           uint64_t tick, uint64_t *insert_retry_exhausted,
+void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table_t **tables,
+                           uint64_t pkt_bytes, uint64_t tick, uint64_t *insert_retry_exhausted,
                            uint64_t *table_full_count)
 {
     if (!scratch || !tables)
@@ -211,8 +208,8 @@ void infmon_counter_update(const infmon_scratch_t *scratch,
         if (e->key_len == 0)
             continue; /* safety: skip entries with no key width */
 
-        bool ok = infmon_counter_table_update(table, e->key_hash, e->key_ptr,
-                                              e->key_len, pkt_bytes, tick);
+        bool ok = infmon_counter_table_update(table, e->key_hash, e->key_ptr, e->key_len, pkt_bytes,
+                                              tick);
 
         if (!ok) {
             /* Distinguish: table full vs CAS exhausted.

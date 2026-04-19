@@ -16,8 +16,8 @@
 #ifdef INFMON_VPP_BUILD
 
 #include <vlib/vlib.h>
-#include <vnet/vnet.h>
 #include <vnet/pg/pg.h>
+#include <vnet/vnet.h>
 
 #include "infmon/graph_node.h"
 
@@ -53,21 +53,19 @@ typedef struct {
     uint32_t inner_len;
 } infmon_erspan_decap_trace_t;
 
-static u8 *
-format_infmon_erspan_decap_trace(u8 *s, va_list *args)
+static u8 *format_infmon_erspan_decap_trace(u8 *s, va_list *args)
 {
     CLIB_UNUSED(vlib_main_t * vm) = va_arg(*args, vlib_main_t *);
     CLIB_UNUSED(vlib_node_t * node) = va_arg(*args, vlib_node_t *);
     infmon_erspan_decap_trace_t *t = va_arg(*args, infmon_erspan_decap_trace_t *);
 
-    s = format(s, "infmon-erspan-decap: result=%d inner_offset=%u inner_len=%u",
-               t->result, t->inner_offset, t->inner_len);
+    s = format(s, "infmon-erspan-decap: result=%d inner_offset=%u inner_len=%u", t->result,
+               t->inner_offset, t->inner_len);
     return s;
 }
 
-static uword
-infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
-                            vlib_frame_t *frame)
+static uword infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
+                                         vlib_frame_t *frame)
 {
     u32 n_left = frame->n_vectors;
     u32 *from = vlib_frame_vector_args(frame);
@@ -96,7 +94,7 @@ infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
 
             if (rc == INFMON_PARSE_OK || rc == INFMON_PARSE_INNER_TRUNCATED_OK) {
                 /* Advance buffer to inner frame */
-                vlib_buffer_advance(b, (i32)dr.inner_offset);
+                vlib_buffer_advance(b, (i32) dr.inner_offset);
                 b->current_length = dr.inner_len;
 
                 to_next_match[0] = bi;
@@ -122,8 +120,7 @@ infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
             }
 
             if (PREDICT_FALSE(b->flags & VLIB_BUFFER_IS_TRACED)) {
-                infmon_erspan_decap_trace_t *t =
-                    vlib_add_trace(vm, node, b, sizeof(*t));
+                infmon_erspan_decap_trace_t *t = vlib_add_trace(vm, node, b, sizeof(*t));
                 t->result = rc;
                 t->inner_offset = dr.inner_offset;
                 t->inner_len = dr.inner_len;
@@ -145,15 +142,14 @@ infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
         infmon_parse_result_t rc = infmon_erspan_decap(data, len, &dr);
 
         if (rc == INFMON_PARSE_OK || rc == INFMON_PARSE_INNER_TRUNCATED_OK) {
-            vlib_buffer_advance(b, (i32)dr.inner_offset);
+            vlib_buffer_advance(b, (i32) dr.inner_offset);
             b->current_length = dr.inner_len;
             to_next_match[0] = bi;
             to_next_match++;
             n_match++;
         } else {
             infmon_node_error_t err;
-            if (rc == INFMON_PARSE_ERR_GRE_BAD_PROTO ||
-                rc == INFMON_PARSE_ERR_ERSPAN_BAD_VERSION)
+            if (rc == INFMON_PARSE_ERR_GRE_BAD_PROTO || rc == INFMON_PARSE_ERR_ERSPAN_BAD_VERSION)
                 err = INFMON_NODE_ERR_ERSPAN_UNKNOWN_PROTO;
             else if (rc == INFMON_PARSE_ERR_ERSPAN_TRUNCATED ||
                      rc == INFMON_PARSE_ERR_OUTER_TRUNCATED)
@@ -167,8 +163,7 @@ infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
         }
 
         if (PREDICT_FALSE(b->flags & VLIB_BUFFER_IS_TRACED)) {
-            infmon_erspan_decap_trace_t *t =
-                vlib_add_trace(vm, node, b, sizeof(*t));
+            infmon_erspan_decap_trace_t *t = vlib_add_trace(vm, node, b, sizeof(*t));
             t->result = rc;
             t->inner_offset = dr.inner_offset;
             t->inner_len = dr.inner_len;
@@ -193,39 +188,35 @@ VLIB_REGISTER_NODE(infmon_erspan_decap_node) = {
     .n_errors = INFMON_NODE_ERR__COUNT,
     .error_strings = infmon_node_error_strings,
     .n_next_nodes = INFMON_ERSPAN_DECAP_NEXT__COUNT,
-    .next_nodes = {
-        [INFMON_ERSPAN_DECAP_NEXT_FLOW_MATCH] = "infmon-flow-match",
-        [INFMON_ERSPAN_DECAP_NEXT_DROP] = "drop",
-    },
+    .next_nodes =
+        {
+            [INFMON_ERSPAN_DECAP_NEXT_FLOW_MATCH] = "infmon-flow-match",
+            [INFMON_ERSPAN_DECAP_NEXT_DROP] = "drop",
+        },
 };
 
 /* ════════════════════════════════════════════════════════════════════
  *  Node 2: infmon-flow-match
  * ════════════════════════════════════════════════════════════════════ */
 
-static uword
-infmon_flow_match_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
-                          vlib_frame_t *frame)
+static uword infmon_flow_match_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
+                                       vlib_frame_t *frame)
 {
     infmon_plugin_main_t *pm = &infmon_plugin_main;
     u32 n_left = frame->n_vectors;
     u32 *from = vlib_frame_vector_args(frame);
 
     /* Load flow rules with ACQUIRE once per frame (§8) */
-    const infmon_flow_rule_t *rules =
-        __atomic_load_n(&pm->flow_rules, __ATOMIC_ACQUIRE);
-    uint32_t rule_count =
-        __atomic_load_n(&pm->flow_rule_count, __ATOMIC_ACQUIRE);
+    const infmon_flow_rule_t *rules = __atomic_load_n(&pm->flow_rules, __ATOMIC_ACQUIRE);
+    uint32_t rule_count = __atomic_load_n(&pm->flow_rule_count, __ATOMIC_ACQUIRE);
 
     infmon_scratch_reset(&infmon_tls_scratch);
 
     u32 *to_next_counter, *to_next_drop;
     u32 n_counter = 0, n_drop = 0;
 
-    vlib_get_next_frame(vm, node, INFMON_FLOW_MATCH_NEXT_COUNTER,
-                        to_next_counter, n_counter);
-    vlib_get_next_frame(vm, node, INFMON_FLOW_MATCH_NEXT_DROP,
-                        to_next_drop, n_drop);
+    vlib_get_next_frame(vm, node, INFMON_FLOW_MATCH_NEXT_COUNTER, to_next_counter, n_counter);
+    vlib_get_next_frame(vm, node, INFMON_FLOW_MATCH_NEXT_DROP, to_next_drop, n_drop);
 
     while (n_left > 0) {
         u32 bi = from[0];
@@ -238,8 +229,8 @@ infmon_flow_match_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
 
         uint32_t matches = 0;
         if (extracted && rules && rule_count > 0) {
-            matches = infmon_flow_match(rules, rule_count, &fields,
-                                        &infmon_tls_scratch, infmon_tls_key_buf);
+            matches = infmon_flow_match(rules, rule_count, &fields, &infmon_tls_scratch,
+                                        infmon_tls_key_buf);
         }
 
         if (matches > 0) {
@@ -271,19 +262,18 @@ VLIB_REGISTER_NODE(infmon_flow_match_node) = {
     .n_errors = INFMON_NODE_ERR__COUNT,
     .error_strings = infmon_node_error_strings,
     .n_next_nodes = INFMON_FLOW_MATCH_NEXT__COUNT,
-    .next_nodes = {
-        [INFMON_FLOW_MATCH_NEXT_COUNTER] = "infmon-counter",
-        [INFMON_FLOW_MATCH_NEXT_DROP] = "drop",
-    },
+    .next_nodes =
+        {
+            [INFMON_FLOW_MATCH_NEXT_COUNTER] = "infmon-counter",
+            [INFMON_FLOW_MATCH_NEXT_DROP] = "drop",
+        },
 };
 
 /* ════════════════════════════════════════════════════════════════════
  *  Node 3: infmon-counter
  * ════════════════════════════════════════════════════════════════════ */
 
-static uword
-infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
-                       vlib_frame_t *frame)
+static uword infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node, vlib_frame_t *frame)
 {
     infmon_plugin_main_t *pm = &infmon_plugin_main;
     u32 n_left = frame->n_vectors;
@@ -319,8 +309,8 @@ infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node,
         uint64_t pkt_bytes = vlib_buffer_length_in_chain(vm, b);
 
         /* Update counters for this packet's scratch entries */
-        infmon_counter_update(&infmon_tls_scratch, tables, pkt_bytes, tick,
-                              &insert_retry, &table_full);
+        infmon_counter_update(&infmon_tls_scratch, tables, pkt_bytes, tick, &insert_retry,
+                              &table_full);
 
         to_next[0] = bi;
         to_next++;
@@ -348,9 +338,10 @@ VLIB_REGISTER_NODE(infmon_counter_node) = {
     .n_errors = INFMON_NODE_ERR__COUNT,
     .error_strings = infmon_node_error_strings,
     .n_next_nodes = INFMON_COUNTER_NEXT__COUNT,
-    .next_nodes = {
-        [INFMON_COUNTER_NEXT_DROP] = "drop",
-    },
+    .next_nodes =
+        {
+            [INFMON_COUNTER_NEXT_DROP] = "drop",
+        },
 };
 
 #endif /* INFMON_VPP_BUILD */

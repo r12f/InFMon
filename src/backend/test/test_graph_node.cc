@@ -12,10 +12,8 @@ extern "C" {
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
-static infmon_flow_rule_t make_rule(const char *name,
-                                     const infmon_field_t *fields,
-                                     uint32_t fc,
-                                     uint32_t max_keys = 1024)
+static infmon_flow_rule_t make_rule(const char *name, const infmon_field_t *fields, uint32_t fc,
+                                    uint32_t max_keys = 1024)
 {
     infmon_flow_rule_t r{};
     std::size_t len = std::strlen(name);
@@ -31,9 +29,8 @@ static infmon_flow_rule_t make_rule(const char *name,
     return r;
 }
 
-static infmon_flow_fields_t make_fields(uint8_t proto, uint8_t dscp,
-                                         const uint8_t src[4],
-                                         const uint8_t dst[4])
+static infmon_flow_fields_t make_fields(uint8_t proto, uint8_t dscp, const uint8_t src[4],
+                                        const uint8_t dst[4])
 {
     infmon_flow_fields_t f{};
     f.ip_proto = proto;
@@ -191,8 +188,7 @@ TEST(CounterUpdate, UpdatesCounterTable)
     bool found = false;
     for (uint32_t i = 0; i < table->num_slots; i++) {
         infmon_slot_t slot;
-        if (infmon_counter_table_read_slot(table, i, &slot) &&
-            slot.flags == INFMON_SLOT_OCCUPIED) {
+        if (infmon_counter_table_read_slot(table, i, &slot) && slot.flags == INFMON_SLOT_OCCUPIED) {
             EXPECT_EQ(slot.packets, 1u);
             EXPECT_EQ(slot.bytes, 100u);
             found = true;
@@ -207,8 +203,7 @@ TEST(CounterUpdate, UpdatesCounterTable)
     found = false;
     for (uint32_t i = 0; i < table->num_slots; i++) {
         infmon_slot_t slot;
-        if (infmon_counter_table_read_slot(table, i, &slot) &&
-            slot.flags == INFMON_SLOT_OCCUPIED) {
+        if (infmon_counter_table_read_slot(table, i, &slot) && slot.flags == INFMON_SLOT_OCCUPIED) {
             EXPECT_EQ(slot.packets, 2u);
             EXPECT_EQ(slot.bytes, 300u);
             found = true;

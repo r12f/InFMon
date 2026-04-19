@@ -135,9 +135,8 @@ infmon_parse_result_t infmon_erspan_decap(const uint8_t *data, uint32_t len,
  *
  * @return true if extraction succeeded.
  */
-bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed,
-                                const uint8_t *inner, uint32_t inner_len,
-                                infmon_flow_fields_t *out);
+bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed, const uint8_t *inner,
+                                uint32_t inner_len, infmon_flow_fields_t *out);
 
 /**
  * Match one packet against all active flow rules, appending entries
@@ -153,8 +152,8 @@ bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed,
  *         with flow_rule_no_match counter).
  */
 uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
-                           const infmon_flow_fields_t *fields,
-                           infmon_scratch_t *scratch, uint8_t *key_buf);
+                           const infmon_flow_fields_t *fields, infmon_scratch_t *scratch,
+                           uint8_t *key_buf);
 
 /* ── Counter update (portable) ───────────────────────────────────── */
 
@@ -168,15 +167,13 @@ uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
  * @param insert_retry_exhausted  Incremented for each CAS-exhausted update.
  * @param table_full_count        Incremented for each table-full update.
  */
-void infmon_counter_update(const infmon_scratch_t *scratch,
-                           infmon_counter_table_t **tables, uint64_t pkt_bytes,
-                           uint64_t tick, uint64_t *insert_retry_exhausted,
+void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table_t **tables,
+                           uint64_t pkt_bytes, uint64_t tick, uint64_t *insert_retry_exhausted,
                            uint64_t *table_full_count);
 
 /* ── Scratch vector helpers ──────────────────────────────────────── */
 
-static inline void
-infmon_scratch_reset(infmon_scratch_t *scratch)
+static inline void infmon_scratch_reset(infmon_scratch_t *scratch)
 {
     scratch->count = 0;
 }
