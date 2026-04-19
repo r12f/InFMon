@@ -37,6 +37,19 @@ add_test(NAME erspan_pcap COMMAND test_erspan_pcap)
 
 # --- Fuzz target (clang only, requires -fsanitize=fuzzer) ---
 option(ENABLE_FUZZER "Build libFuzzer targets (requires clang)" OFF)
+# --- Flow-rule data model library ---
+add_library(infmon_flow_rule STATIC
+    src/flow_rule.c
+)
+target_include_directories(infmon_flow_rule PUBLIC include)
+
+add_executable(test_flow_rule
+    test/test_flow_rule.cc
+)
+target_link_libraries(test_flow_rule PRIVATE infmon_flow_rule GTest::gtest GTest::gtest_main)
+target_include_directories(test_flow_rule PRIVATE include)
+add_test(NAME flow_rule COMMAND test_flow_rule)
+
 if(ENABLE_FUZZER)
     add_executable(fuzz_erspan_parser
         test/fuzz_erspan_parser.cc
