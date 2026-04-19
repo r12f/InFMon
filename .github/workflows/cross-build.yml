@@ -1,4 +1,4 @@
-name: build
+name: cross-build
 
 on:
   pull_request:
@@ -18,7 +18,7 @@ env:
 
 jobs:
   rust-build:
-    name: build-rust
+    name: cross-build
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
@@ -47,7 +47,7 @@ jobs:
         run: cargo build --workspace --release --locked
 
   cpp-build:
-    name: build-cpp
+    name: cross-build-cpp
     runs-on: ubuntu-24.04-arm
     container:
       image: ghcr.io/r12f/infmon-vpp-dev:24.10
