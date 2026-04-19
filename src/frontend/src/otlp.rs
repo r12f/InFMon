@@ -419,10 +419,7 @@ impl Exporter for OtlpExporter {
         Box::pin(async move {
             let request = self.build_request(&snap);
 
-            let mut client = self
-                .get_client()
-                .await
-                .map_err(ExporterError::Transient)?;
+            let mut client = self.get_client().await.map_err(ExporterError::Transient)?;
 
             client.export(request).await.map_err(|e| {
                 // Classify gRPC status codes
