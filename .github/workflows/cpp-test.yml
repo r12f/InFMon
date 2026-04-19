@@ -26,13 +26,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify build tools present in image
+      - name: Install build deps
         run: |
           set -eux
-          for cmd in cmake ninja g++ clang ccache pkg-config; do
-            command -v "$cmd" || { echo "::error::$cmd not found in container image"; exit 1; }
-          done
-          dpkg -s libgtest-dev >/dev/null 2>&1 || { echo "::error::libgtest-dev not installed in container image"; exit 1; }
+          apt-get update
+          apt-get install -y --no-install-recommends \
+              cmake ninja-build g++ clang libgtest-dev ccache pkg-config
 
       - name: Verify VPP dev headers
         run: |
