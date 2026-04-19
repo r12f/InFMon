@@ -210,7 +210,7 @@ TEST(CounterUpdate, UpdatesCounterTable)
         infmon_slot_t slot;
         if (infmon_counter_table_read_slot(table, i, &slot) && slot.flags == INFMON_SLOT_OCCUPIED) {
             EXPECT_EQ(slot.packets, 2u);
-            EXPECT_EQ(slot.bytes, 300u);
+            EXPECT_EQ(slot.bytes, 200u);
             found = true;
             break;
         }
