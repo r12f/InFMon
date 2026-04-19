@@ -24,7 +24,8 @@ static infmon_flow_rule_t make_rule(const char *name, uint32_t max_keys = 1024)
     return r;
 }
 
-class ApiHandlerTest : public ::testing::Test {
+class ApiHandlerTest : public ::testing::Test
+{
   protected:
     void SetUp() override
     {

@@ -32,7 +32,7 @@ static infmon_api_result_t map_rule_result(infmon_flow_rule_result_t r)
 
 /**
  * Find the index of a rule by name in the set.
- * Returns the index, or (uint32_t)-1 if not found.
+ * Returns the index, or (uint32_t) -1 if not found.
  */
 static uint32_t find_rule_index(const infmon_flow_rule_set_t *set, const char *name)
 {
@@ -42,7 +42,7 @@ static uint32_t find_rule_index(const infmon_flow_rule_set_t *set, const char *n
         if (r && strcmp(r->name, name) == 0)
             return i;
     }
-    return (uint32_t)-1;
+    return (uint32_t) -1;
 }
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
@@ -67,8 +67,7 @@ void infmon_api_ctx_destroy(infmon_api_ctx_t *ctx)
 
 /* ── Operations ──────────────────────────────────────────────────── */
 
-infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx,
-                                             const infmon_flow_rule_t *rule)
+infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx, const infmon_flow_rule_t *rule)
 {
     if (!ctx || !rule)
         return INFMON_API_ERR_INVALID_RULE;
@@ -80,7 +79,7 @@ infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx,
 
     /* 2. Find the index the rule landed at. */
     uint32_t idx = find_rule_index(ctx->rule_set, rule->name);
-    if (idx == (uint32_t)-1) {
+    if (idx == (uint32_t) -1) {
         /* Shouldn't happen — rule was just added. */
         infmon_flow_rule_rm(ctx->rule_set, rule->name);
         return INFMON_API_ERR_INTERNAL;
@@ -108,7 +107,7 @@ infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *
 
     /* 1. Find the rule index before removing. */
     uint32_t idx = find_rule_index(ctx->rule_set, name);
-    if (idx == (uint32_t)-1)
+    if (idx == (uint32_t) -1)
         return INFMON_API_ERR_NOT_FOUND;
 
     /* 2. Destroy the counter table. */
