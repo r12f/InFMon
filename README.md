@@ -29,6 +29,7 @@ and active work are tracked in
 │   ├── backend/            Backend (control plane + dataplane integration)
 │   ├── frontend/           Web UI
 │   └── cli/                Command-line client
+├── tests/                  End-to-end and integration tests
 ├── CHANGELOG.md            Release notes (Keep a Changelog format)
 ├── CODEOWNERS              Required reviewers
 └── LICENSE                 Apache-2.0
