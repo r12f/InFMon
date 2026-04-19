@@ -26,11 +26,15 @@ lint:
 
 cppcheck-full:
 	@if [ -d src/backend ]; then \
+	    suppr=""; \
+	    if [ -f .cppcheck-suppressions ]; then \
+	        suppr="--suppressions-list=.cppcheck-suppressions"; \
+	    fi; \
 	    cppcheck \
 	        --enable=warning,performance,portability \
 	        --error-exitcode=1 \
 	        --inline-suppr \
-	        --suppressions-list=.cppcheck-suppressions \
+	        $$suppr \
 	        src/backend; \
 	else \
 	    echo "src/backend/ not present yet — nothing to check."; \

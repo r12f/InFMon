@@ -44,7 +44,7 @@ jobs:
 
       - name: cargo build (release)
         if: steps.detect_rust.outputs.have_workspace == 'true'
-        run: cargo build --workspace --release --locked
+        run: cargo build --workspace --all-targets --release --locked
 
   cpp-build:
     name: build-cpp
@@ -69,6 +69,10 @@ jobs:
       - name: Configure + build
         if: steps.detect_cpp.outputs.have_backend == 'true'
         run: |
+          cmake_launchers=""
+          if command -v ccache >/dev/null 2>&1; then
+            cmake_launchers="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          fi
           cmake -S src/backend -B build -G Ninja \
-              -DCMAKE_BUILD_TYPE=Release
+              -DCMAKE_BUILD_TYPE=Release $cmake_launchers
           cmake --build build

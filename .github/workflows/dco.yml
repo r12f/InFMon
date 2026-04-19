@@ -33,6 +33,12 @@ jobs:
           missing=0
           # Iterate over each commit in the PR range.
           for sha in $(git rev-list --no-merges "${BASE_SHA}..${HEAD_SHA}"); do
+              # Skip GitHub-authored squash-merge commits (e.g. from web UI).
+              author_email=$(git log -1 --format='%ae' "$sha")
+              if echo "$author_email" | grep -qE '^[0-9]+\+[^@]+@users\.noreply\.github\.com$|^noreply@github\.com$'; then
+                  echo "  skipping $sha (GitHub-authored: $author_email)"
+                  continue
+              fi
               if ! git log -1 --format=%B "$sha" \
                       | grep -qE '^Signed-off-by: .+ <.+@.+>[[:space:]]*$'; then
                   echo "::error::commit $sha is missing a 'Signed-off-by:' trailer."
@@ -60,8 +66,19 @@ jobs:
             echo "Initial push — skipping DCO check."
             exit 0
           fi
+          # Guard against force-pushes where BEFORE is not an ancestor of AFTER.
+          if ! git merge-base --is-ancestor "$BEFORE" "$AFTER" 2>/dev/null; then
+            echo "::warning::BEFORE ($BEFORE) is not an ancestor of AFTER ($AFTER) — skipping DCO check for this push."
+            exit 0
+          fi
           missing=0
           for sha in $(git rev-list --no-merges "${BEFORE}..${AFTER}"); do
+              # Skip GitHub-authored squash-merge commits.
+              author_email=$(git log -1 --format='%ae' "$sha")
+              if echo "$author_email" | grep -qE '^[0-9]+\+[^@]+@users\.noreply\.github\.com$|^noreply@github\.com$'; then
+                  echo "  skipping $sha (GitHub-authored: $author_email)"
+                  continue
+              fi
               if ! git log -1 --format=%B "$sha" \
                       | grep -qE '^Signed-off-by: .+ <.+@.+>[[:space:]]*$'; then
                   echo "::error::commit $sha is missing a 'Signed-off-by:' trailer."
