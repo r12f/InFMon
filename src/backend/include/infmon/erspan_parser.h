@@ -89,12 +89,12 @@ typedef struct {
 
     /* Inner L4 extracted fields (valid only when corresponding bit set) */
     uint32_t valid_fields; /* bitmask of INFMON_VALID_* */
-    uint16_t src_port;     /* network byte order */
-    uint16_t dst_port;     /* network byte order */
+    uint16_t src_port;     /* host byte order */
+    uint16_t dst_port;     /* host byte order */
     uint8_t tcp_flags;
-    uint32_t tcp_seq;    /* network byte order */
-    uint32_t tcp_ack;    /* network byte order */
-    uint16_t tcp_window; /* network byte order */
+    uint32_t tcp_seq;    /* host byte order */
+    uint32_t tcp_ack;    /* host byte order */
+    uint16_t tcp_window; /* host byte order */
 
     bool flow_key_partial; /* ports missing for TCP/UDP */
 

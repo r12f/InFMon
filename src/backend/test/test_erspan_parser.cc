@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
 // Comprehensive tests for the ERSPAN III parser.
 
 #include <arpa/inet.h>

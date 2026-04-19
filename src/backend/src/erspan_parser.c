@@ -30,6 +30,9 @@ const char *infmon_parse_counter_names[] = {
     [INFMON_PARSE_ERR_INNER_DOUBLE_ENCAP_DROPPED] = "inner_double_encap_dropped",
 };
 
+_Static_assert(sizeof(infmon_parse_counter_names) / sizeof(infmon_parse_counter_names[0]) == INFMON_PARSE_ERR__COUNT,
+               "counter_names out of sync with infmon_parse_result_t");
+
 /* ── Helpers ──────────────────────────────────────────────────────── */
 
 static inline uint16_t read_u16(const uint8_t *p)
@@ -40,6 +43,47 @@ static inline uint16_t read_u16(const uint8_t *p)
 static inline uint32_t read_u32(const uint8_t *p)
 {
     return (uint32_t) ((uint32_t) p[0] << 24 | (uint32_t) p[1] << 16 | (uint32_t) p[2] << 8 | p[3]);
+}
+
+/* ── Extract inner L4 fields (TCP/UDP) ───────────────────────────── */
+
+static void extract_inner_l4(const uint8_t *inner_ptr, uint32_t inner_l4_off,
+                             uint32_t inner_len, uint8_t inner_ip_proto,
+                             infmon_parsed_packet_t *out)
+{
+    if (inner_ip_proto == 6 || inner_ip_proto == 17) {
+        /* Need at least 4 bytes for ports */
+        if (inner_len >= inner_l4_off + 4) {
+            out->src_port = read_u16(inner_ptr + inner_l4_off);
+            out->dst_port = read_u16(inner_ptr + inner_l4_off + 2);
+            out->valid_fields |= INFMON_VALID_PORTS;
+        } else {
+            out->flow_key_partial = true;
+        }
+
+        /* TCP-specific fields */
+        if (inner_ip_proto == 6 && (out->valid_fields & INFMON_VALID_PORTS)) {
+            if (inner_len >= inner_l4_off + 8) {
+                out->tcp_seq = read_u32(inner_ptr + inner_l4_off + 4);
+                out->valid_fields |= INFMON_VALID_TCP_SEQ;
+            }
+            if (inner_len >= inner_l4_off + 12) {
+                out->tcp_ack = read_u32(inner_ptr + inner_l4_off + 8);
+                out->valid_fields |= INFMON_VALID_TCP_ACK;
+            }
+            if (inner_len >= inner_l4_off + 14) {
+                out->tcp_flags = inner_ptr[inner_l4_off + 13];
+                out->valid_fields |= INFMON_VALID_TCP_FLAGS;
+            }
+            if (inner_len >= inner_l4_off + 16) {
+                out->tcp_window = read_u16(inner_ptr + inner_l4_off + 14);
+                out->valid_fields |= INFMON_VALID_TCP_WINDOW;
+            }
+        }
+    } else {
+        /* Non-TCP/UDP L4: no port extraction */
+        out->flow_key_partial = true;
+    }
 }
 
 /* ── Inner-decap hook ─────────────────────────────────────────────── */
@@ -56,6 +100,9 @@ int infmon_inner_decap(infmon_inner_decap_t kind, const uint8_t *in, uint32_t in
     *out_truncated = in_truncated;
     return 0;
 }
+
+/* Maximum number of IPv6 extension headers to traverse before giving up. */
+#define MAX_IPV6_EXT_HEADERS 8
 
 /* ── Main parser ──────────────────────────────────────────────────── */
 
@@ -92,9 +139,7 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
         return INFMON_PARSE_ERR_OUTER_ETHERTYPE_UNSUPPORTED;
 
     /* ── Outer L3 ───────────────────────────────────────────────── */
-    uint16_t outer_ip_payload_len = 0; /* bytes after IP header(s) */
-    (void) 0;                          /* l3_off removed — not needed */
-    uint32_t v6_ext_len = 0;
+    uint32_t outer_ip_payload_len = 0; /* bytes after IP header(s) */
 
     if (ethertype == 0x0800) {
         /* IPv4 */
@@ -119,12 +164,15 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
 
         uint16_t total_length = read_u16(data + off + 2);
 
+        /* Validate total_length against ip_hdr_len */
+        if (total_length < ip_hdr_len)
+            return INFMON_PARSE_ERR_OUTER_TRUNCATED;
+
         /* Extract mirror_src_ip (IPv4 SA at offset 12) */
         out->mirror_src_ip.family = INFMON_AF_V4;
         memcpy(out->mirror_src_ip.addr.v4, data + off + 12, 4);
 
-        outer_ip_payload_len =
-            total_length > ip_hdr_len ? (uint16_t) (total_length - ip_hdr_len) : 0;
+        outer_ip_payload_len = total_length - ip_hdr_len;
         off += ip_hdr_len;
 
     } else {
@@ -146,8 +194,13 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
         off += 40;
 
         /* Parse allowed extension headers: Hop-by-Hop (0) and
-         * Destination Options (60) */
+         * Destination Options (60).
+         * Cap iterations to avoid pathological chains. */
+        uint32_t v6_ext_len = 0;
+        int ext_iters = 0;
         while (next_hdr == 0 || next_hdr == 60) {
+            if (++ext_iters > MAX_IPV6_EXT_HEADERS)
+                return INFMON_PARSE_ERR_OUTER_V6_EXT_UNSUPPORTED;
             if (len < off + 2)
                 return INFMON_PARSE_ERR_OUTER_TRUNCATED;
             uint8_t ext_next = data[off];
@@ -170,9 +223,8 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
             return INFMON_PARSE_ERR_OUTER_ETHERTYPE_UNSUPPORTED;
         }
 
-        outer_ip_payload_len = payload_length > (uint16_t) v6_ext_len
-                                   ? (uint16_t) (payload_length - (uint16_t) v6_ext_len)
-                                   : 0;
+        outer_ip_payload_len =
+            payload_length > v6_ext_len ? payload_length - v6_ext_len : 0;
     }
 
     /* ── GRE ────────────────────────────────────────────────────── */
@@ -233,6 +285,12 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
     /* Actual inner bytes available in buffer */
     uint32_t actual_inner_len = (len > off) ? (len - off) : 0;
 
+    /* If declared_inner_len is 0 but we have actual data, the outer IP
+     * header is malformed (total_length too small).  Treat as truncated
+     * rather than silently parsing trailing buffer bytes. */
+    if (declared_inner_len == 0 && actual_inner_len > 0)
+        return INFMON_PARSE_ERR_OUTER_TRUNCATED;
+
     /* Use the smaller of declared and actual */
     uint32_t inner_len = actual_inner_len;
     if (declared_inner_len > 0 && declared_inner_len < inner_len)
@@ -277,46 +335,14 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
         out->inner_ip_proto = inner_ptr[inner_l3_off + 9];
 
         uint8_t inner_ihl = inner_ptr[inner_l3_off] & 0x0F;
-        uint32_t inner_ip_hdr_len = (uint32_t) inner_ihl * 4;
-        if (inner_ip_hdr_len < 20)
-            inner_ip_hdr_len = 20;
-
-        uint32_t inner_l4_off = inner_l3_off + inner_ip_hdr_len;
-
-        /* Extract L4 fields (TCP/UDP only) */
-        if (out->inner_ip_proto == 6 || out->inner_ip_proto == 17) {
-            /* Need at least 4 bytes for ports */
-            if (inner_len >= inner_l4_off + 4) {
-                out->src_port = read_u16(inner_ptr + inner_l4_off);
-                out->dst_port = read_u16(inner_ptr + inner_l4_off + 2);
-                out->valid_fields |= INFMON_VALID_PORTS;
-            } else {
-                out->flow_key_partial = true;
-            }
-
-            /* TCP-specific fields */
-            if (out->inner_ip_proto == 6 && (out->valid_fields & INFMON_VALID_PORTS)) {
-                if (inner_len >= inner_l4_off + 8) {
-                    out->tcp_seq = read_u32(inner_ptr + inner_l4_off + 4);
-                    out->valid_fields |= INFMON_VALID_TCP_SEQ;
-                }
-                if (inner_len >= inner_l4_off + 12) {
-                    out->tcp_ack = read_u32(inner_ptr + inner_l4_off + 8);
-                    out->valid_fields |= INFMON_VALID_TCP_ACK;
-                }
-                if (inner_len >= inner_l4_off + 14) {
-                    uint8_t data_off_flags = inner_ptr[inner_l4_off + 13];
-                    out->tcp_flags = data_off_flags;
-                    out->valid_fields |= INFMON_VALID_TCP_FLAGS;
-                }
-                if (inner_len >= inner_l4_off + 16) {
-                    out->tcp_window = read_u16(inner_ptr + inner_l4_off + 14);
-                    out->valid_fields |= INFMON_VALID_TCP_WINDOW;
-                }
-            }
-        } else {
-            /* Non-TCP/UDP L4: no port extraction */
+        if (inner_ihl < 5) {
+            /* Malformed inner IP header — skip L4 extraction */
             out->flow_key_partial = true;
+        } else {
+            uint32_t inner_ip_hdr_len = (uint32_t) inner_ihl * 4;
+            uint32_t inner_l4_off = inner_l3_off + inner_ip_hdr_len;
+            extract_inner_l4(inner_ptr, inner_l4_off, inner_len,
+                             out->inner_ip_proto, out);
         }
 
     } else if (inner_ethertype == 0x86DD) {
@@ -325,40 +351,16 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
             return INFMON_PARSE_ERR_INNER_L3_TRUNCATED;
 
         out->inner_af = INFMON_AF_V6;
+        /* NOTE: inner_ip_proto is read from the fixed IPv6 next_hdr field.
+         * If the inner packet has extension headers (hop-by-hop, destination
+         * options, etc.), this will be the extension type rather than the
+         * actual L4 protocol, and port extraction will read the wrong bytes.
+         * This is a known limitation for v1 with ~128B ERSPAN snaps. */
         out->inner_ip_proto = inner_ptr[inner_l3_off + 6];
 
         uint32_t inner_l4_off = inner_l3_off + 40;
-
-        if (out->inner_ip_proto == 6 || out->inner_ip_proto == 17) {
-            if (inner_len >= inner_l4_off + 4) {
-                out->src_port = read_u16(inner_ptr + inner_l4_off);
-                out->dst_port = read_u16(inner_ptr + inner_l4_off + 2);
-                out->valid_fields |= INFMON_VALID_PORTS;
-            } else {
-                out->flow_key_partial = true;
-            }
-
-            if (out->inner_ip_proto == 6 && (out->valid_fields & INFMON_VALID_PORTS)) {
-                if (inner_len >= inner_l4_off + 8) {
-                    out->tcp_seq = read_u32(inner_ptr + inner_l4_off + 4);
-                    out->valid_fields |= INFMON_VALID_TCP_SEQ;
-                }
-                if (inner_len >= inner_l4_off + 12) {
-                    out->tcp_ack = read_u32(inner_ptr + inner_l4_off + 8);
-                    out->valid_fields |= INFMON_VALID_TCP_ACK;
-                }
-                if (inner_len >= inner_l4_off + 14) {
-                    out->tcp_flags = inner_ptr[inner_l4_off + 13];
-                    out->valid_fields |= INFMON_VALID_TCP_FLAGS;
-                }
-                if (inner_len >= inner_l4_off + 16) {
-                    out->tcp_window = read_u16(inner_ptr + inner_l4_off + 14);
-                    out->valid_fields |= INFMON_VALID_TCP_WINDOW;
-                }
-            }
-        } else {
-            out->flow_key_partial = true;
-        }
+        extract_inner_l4(inner_ptr, inner_l4_off, inner_len,
+                         out->inner_ip_proto, out);
     } else {
         /* Non-IP inner: we still accept it but can't extract L3/L4 */
         out->flow_key_partial = true;
