@@ -110,6 +110,14 @@ static inline void infmon_worker_counters_init(infmon_worker_counters_t *wc, uin
 {
     if (!wc)
         return;
+    /*
+     * memset on _Atomic uint64_t is technically UB per C11 §7.17.2.1
+     * (atomic objects should be initialised via atomic_init()).  We rely on
+     * the pragmatic assumption that _Atomic uint64_t has the same
+     * representation as uint64_t (true on GCC/Clang x86-64/aarch64) and
+     * that init is always single-threaded (no concurrent access during
+     * worker bring-up).
+     */
     memset(wc, 0, sizeof(*wc));
     wc->worker_id = worker_id;
 }
