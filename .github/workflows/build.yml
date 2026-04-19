@@ -87,6 +87,13 @@ jobs:
             echo "::notice::src/backend/CMakeLists.txt not present yet; C++ build is a no-op."
           fi
 
+      - name: Install build deps
+        if: steps.detect_cpp.outputs.have_backend == 'true'
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends \
+              cmake ninja-build g++ libgtest-dev ccache pkg-config
+
       - name: Configure + build
         if: steps.detect_cpp.outputs.have_backend == 'true'
         run: |
