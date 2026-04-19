@@ -255,6 +255,8 @@ TEST_F(SnapshotTest, RetiredRingFull)
     }
 
     /* Next swap should fail with TOO_MANY_RETIRED */
+    infmon_counter_table_destroy(tables[0]);
+    tables[0] = nullptr;
     install_table(0); /* tables[0] was swapped above, so it's a fresh table */
     infmon_snap_reply_t reply{};
     infmon_snapshot_and_clear(&mgr, tables, 0, MAX_FLOW_RULES, MAX_KEY_WIDTH, &reply);
@@ -305,10 +307,12 @@ TEST_F(SnapshotTest, ConcurrentEpochBumps)
 
         advance_clock_ns(INFMON_RETIRE_GRACE_NS + 1);
         /* Poll until freed — workers are bumping so this should eventually succeed */
-        for (int attempt = 0; attempt < 100; attempt++) {
+        int attempt;
+        for (attempt = 0; attempt < 100; attempt++) {
             if (infmon_retire_poll(&mgr) > 0)
                 break;
         }
+        ASSERT_LT(attempt, 100) << "retire_poll never freed the table";
     }
 
     stop.store(true);

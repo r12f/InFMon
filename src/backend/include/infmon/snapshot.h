@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <assert.h>
 
 #include "infmon/counter_table.h"
 
@@ -39,7 +40,7 @@ extern "C" {
  */
 typedef struct {
     uint64_t epoch;
-    uint8_t _pad[56]; /* pad to 64 B to avoid false sharing */
+    uint8_t pad[64 - sizeof(uint64_t)]; /* pad to 64 B to avoid false sharing */
 } __attribute__((aligned(64))) infmon_worker_epoch_t;
 
 /* ── Retired table descriptor ────────────────────────────────────── */
@@ -122,7 +123,10 @@ void infmon_snapshot_mgr_destroy(infmon_snapshot_mgr_t *mgr);
  */
 static inline void infmon_worker_epoch_bump(infmon_snapshot_mgr_t *mgr, uint32_t worker_id)
 {
-    __atomic_fetch_add(&mgr->worker_epochs[worker_id].epoch, 1, __ATOMIC_RELEASE);
+    assert(worker_id < mgr->num_workers);
+    /* Single-writer: relaxed load + release store avoids locked RMW. */
+    uint64_t e = __atomic_load_n(&mgr->worker_epochs[worker_id].epoch, __ATOMIC_RELAXED);
+    __atomic_store_n(&mgr->worker_epochs[worker_id].epoch, e + 1, __ATOMIC_RELEASE);
 }
 
 /**
@@ -131,6 +135,7 @@ static inline void infmon_worker_epoch_bump(infmon_snapshot_mgr_t *mgr, uint32_t
 static inline uint64_t infmon_worker_epoch_read(const infmon_snapshot_mgr_t *mgr,
                                                 uint32_t worker_id)
 {
+    assert(worker_id < mgr->num_workers);
     return __atomic_load_n(&mgr->worker_epochs[worker_id].epoch, __ATOMIC_ACQUIRE);
 }
 
