@@ -135,8 +135,8 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
  * On success the reply's descriptor is fully populated with the
  * retired table's metadata (generation, offsets, counters).
  *
- * Requires ctx->snap_mgr to be set (returns INFMON_API_ERR_NO_SNAPSHOT_MGR
- * otherwise).
+ * Requires ctx->snap_mgr and ctx->stats_reg to be set.
+ * @p reply must be non-NULL; if NULL, the call is a no-op.
  */
 void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t flow_rule_id,
                                    infmon_api_snap_reply_t *reply);

@@ -144,9 +144,12 @@ static infmon_api_result_t flow_rule_add_internal(infmon_api_ctx_t *ctx,
     }
     ctx->tables[idx] = ct;
 
-    /* 5. Record the flow_rule_id if provided. */
+    /* 5. Record the flow_rule_id if provided, otherwise zero out the slot
+     *    to avoid stale IDs from a previous occupant of this index. */
     if (id) {
         ctx->flow_rule_ids[idx] = *id;
+    } else {
+        memset(&ctx->flow_rule_ids[idx], 0, sizeof(ctx->flow_rule_ids[0]));
     }
 
     return INFMON_API_OK;
@@ -247,6 +250,9 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
 void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t flow_rule_id,
                                    infmon_api_snap_reply_t *reply)
 {
+    if (!reply)
+        return;
+
     memset(reply, 0, sizeof(*reply));
 
     if (!ctx) {
@@ -268,8 +274,13 @@ void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t 
 
     /* Delegate to the snapshot manager. */
     infmon_snap_reply_t snap_reply;
+    const infmon_flow_rule_t *rule = infmon_flow_rule_get(ctx->rule_set, idx);
+    if (!rule) {
+        reply->result = INFMON_API_ERR_INTERNAL;
+        return;
+    }
     infmon_snapshot_and_clear(ctx->snap_mgr, ctx->tables, idx, INFMON_FLOW_RULE_SET_MAX,
-                              infmon_flow_rule_get(ctx->rule_set, idx)->key_width, &snap_reply);
+                              rule->key_width, &snap_reply);
 
     reply->result = map_snap_result(snap_reply.result);
 
@@ -285,8 +296,13 @@ void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t 
     desc->generation = snap_reply.retired_generation;
     desc->epoch_ns = retired->epoch_ns;
 
-    /* Compute byte offsets relative to stats segment base. */
-    uintptr_t seg_base = ctx->stats_reg ? ctx->stats_reg->segment_base : 0;
+    /* Compute byte offsets relative to stats segment base.
+     * stats_reg is required — without a valid base the offsets are meaningless. */
+    if (!ctx->stats_reg) {
+        reply->result = INFMON_API_ERR_INTERNAL;
+        return;
+    }
+    uintptr_t seg_base = ctx->stats_reg->segment_base;
     desc->slots_offset = infmon_stats_offset_of(seg_base, retired->slots);
     desc->slots_len = retired->num_slots;
     desc->key_arena_offset = infmon_stats_offset_of(seg_base, retired->key_arena);
