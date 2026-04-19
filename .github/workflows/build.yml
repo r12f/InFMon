@@ -1,0 +1,74 @@
+name: build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-build:
+    name: build-rust
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build-arm64
+
+      - name: Detect Cargo workspace
+        id: detect_rust
+        run: |
+          if [ -f Cargo.toml ]; then
+            echo "have_workspace=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_workspace=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Cargo.toml at repo root yet; Rust build is a no-op."
+          fi
+
+      - name: cargo build (release)
+        if: steps.detect_rust.outputs.have_workspace == 'true'
+        run: cargo build --workspace --release --locked
+
+  cpp-build:
+    name: build-cpp
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: ghcr.io/r12f/infmon-vpp-dev:24.10
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect backend source
+        id: detect_cpp
+        run: |
+          if [ -f src/backend/CMakeLists.txt ]; then
+            echo "have_backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_backend=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::src/backend/CMakeLists.txt not present yet; C++ build is a no-op."
+          fi
+
+      - name: Configure + build
+        if: steps.detect_cpp.outputs.have_backend == 'true'
+        run: |
+          cmake -S src/backend -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
