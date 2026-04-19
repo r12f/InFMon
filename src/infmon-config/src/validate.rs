@@ -58,7 +58,11 @@ pub enum ValidationError {
     #[error("exporter '{name}': queue_depth must be >= 1")]
     ZeroQueueDepth { name: String },
     #[error("exporter '{name}': queue_depth {depth} exceeds maximum {max}")]
-    QueueDepthTooLarge { name: String, depth: usize, max: usize },
+    QueueDepthTooLarge {
+        name: String,
+        depth: usize,
+        max: usize,
+    },
     #[error("exporter '{name}': invalid export_timeout format: {value:?}")]
     InvalidExportTimeout { name: String, value: String },
     #[error("exporter '{name}': unknown on_overflow policy '{policy}' (valid: {valid})")]
@@ -241,7 +245,7 @@ pub fn validate_exporter(entry: &ExporterEntry, index: usize) -> Result<(), Vali
             .extra
             .get("endpoint")
             .and_then(|v| v.as_str())
-            .map_or(false, |s| !s.is_empty());
+            .is_some_and(|s| !s.is_empty());
         if !has_endpoint {
             return Err(ValidationError::MissingOtlpEndpoint {
                 name: entry.name.clone(),
