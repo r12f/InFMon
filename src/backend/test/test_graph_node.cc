@@ -330,7 +330,7 @@ TEST(ExtractFlowFields, UnknownAfRejected)
     inner[14] = 0x45;
 
     infmon_parsed_packet_t parsed{};
-    parsed.mirror_src_ip.family = (infmon_af_t)99;
+    parsed.mirror_src_ip.family = (infmon_af_t) 99;
 
     infmon_flow_fields_t out{};
     EXPECT_FALSE(infmon_extract_flow_fields(&parsed, inner, sizeof(inner), &out));

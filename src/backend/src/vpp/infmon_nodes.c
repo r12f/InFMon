@@ -86,7 +86,7 @@ static uword infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *n
                 b->current_length = dr.inner_len;
 
                 /* Stash mirror_src_ip in buffer opaque for flow-match node */
-                infmon_buffer_opaque_t *op = (infmon_buffer_opaque_t *)vlib_buffer_get_opaque2(b);
+                infmon_buffer_opaque_t *op = (infmon_buffer_opaque_t *) vlib_buffer_get_opaque2(b);
                 op->mirror_src_ip = dr.parsed.mirror_src_ip;
 
                 to_next_match[0] = bi;
@@ -138,7 +138,7 @@ static uword infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *n
             b->current_length = dr.inner_len;
 
             /* Stash mirror_src_ip in buffer opaque for flow-match node */
-            infmon_buffer_opaque_t *op = (infmon_buffer_opaque_t *)vlib_buffer_get_opaque2(b);
+            infmon_buffer_opaque_t *op = (infmon_buffer_opaque_t *) vlib_buffer_get_opaque2(b);
             op->mirror_src_ip = dr.parsed.mirror_src_ip;
 
             to_next_match[0] = bi;
@@ -182,7 +182,7 @@ VLIB_REGISTER_NODE(infmon_erspan_decap_node) = {
     .vector_size = sizeof(u32),
     .format_trace = format_infmon_erspan_decap_trace,
     .type = VLIB_NODE_TYPE_INTERNAL,
-    .n_errors = INFMON_NODE_ERR__COUNT,    /* shared enum; unused counters read zero */
+    .n_errors = INFMON_NODE_ERR__COUNT,         /* shared enum; unused counters read zero */
     .error_strings = infmon_node_error_strings, /* per-node subsets deferred to v2 */
     .n_next_nodes = INFMON_ERSPAN_DECAP_NEXT__COUNT,
     .next_nodes =
@@ -222,7 +222,7 @@ static uword infmon_flow_match_node_fn(vlib_main_t *vm, vlib_node_runtime_t *nod
         const uint8_t *inner = vlib_buffer_get_current(b);
         uint32_t inner_len = b->current_length;
 
-        infmon_buffer_opaque_t *op = (infmon_buffer_opaque_t *)vlib_buffer_get_opaque2(b);
+        infmon_buffer_opaque_t *op = (infmon_buffer_opaque_t *) vlib_buffer_get_opaque2(b);
         infmon_parsed_packet_t parsed_pkt;
         memset(&parsed_pkt, 0, sizeof(parsed_pkt));
         parsed_pkt.mirror_src_ip = op->mirror_src_ip;

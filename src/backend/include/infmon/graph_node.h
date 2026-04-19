@@ -115,11 +115,11 @@ typedef struct {
  * key buffer).
  */
 typedef struct {
-    uint32_t flow_rule_index; /*  0: index into flow_rule vector */
-    uint16_t key_len;         /*  4: length of key blob in bytes */
-    uint16_t _pad;            /*  6: alignment padding           */
-    uint64_t key_hash;        /*  8: full 64-bit hash            */
-    const uint8_t *key_ptr;   /* 16: pointer to key blob         */
+    uint32_t flow_rule_index;             /*  0: index into flow_rule vector */
+    uint16_t key_len;                     /*  4: length of key blob in bytes */
+    uint16_t _pad;                        /*  6: alignment padding           */
+    uint64_t key_hash;                    /*  8: full 64-bit hash            */
+    const uint8_t *key_ptr;               /* 16: pointer to key blob         */
     uint8_t key_data[INFMON_KEY_BUF_MAX]; /* per-entry key copy  */
 } infmon_scratch_entry_t;
 
