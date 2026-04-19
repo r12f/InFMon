@@ -33,7 +33,7 @@ void infmon_snapshot_mgr_init(infmon_snapshot_mgr_t *mgr, uint32_t num_workers, 
     mgr->num_workers = num_workers;
     mgr->global_epoch = 0;
     mgr->retired_count = 0;
-    mgr->grace_ns = (grace_ns > 0) ? grace_ns : INFMON_RETIRE_GRACE_NS;
+    mgr->grace_ns = grace_ns;
     mgr->clock_ns = clock_ns ? clock_ns : default_clock_ns;
 }
 
