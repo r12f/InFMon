@@ -11,14 +11,20 @@ path = "src/main.rs"
 
 [dependencies]
 env_logger = "0.11"
+hostname = "0.4"
 infmon-config = { path = "../infmon-config" }
 infmon-ipc = { path = "../infmon-ipc", default-features = false }
 inventory = "0.3"
 libc = "0.2"
 log = "0.4"
+# NOTE: opentelemetry-proto 0.27 with gen-tonic-messages requires tonic 0.12.
+# Upgrading either crate independently may cause compile errors — always upgrade together.
+opentelemetry-proto = { version = "0.27", features = ["gen-tonic-messages", "metrics"] }
 serde_yaml = "0.9"
 signal-hook = "0.3"
 tokio = { version = "1", features = ["rt", "time"] }
+tonic = "0.12"
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 tempfile = "3"
