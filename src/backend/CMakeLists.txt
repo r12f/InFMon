@@ -63,6 +63,20 @@ target_link_libraries(test_counter_table PRIVATE infmon_counter_table GTest::gte
 target_include_directories(test_counter_table PRIVATE include)
 add_test(NAME counter_table COMMAND test_counter_table)
 
+# --- Snapshot library (atomic table swap + epoch-based RCU) ---
+add_library(infmon_snapshot STATIC
+    src/snapshot.c
+)
+target_include_directories(infmon_snapshot PUBLIC include)
+target_link_libraries(infmon_snapshot PUBLIC infmon_counter_table)
+
+add_executable(test_snapshot
+    test/test_snapshot.cc
+)
+target_link_libraries(test_snapshot PRIVATE infmon_snapshot infmon_counter_table GTest::gtest GTest::gtest_main pthread)
+target_include_directories(test_snapshot PRIVATE include)
+add_test(NAME snapshot COMMAND test_snapshot)
+
 if(ENABLE_FUZZER)
     add_executable(fuzz_erspan_parser
         test/fuzz_erspan_parser.cc
