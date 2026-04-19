@@ -1,6 +1,5 @@
 use std::fmt;
 use std::net::IpAddr;
-use std::sync::Arc;
 
 /// Identifies a flow rule (128-bit UUID from the backend)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -39,7 +38,9 @@ pub enum FieldValue {
 pub struct FlowCounters {
     pub packets: u64,
     pub bytes: u64,
+    /// Monotonic nanoseconds (same clock as `FlowStatsSnapshot::monotonic_ns`)
     pub first_seen_ns: u64,
+    /// Monotonic nanoseconds (same clock as `FlowStatsSnapshot::monotonic_ns`)
     pub last_seen_ns: u64,
 }
 
@@ -62,8 +63,8 @@ pub struct FlowRuleCounters {
 /// Stats for one flow rule in a snapshot
 #[derive(Debug, Clone)]
 pub struct FlowRuleStats {
-    pub name: Arc<str>,
-    pub fields: Arc<[FieldId]>,
+    pub name: String,
+    pub fields: Vec<FieldId>,
     pub flows: Vec<FlowStats>,
     pub counters: FlowRuleCounters,
 }

@@ -34,55 +34,37 @@ impl InFMonControlClient {
     /// Add a flow rule to the backend.
     pub async fn flow_rule_add(&self, def: FlowRuleDef) -> Result<FlowRuleId, CtlError> {
         let _ = (&self.socket_path, &def);
-        Err(CtlError::Connect(std::io::Error::new(
-            std::io::ErrorKind::NotConnected,
-            "not connected to backend (stub)",
-        )))
+Err(CtlError::Request("not implemented (stub)".into()))
     }
 
     /// Remove a flow rule by name.
     pub async fn flow_rule_rm(&self, name: &str) -> Result<(), CtlError> {
         let _ = (&self.socket_path, name);
-        Err(CtlError::Connect(std::io::Error::new(
-            std::io::ErrorKind::NotConnected,
-            "not connected to backend (stub)",
-        )))
+Err(CtlError::Request("not implemented (stub)".into()))
     }
 
     /// List all flow rules.
     pub async fn flow_rule_list(&self) -> Result<Vec<FlowRuleDef>, CtlError> {
         let _ = &self.socket_path;
-        Err(CtlError::Connect(std::io::Error::new(
-            std::io::ErrorKind::NotConnected,
-            "not connected to backend (stub)",
-        )))
+Err(CtlError::Request("not implemented (stub)".into()))
     }
 
     /// Show detailed stats for one flow rule.
     pub async fn flow_rule_show(&self, name: &str) -> Result<FlowRuleStats, CtlError> {
         let _ = (&self.socket_path, name);
-        Err(CtlError::Connect(std::io::Error::new(
-            std::io::ErrorKind::NotConnected,
-            "not connected to backend (stub)",
-        )))
+Err(CtlError::Request("not implemented (stub)".into()))
     }
 
     /// Trigger a config reload on the frontend.
     pub async fn reload(&self) -> Result<(), CtlError> {
         let _ = &self.socket_path;
-        Err(CtlError::Connect(std::io::Error::new(
-            std::io::ErrorKind::NotConnected,
-            "not connected to backend (stub)",
-        )))
+Err(CtlError::Request("not implemented (stub)".into()))
     }
 
     /// List all exporters and their status.
     pub async fn exporter_list(&self) -> Result<Vec<ExporterStatus>, CtlError> {
         let _ = &self.socket_path;
-        Err(CtlError::Connect(std::io::Error::new(
-            std::io::ErrorKind::NotConnected,
-            "not connected to backend (stub)",
-        )))
+Err(CtlError::Request("not implemented (stub)".into()))
     }
 
     /// Path to the control socket.
