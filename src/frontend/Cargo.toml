@@ -7,8 +7,10 @@ license = "Apache-2.0"
 
 [dependencies]
 infmon-ipc = { path = "../infmon-ipc", default-features = false }
+inventory = "0.3"
 libc = "0.2"
 log = "0.4"
+tokio = { version = "1", features = ["rt", "time"] }
 
 [dev-dependencies]
 tempfile = "3"
