@@ -260,21 +260,19 @@ The `[[exporter]]` blocks in §5 are matched to registrations by
 ### 6.2 Crate layout
 
 ```text
-src/frontend/
-├── src/
-│   ├── core/             # tick loop, lifecycle, FlowStatsSnapshot
-│   ├── exporter/         # Exporter trait, registration, dispatch
-│   ├── ipc/              # shared with infmon-cli (Spec 007)
-│   └── bin/              # main(), config loading, signal wiring
-└── exporters/
-    └── otlp/             # the v1 exporter (Spec 006)
+src/frontend/src/
+├── core/                 # tick loop, lifecycle, FlowStatsSnapshot
+├── exporters/            # Exporter trait, registration, dispatch
+│   └── otlp/             # the v1 exporter (Spec 006)
+├── ipc/                  # shared with infmon-cli (Spec 007)
+└── bin/                  # main(), config loading, signal wiring
 ```
 
 Directory names are short (`core/`, `exporter/`, etc.) but Cargo crate
 names use an `infmon-` prefix (e.g. `infmon-core`, `infmon-exporter`)
 to avoid workspace-level collisions.
 
-Adding an exporter is: new crate under `src/frontend/exporters/`, depend on
+Adding an exporter is: new crate under `src/frontend/src/exporters/`, depend on
 `exporter`, `inventory::submit!` a registration, declare the
 crate as a dep of `bin`. No changes to the loop or the trait.
 
