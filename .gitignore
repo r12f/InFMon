@@ -49,6 +49,7 @@ Cargo.lock.bak
 build/
 build-*/
 cmake-build-*/
+fuzz-corpus/
 CMakeCache.txt
 CMakeFiles/
 CMakeScripts/

@@ -24,3 +24,25 @@ add_executable(test_erspan_parser
 target_link_libraries(test_erspan_parser PRIVATE infmon_parser GTest::gtest GTest::gtest_main)
 target_include_directories(test_erspan_parser PRIVATE include)
 add_test(NAME erspan_parser COMMAND test_erspan_parser)
+
+# --- Golden PCAP tests ---
+add_executable(test_erspan_pcap
+    test/test_erspan_pcap.cc
+)
+target_link_libraries(test_erspan_pcap PRIVATE infmon_parser GTest::gtest GTest::gtest_main)
+target_include_directories(test_erspan_pcap PRIVATE include)
+target_compile_definitions(test_erspan_pcap PRIVATE
+    PCAP_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/../../tests/pcaps/erspan\")
+add_test(NAME erspan_pcap COMMAND test_erspan_pcap)
+
+# --- Fuzz target (clang only, requires -fsanitize=fuzzer) ---
+option(ENABLE_FUZZER "Build libFuzzer targets (requires clang)" OFF)
+if(ENABLE_FUZZER)
+    add_executable(fuzz_erspan_parser
+        test/fuzz_erspan_parser.cc
+    )
+    target_link_libraries(fuzz_erspan_parser PRIVATE infmon_parser)
+    target_include_directories(fuzz_erspan_parser PRIVATE include)
+    target_compile_options(fuzz_erspan_parser PRIVATE -fsanitize=fuzzer,address,undefined)
+    target_link_options(fuzz_erspan_parser PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()
