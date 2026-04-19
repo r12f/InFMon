@@ -22,7 +22,8 @@ static infmon_flow_rule_id_t make_id(uint64_t hi, uint64_t lo)
     return id;
 }
 
-class StatsSegmentTest : public ::testing::Test {
+class StatsSegmentTest : public ::testing::Test
+{
   protected:
     infmon_stats_registry_t reg;
     infmon_counter_table_t *table1 = nullptr;
@@ -217,8 +218,8 @@ TEST_F(StatsSegmentTest, OffsetsAreRelativeToBase)
     /* Resolve back and verify we get the original pointers */
     void *resolved_slots = infmon_stats_resolve(fake_base, d->slots_offset);
     void *resolved_arena = infmon_stats_resolve(fake_base, d->key_arena_offset);
-    EXPECT_EQ(resolved_slots, (void *)table1->slots);
-    EXPECT_EQ(resolved_arena, (void *)table1->key_arena);
+    EXPECT_EQ(resolved_slots, (void *) table1->slots);
+    EXPECT_EQ(resolved_arena, (void *) table1->key_arena);
 
     infmon_stats_registry_destroy(&reg2);
 }
@@ -267,6 +268,37 @@ TEST_F(StatsSegmentTest, SlotReuseAfterUnpublish)
     auto new_id = make_id(999, 999);
     EXPECT_EQ(infmon_stats_publish(&reg, table1, new_id, 0), INFMON_STATS_OK);
     EXPECT_EQ(infmon_stats_count(&reg), INFMON_STATS_MAX_DESCRIPTORS);
+}
+
+/* ── Negative tests for NULL args ────────────────────────────────── */
+
+TEST_F(StatsSegmentTest, RefreshNullTable)
+{
+    auto id = make_id(0xAA, 0xBB);
+    EXPECT_EQ(infmon_stats_publish(&reg, table1, id, 0), INFMON_STATS_OK);
+    EXPECT_EQ(infmon_stats_refresh(&reg, id, 1, nullptr), INFMON_STATS_ERR_INVALID_ARG);
+}
+
+TEST_F(StatsSegmentTest, CountNullRegistry)
+{
+    EXPECT_EQ(infmon_stats_count(nullptr), 0u);
+}
+
+TEST_F(StatsSegmentTest, GetNullRegistry)
+{
+    EXPECT_EQ(infmon_stats_get(nullptr, 0), nullptr);
+}
+
+TEST_F(StatsSegmentTest, FindNullRegistry)
+{
+    auto id = make_id(1, 1);
+    EXPECT_EQ(infmon_stats_find(nullptr, id, 0), nullptr);
+}
+
+TEST_F(StatsSegmentTest, FindLatestNullRegistry)
+{
+    auto id = make_id(1, 1);
+    EXPECT_EQ(infmon_stats_find_latest(nullptr, id), nullptr);
 }
 
 /* ── flow_rule_id helpers ────────────────────────────────────────── */

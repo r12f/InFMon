@@ -24,7 +24,7 @@ void infmon_stats_registry_destroy(infmon_stats_registry_t *reg)
     if (!reg)
         return;
     for (uint32_t i = 0; i < INFMON_STATS_MAX_DESCRIPTORS; i++)
-        reg->descriptors[i].active = false;
+        __atomic_store_n(&reg->descriptors[i].active, 0, __ATOMIC_RELEASE);
     reg->count = 0;
 }
 
@@ -53,7 +53,11 @@ infmon_stats_result_t infmon_stats_publish(infmon_stats_registry_t *reg,
             d->generation = table->generation;
             d->epoch_ns = table->epoch_ns;
 
-            /* Compute offsets relative to segment base */
+            /* Compute offsets relative to segment base.
+             * infmon_stats_offset_of asserts ptr != NULL; table->slots
+             * and table->key_arena are guaranteed non-NULL by
+             * infmon_counter_table_create (allocation failure returns NULL
+             * table, caught by the NULL-table check above). */
             d->slots_offset = infmon_stats_offset_of(reg->segment_base, table->slots);
             d->slots_len = table->num_slots;
             d->key_arena_offset = infmon_stats_offset_of(reg->segment_base, table->key_arena);
@@ -63,7 +67,7 @@ infmon_stats_result_t infmon_stats_publish(infmon_stats_registry_t *reg,
             d->table_full = table->table_full;
 
             /* Publish with release semantics so readers see all fields */
-            __atomic_store_n(&d->active, true, __ATOMIC_RELEASE);
+            __atomic_store_n(&d->active, 1, __ATOMIC_RELEASE);
             reg->count++;
             return INFMON_STATS_OK;
         }
@@ -86,7 +90,7 @@ infmon_stats_result_t infmon_stats_unpublish(infmon_stats_registry_t *reg,
         infmon_stats_descriptor_t *d = &reg->descriptors[i];
         if (d->active && infmon_flow_rule_id_eq(d->flow_rule_id, flow_rule_id) &&
             d->generation == generation) {
-            __atomic_store_n(&d->active, false, __ATOMIC_RELEASE);
+            __atomic_store_n(&d->active, 0, __ATOMIC_RELEASE);
             reg->count--;
             return INFMON_STATS_OK;
         }
@@ -104,7 +108,7 @@ uint32_t infmon_stats_unpublish_all(infmon_stats_registry_t *reg,
     for (uint32_t i = 0; i < INFMON_STATS_MAX_DESCRIPTORS; i++) {
         infmon_stats_descriptor_t *d = &reg->descriptors[i];
         if (d->active && infmon_flow_rule_id_eq(d->flow_rule_id, flow_rule_id)) {
-            __atomic_store_n(&d->active, false, __ATOMIC_RELEASE);
+            __atomic_store_n(&d->active, 0, __ATOMIC_RELEASE);
             reg->count--;
             removed++;
         }
@@ -115,8 +119,7 @@ uint32_t infmon_stats_unpublish_all(infmon_stats_registry_t *reg,
 /* ── Refresh ─────────────────────────────────────────────────────── */
 
 infmon_stats_result_t infmon_stats_refresh(infmon_stats_registry_t *reg,
-                                           infmon_flow_rule_id_t flow_rule_id,
-                                           uint64_t generation,
+                                           infmon_flow_rule_id_t flow_rule_id, uint64_t generation,
                                            const infmon_counter_table_t *table)
 {
     if (!reg || !table)
@@ -126,8 +129,15 @@ infmon_stats_result_t infmon_stats_refresh(infmon_stats_registry_t *reg,
         infmon_stats_descriptor_t *d = &reg->descriptors[i];
         if (d->active && infmon_flow_rule_id_eq(d->flow_rule_id, flow_rule_id) &&
             d->generation == generation) {
-            /* Update mutable fields.  These are read by the frontend with
-             * acquire loads; we write with release for visibility. */
+            /* Update mutable fields with release stores.
+             *
+             * Note: three separate atomic stores means a reader may see a
+             * partially updated snapshot (e.g. new insert_failed but old
+             * key_arena_used).  This is acceptable for stats: readers get
+             * eventually-consistent values and never see torn 32/64-bit
+             * words.  If consistent snapshots become required, add a
+             * sequence counter (bump before/after, reader retries on
+             * mismatch). */
             __atomic_store_n(&d->key_arena_used, table->key_arena_used, __ATOMIC_RELEASE);
             __atomic_store_n(&d->insert_failed, table->insert_failed, __ATOMIC_RELEASE);
             __atomic_store_n(&d->table_full, table->table_full, __ATOMIC_RELEASE);
@@ -140,8 +150,8 @@ infmon_stats_result_t infmon_stats_refresh(infmon_stats_registry_t *reg,
 /* ── Queries ─────────────────────────────────────────────────────── */
 
 const infmon_stats_descriptor_t *infmon_stats_find(const infmon_stats_registry_t *reg,
-                                                    infmon_flow_rule_id_t flow_rule_id,
-                                                    uint64_t generation)
+                                                   infmon_flow_rule_id_t flow_rule_id,
+                                                   uint64_t generation)
 {
     if (!reg)
         return NULL;
@@ -156,7 +166,7 @@ const infmon_stats_descriptor_t *infmon_stats_find(const infmon_stats_registry_t
 }
 
 const infmon_stats_descriptor_t *infmon_stats_find_latest(const infmon_stats_registry_t *reg,
-                                                           infmon_flow_rule_id_t flow_rule_id)
+                                                          infmon_flow_rule_id_t flow_rule_id)
 {
     if (!reg)
         return NULL;
@@ -178,7 +188,7 @@ uint32_t infmon_stats_count(const infmon_stats_registry_t *reg)
 }
 
 const infmon_stats_descriptor_t *infmon_stats_get(const infmon_stats_registry_t *reg,
-                                                   uint32_t index)
+                                                  uint32_t index)
 {
     if (!reg)
         return NULL;

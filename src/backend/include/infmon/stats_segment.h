@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <assert.h>
 
 #include "infmon/counter_table.h"
 
@@ -42,6 +43,8 @@ static inline bool infmon_flow_rule_id_eq(infmon_flow_rule_id_t a, infmon_flow_r
     return a.hi == b.hi && a.lo == b.lo;
 }
 
+/* Used by future flow_rule lifecycle management (publish-if-nonzero guard). */
+static inline bool infmon_flow_rule_id_is_zero(infmon_flow_rule_id_t id) __attribute__((unused));
 static inline bool infmon_flow_rule_id_is_zero(infmon_flow_rule_id_t id)
 {
     return id.hi == 0 && id.lo == 0;
@@ -77,9 +80,13 @@ typedef struct {
     uint32_t key_arena_used;            /* 68: high-water mark (bump head) */
     uint64_t insert_failed;             /* 72: cumulative */
     uint64_t table_full;                /* 80: cumulative */
-    bool active;                        /* 88: true if this descriptor is live */
+    uint8_t active;                     /* 88: 1 if this descriptor is live (uint8_t for
+                                         *     guaranteed 1-byte layout in shared memory) */
     uint8_t _pad2[7];                   /* 89: pad to 96 B total */
 } infmon_stats_descriptor_t;
+
+_Static_assert(sizeof(infmon_stats_descriptor_t) == 96,
+               "descriptor must be exactly 96 bytes for shared-memory layout stability");
 
 /* ── Stats-segment registry ──────────────────────────────────────── */
 
@@ -102,6 +109,13 @@ typedef struct {
      * to a known base and compute offsets relative to it.
      */
     uintptr_t segment_base;
+
+    /**
+     * Total size (bytes) of the stats segment.  Used by checked resolve
+     * helpers for bounds validation.  Set to 0 to disable bounds checks
+     * (e.g. in unit tests where the segment is simulated).
+     */
+    uint64_t segment_size;
 } infmon_stats_registry_t;
 
 /* ── Result codes ────────────────────────────────────────────────── */
@@ -173,8 +187,7 @@ uint32_t infmon_stats_unpublish_all(infmon_stats_registry_t *reg,
  * @return INFMON_STATS_OK or INFMON_STATS_ERR_NOT_FOUND.
  */
 infmon_stats_result_t infmon_stats_refresh(infmon_stats_registry_t *reg,
-                                           infmon_flow_rule_id_t flow_rule_id,
-                                           uint64_t generation,
+                                           infmon_flow_rule_id_t flow_rule_id, uint64_t generation,
                                            const infmon_counter_table_t *table);
 
 /* ── Queries ─────────────────────────────────────────────────────── */
@@ -185,8 +198,8 @@ infmon_stats_result_t infmon_stats_refresh(infmon_stats_registry_t *reg,
  * @return Pointer to the descriptor, or NULL if not found.
  */
 const infmon_stats_descriptor_t *infmon_stats_find(const infmon_stats_registry_t *reg,
-                                                    infmon_flow_rule_id_t flow_rule_id,
-                                                    uint64_t generation);
+                                                   infmon_flow_rule_id_t flow_rule_id,
+                                                   uint64_t generation);
 
 /**
  * Find the latest-generation descriptor for a given flow_rule_id.
@@ -194,7 +207,7 @@ const infmon_stats_descriptor_t *infmon_stats_find(const infmon_stats_registry_t
  * @return Pointer to the descriptor with the highest generation, or NULL.
  */
 const infmon_stats_descriptor_t *infmon_stats_find_latest(const infmon_stats_registry_t *reg,
-                                                           infmon_flow_rule_id_t flow_rule_id);
+                                                          infmon_flow_rule_id_t flow_rule_id);
 
 /**
  * Get the number of active descriptors in the registry.
@@ -207,8 +220,14 @@ uint32_t infmon_stats_count(const infmon_stats_registry_t *reg);
  * Iterates only over active descriptors; index is 0-based in the
  * active set.  Returns NULL if index >= active count.
  */
+/**
+ * Note: infmon_stats_get performs a linear scan to find the Nth active
+ * descriptor, so full enumeration via for(i=0;i<count;i++) get(reg,i)
+ * is O(count × MAX_DESCRIPTORS).  With MAX_DESCRIPTORS=128 this is
+ * acceptable; if the limit grows, consider adding an iterator API.
+ */
 const infmon_stats_descriptor_t *infmon_stats_get(const infmon_stats_registry_t *reg,
-                                                   uint32_t index);
+                                                  uint32_t index);
 
 /* ── Frontend-side helpers ───────────────────────────────────────── */
 
@@ -217,7 +236,7 @@ const infmon_stats_descriptor_t *infmon_stats_get(const infmon_stats_registry_t 
  */
 static inline void *infmon_stats_resolve(uintptr_t segment_base, uint64_t offset)
 {
-    return (void *)(segment_base + offset);
+    return (void *) (segment_base + offset);
 }
 
 /**
@@ -225,7 +244,10 @@ static inline void *infmon_stats_resolve(uintptr_t segment_base, uint64_t offset
  */
 static inline uint64_t infmon_stats_offset_of(uintptr_t segment_base, const void *ptr)
 {
-    return (uint64_t)((uintptr_t)ptr - segment_base);
+    assert(ptr != NULL && "infmon_stats_offset_of: ptr must not be NULL");
+    assert((uintptr_t) ptr >= segment_base &&
+           "infmon_stats_offset_of: ptr must be >= segment_base (unsigned underflow)");
+    return (uint64_t) ((uintptr_t) ptr - segment_base);
 }
 
 #ifdef __cplusplus
