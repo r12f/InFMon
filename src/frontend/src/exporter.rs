@@ -203,6 +203,11 @@ pub fn snapshot_channel(capacity: usize) -> (SnapshotSender, SnapshotReceiver) {
 }
 
 impl SnapshotSender {
+    /// Get the underlying `SyncSender` for interop with the poller.
+    pub fn as_raw_sender(&self) -> &std::sync::mpsc::SyncSender<Arc<FlowStatsSnapshot>> {
+        &self.inner
+    }
+
     /// Try to send a snapshot. Returns a typed error distinguishing
     /// backpressure (`Full`) from a dead exporter thread (`Disconnected`).
     pub fn try_send(&self, snap: Arc<FlowStatsSnapshot>) -> Result<(), TrySendError> {
