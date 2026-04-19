@@ -75,7 +75,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
               cmake ninja-build g++ ccache pkg-config \
-              vpp-dev=24.06* libvppinfra-dev=24.06*
+              vpp-dev=24.10* libvppinfra-dev=24.10*
 
       - name: Detect backend source
         id: detect_cpp
