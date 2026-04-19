@@ -41,8 +41,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Symlink packaging/debian → debian for dpkg tools
-        run: ln -s packaging/debian debian
+      - name: Copy packaging/debian → debian for dpkg tools
+        # dpkg tools expect debian/ at the source root. Our packaging
+        # files live under packaging/debian/, so we copy them.
+        # A symlink doesn't work — dpkg-source's V2 format handler
+        # requires a real directory.
+        run: cp -a packaging/debian debian
 
       - name: Validate debian/changelog is in sync with CHANGELOG.md
         run: python3 packaging/tools/sync-debian-changelog.py --check
