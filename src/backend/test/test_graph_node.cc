@@ -69,7 +69,7 @@ TEST(FlowMatch, SingleRuleSingleMatch)
     infmon_scratch_t scratch{};
     uint8_t key_buf[INFMON_KEY_BUF_MAX]{};
 
-    uint32_t m = infmon_flow_match(&rule, 1, &ff, &scratch, key_buf);
+    uint32_t m = infmon_flow_match(&rule, 1, &ff, &scratch, key_buf, 1500);
     EXPECT_EQ(m, 1u);
     EXPECT_EQ(scratch.count, 1u);
     EXPECT_EQ(scratch.entries[0].flow_rule_index, 0u);
@@ -184,7 +184,7 @@ TEST(CounterUpdate, UpdatesCounterTable)
     tables[0] = table;
 
     uint64_t retry = 0, full = 0;
-    infmon_counter_update(&scratch, tables, 100, 1, &retry, &full);
+    infmon_counter_update(&scratch, tables, 100, &retry, &full);
 
     EXPECT_EQ(retry, 0u);
     EXPECT_EQ(full, 0u);

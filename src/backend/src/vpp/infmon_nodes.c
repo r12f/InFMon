@@ -233,8 +233,7 @@ static uword infmon_flow_match_node_fn(vlib_main_t *vm, vlib_node_runtime_t *nod
         uint32_t matches = 0;
         if (extracted && rules && rule_count > 0) {
             matches = infmon_flow_match(rules, rule_count, &fields, &infmon_tls_scratch,
-                                        infmon_tls_key_buf,
-                                        vlib_buffer_length_in_chain(vm, b));
+                                        infmon_tls_key_buf, vlib_buffer_length_in_chain(vm, b));
         }
 
         if (matches > 0) {
@@ -311,8 +310,7 @@ static uword infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node, 
     }
 
     /* Update counters once for the entire scratch vector */
-    infmon_counter_update(&infmon_tls_scratch, tables, tick, &insert_retry,
-                          &table_full);
+    infmon_counter_update(&infmon_tls_scratch, tables, tick, &insert_retry, &table_full);
 
     node->errors[INFMON_NODE_ERR_COUNTER_INSERT_RETRY_EXHAUSTED] += insert_retry;
     node->errors[INFMON_NODE_ERR_COUNTER_TABLE_FULL] += table_full;

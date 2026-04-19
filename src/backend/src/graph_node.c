@@ -216,8 +216,8 @@ void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table
         if (e->key_len == 0)
             continue; /* safety: skip entries with no key width */
 
-        bool ok = infmon_counter_table_update(table, e->key_hash, e->key_ptr, e->key_len, e->pkt_bytes,
-                                              tick);
+        bool ok = infmon_counter_table_update(table, e->key_hash, e->key_ptr, e->key_len,
+                                              e->pkt_bytes, tick);
 
         if (!ok) {
             /* Distinguish: table full vs CAS exhausted.  Note: reading

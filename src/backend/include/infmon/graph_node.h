@@ -207,7 +207,8 @@ uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
  * @param insert_retry_exhausted  Incremented for each CAS-exhausted update.
  * @param table_full_count        Incremented for each table-full update.
  */
-void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table_t **tables, uint64_t tick, uint64_t *insert_retry_exhausted,
+void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table_t **tables,
+                           uint64_t tick, uint64_t *insert_retry_exhausted,
                            uint64_t *table_full_count);
 
 /* ── Scratch vector helpers ──────────────────────────────────────── */
