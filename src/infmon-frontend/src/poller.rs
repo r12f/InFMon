@@ -53,8 +53,7 @@ impl PollerHandle {
 
     /// Internal: signal stop and join the thread.
     fn shutdown(&mut self) {
-        self.stop
-            .store(true, std::sync::atomic::Ordering::Release);
+        self.stop.store(true, std::sync::atomic::Ordering::Release);
         if let Some(h) = self.join.take() {
             let _ = h.join();
         }
@@ -152,7 +151,11 @@ fn decode_snapshot(
     use infmon_ipc::decode::decode_key;
     use infmon_ipc::types::*;
 
-    let interval_ns = if tick_id == 1 { 0 } else { mono - prev_mono };
+    let interval_ns = if tick_id == 1 || prev_mono == 0 {
+        0
+    } else {
+        mono - prev_mono
+    };
 
     let flow_rules = raw
         .descriptors
