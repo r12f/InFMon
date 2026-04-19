@@ -91,6 +91,23 @@ target_link_libraries(test_stats_segment PRIVATE infmon_stats_segment infmon_cou
 target_include_directories(test_stats_segment PRIVATE include)
 add_test(NAME stats_segment COMMAND test_stats_segment)
 
+# --- VPP API schema (.api -> C header + JSON) ---
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+find_package(VppApiGen)
+vpp_generate_api_header(
+    API_FILE  "${CMAKE_CURRENT_SOURCE_DIR}/api/infmon.api"
+    OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated"
+)
+
+# --- API schema validation test (no VPP dependency) ---
+add_executable(test_api_schema
+    test/test_api_schema.cc
+)
+target_link_libraries(test_api_schema PRIVATE GTest::gtest GTest::gtest_main)
+target_compile_definitions(test_api_schema PRIVATE
+    API_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/api/infmon.api\")
+add_test(NAME api_schema COMMAND test_api_schema)
+
 if(ENABLE_FUZZER)
     add_executable(fuzz_erspan_parser
         test/fuzz_erspan_parser.cc

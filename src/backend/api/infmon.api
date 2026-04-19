@@ -1,0 +1,225 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright 2026 Riff
+ *
+ * InFMon VPP binary API — wire schema for all v1 API messages.
+ * See specs/004-backend-architecture.md §7
+ *
+ * Consumed by vppapigen to produce C headers and Rust bindings.
+ *
+ * Conventions:
+ *   - All messages use client_index + context for VPP API routing.
+ *   - _reply messages carry a standard i32 retval (0 = OK, negative = error).
+ *   - flow_rule_id is a 128-bit UUID represented as two u64 fields (hi, lo).
+ *   - Variable-length key fields use vla (variable length array) at the end.
+ *   - Field widths match the C structs in include/infmon/*.h.
+ */
+
+option version = "1.0.0";
+
+/* ── Enumerations ──────────────────────────────────────────────────── */
+
+/** Flow-rule key field types — mirrors infmon_field_t. */
+enum infmon_field_type : u8
+{
+    INFMON_FIELD_SRC_IP = 0,
+    INFMON_FIELD_DST_IP = 1,
+    INFMON_FIELD_IP_PROTO = 2,
+    INFMON_FIELD_DSCP = 3,
+    INFMON_FIELD_MIRROR_SRC_IP = 4,
+};
+
+/** Eviction policy — mirrors infmon_eviction_policy_t. */
+enum infmon_eviction_policy : u8
+{
+    INFMON_EVICTION_LRU_DROP = 0,
+};
+
+/** Error codes for flow_rule operations. */
+enum infmon_flow_rule_error : i32
+{
+    INFMON_FLOW_RULE_OK = 0,
+    INFMON_FLOW_RULE_ERR_NAME_EXISTS = -1,
+    INFMON_FLOW_RULE_ERR_NOT_FOUND = -2,
+    INFMON_FLOW_RULE_ERR_INVALID_SPEC = -3,
+    INFMON_FLOW_RULE_ERR_BUDGET_EXCEEDED = -4,
+    INFMON_FLOW_RULE_ERR_SET_FULL = -5,
+    INFMON_FLOW_RULE_ERR_INTERNAL = -6,
+};
+
+/** Error codes for snapshot_and_clear. */
+enum infmon_snap_error : i32
+{
+    INFMON_SNAP_OK = 0,
+    INFMON_SNAP_ALLOC_FAILED = -1,
+    INFMON_SNAP_TOO_MANY_RETIRED = -2,
+    INFMON_SNAP_INVALID_INDEX = -3,
+    INFMON_SNAP_NULL_TABLE = -4,
+};
+
+/* ── Type definitions ──────────────────────────────────────────────── */
+
+/** 128-bit flow_rule UUID. */
+typedef infmon_flow_rule_id
+{
+    u64 hi;
+    u64 lo;
+};
+
+/** Descriptor of a counter table (returned by snapshot_and_clear). */
+typedef infmon_table_descriptor
+{
+    u64 flow_rule_id_hi;
+    u64 flow_rule_id_lo;
+    u32 flow_rule_index;
+    u64 generation;
+    u64 epoch_ns;
+    u64 slots_offset;
+    u32 slots_len;
+    u64 key_arena_offset;
+    u32 key_arena_capacity;
+    u32 key_arena_used;
+    u64 insert_failed;
+    u64 table_full;
+};
+
+/** Per-flow-rule summary (used in list/get replies). */
+typedef infmon_flow_rule_details
+{
+    u64 flow_rule_id_hi;
+    u64 flow_rule_id_lo;
+    u32 flow_rule_index;
+    string name[32];       /* NUL-terminated, max 31 chars + NUL */
+    u32 field_count;
+    vl_api_infmon_field_type_t fields[5];
+    u32 max_keys;
+    vl_api_infmon_eviction_policy_t eviction_policy;
+    u32 key_width;
+};
+
+/** Per-worker status counters. */
+typedef infmon_worker_status
+{
+    u32 worker_id;
+    u64 packets_seen;
+    u64 erspan_unknown_proto;
+    u64 erspan_truncated;
+    u64 inner_parse_failed;
+    u64 flow_rule_no_match;
+    u64 counter_insert_retry_exhausted;
+    u64 counter_table_full;
+};
+
+/* ── W10b: infmon_flow_rule_add / infmon_flow_rule_del ─────────────── */
+
+/**
+ * Register a new flow_rule.  Allocates a counter table and returns
+ * the assigned flow_rule_id.
+ */
+autoreply define infmon_flow_rule_add
+{
+    u32 client_index;
+    u32 context;
+    string name[32];
+    u32 field_count;
+    vl_api_infmon_field_type_t fields[5];
+    u32 max_keys;
+    vl_api_infmon_eviction_policy_t eviction_policy;
+};
+
+/**
+ * Reply to infmon_flow_rule_add.
+ * retval: 0 on success, negative infmon_flow_rule_error on failure.
+ * flow_rule_id: the assigned UUID (only valid when retval == 0).
+ */
+define infmon_flow_rule_add_reply
+{
+    u32 context;
+    i32 retval;
+    vl_api_infmon_flow_rule_id_t flow_rule_id;
+};
+
+/**
+ * Tear down a flow_rule and free its counter tables.
+ */
+autoreply define infmon_flow_rule_del
+{
+    u32 client_index;
+    u32 context;
+    vl_api_infmon_flow_rule_id_t flow_rule_id;
+};
+
+/* ── W10c: infmon_flow_rule_list / infmon_flow_rule_get ────────────── */
+
+/**
+ * Enumerate all active flow_rules.
+ * Returns one infmon_flow_rule_list_details per flow_rule.
+ */
+define infmon_flow_rule_list
+{
+    u32 client_index;
+    u32 context;
+};
+
+/** Per-flow_rule detail message (streamed, one per active rule). */
+define infmon_flow_rule_list_details
+{
+    u32 context;
+    vl_api_infmon_flow_rule_details_t flow_rule;
+};
+
+/**
+ * Get the full definition of one flow_rule by its UUID.
+ */
+define infmon_flow_rule_get
+{
+    u32 client_index;
+    u32 context;
+    vl_api_infmon_flow_rule_id_t flow_rule_id;
+};
+
+define infmon_flow_rule_get_reply
+{
+    u32 context;
+    i32 retval;
+    vl_api_infmon_flow_rule_details_t flow_rule;
+};
+
+/* ── W10d: infmon_snapshot_and_clear ──────────────────────────────── */
+
+/**
+ * Atomic table swap for one flow_rule.  Returns the descriptor of the
+ * retired table (generation G) so the caller can walk it at leisure.
+ */
+define infmon_snapshot_and_clear
+{
+    u32 client_index;
+    u32 context;
+    vl_api_infmon_flow_rule_id_t flow_rule_id;
+};
+
+define infmon_snapshot_and_clear_reply
+{
+    u32 context;
+    i32 retval;
+    vl_api_infmon_table_descriptor_t descriptor;
+};
+
+/* ── W10e: infmon_status ─────────────────────────────────────────── */
+
+/**
+ * Retrieve per-worker error/health counters.
+ * Returns one infmon_status_details per worker.
+ */
+define infmon_status
+{
+    u32 client_index;
+    u32 context;
+};
+
+define infmon_status_details
+{
+    u32 context;
+    u32 worker_count;
+    vl_api_infmon_worker_status_t workers[worker_count];
+};
