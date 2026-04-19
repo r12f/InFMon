@@ -65,7 +65,11 @@ impl InFMonStatsClient {
         let rc =
             unsafe { libc::flock(lock_file.as_fd().as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
         if rc != 0 {
-            return Err(IpcError::StatsSegmentBusy);
+            let err = std::io::Error::last_os_error();
+            return match err.raw_os_error() {
+                Some(libc::EWOULDBLOCK) | Some(libc::EAGAIN) => Err(IpcError::StatsSegmentBusy),
+                _ => Err(IpcError::StatsIo(err)),
+            };
         }
 
         Ok(Self {
