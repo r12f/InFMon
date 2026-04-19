@@ -156,7 +156,7 @@ bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed, const uint
 
 uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
                            const infmon_flow_fields_t *fields, infmon_scratch_t *scratch,
-                           uint8_t *key_buf)
+                           uint8_t *key_buf, uint64_t pkt_bytes)
 {
     if (!rules || !fields || !scratch || !key_buf)
         return 0;
@@ -189,6 +189,7 @@ uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
             /* Copy key into per-entry storage to avoid aliasing */
             memcpy(e->key_data, key_buf, kw);
             e->key_ptr = e->key_data;
+            e->pkt_bytes = pkt_bytes;
             matches++;
         }
     }
@@ -199,7 +200,7 @@ uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
 /* ── Counter update ──────────────────────────────────────────────── */
 
 void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table_t **tables,
-                           uint64_t pkt_bytes, uint64_t tick, uint64_t *insert_retry_exhausted,
+                           uint64_t tick, uint64_t *insert_retry_exhausted,
                            uint64_t *table_full_count)
 {
     if (!scratch || !tables)
@@ -215,7 +216,7 @@ void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table
         if (e->key_len == 0)
             continue; /* safety: skip entries with no key width */
 
-        bool ok = infmon_counter_table_update(table, e->key_hash, e->key_ptr, e->key_len, pkt_bytes,
+        bool ok = infmon_counter_table_update(table, e->key_hash, e->key_ptr, e->key_len, e->pkt_bytes,
                                               tick);
 
         if (!ok) {

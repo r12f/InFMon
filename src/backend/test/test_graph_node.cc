@@ -96,7 +96,7 @@ TEST(FlowMatch, MultipleRulesAllMatch)
     infmon_scratch_t scratch{};
     uint8_t key_buf[INFMON_KEY_BUF_MAX]{};
 
-    uint32_t m = infmon_flow_match(rules, 2, &ff, &scratch, key_buf);
+    uint32_t m = infmon_flow_match(rules, 2, &ff, &scratch, key_buf, 100);
     EXPECT_EQ(m, 2u);
     EXPECT_EQ(scratch.count, 2u);
     EXPECT_EQ(scratch.entries[0].flow_rule_index, 0u);
@@ -112,7 +112,7 @@ TEST(FlowMatch, MultipleRulesAllMatch)
 
 TEST(FlowMatch, NullInputsReturnZero)
 {
-    EXPECT_EQ(infmon_flow_match(nullptr, 0, nullptr, nullptr, nullptr), 0u);
+    EXPECT_EQ(infmon_flow_match(nullptr, 0, nullptr, nullptr, nullptr, 0), 0u);
 }
 
 /* ── Flow match — deterministic hashing ─────────────────────────── */
@@ -129,8 +129,8 @@ TEST(FlowMatch, SameInputSameHash)
     infmon_scratch_t s1{}, s2{};
     uint8_t kb1[INFMON_KEY_BUF_MAX]{}, kb2[INFMON_KEY_BUF_MAX]{};
 
-    infmon_flow_match(&rule, 1, &ff, &s1, kb1);
-    infmon_flow_match(&rule, 1, &ff, &s2, kb2);
+    infmon_flow_match(&rule, 1, &ff, &s1, kb1, 100);
+    infmon_flow_match(&rule, 1, &ff, &s2, kb2, 100);
 
     EXPECT_EQ(s1.entries[0].key_hash, s2.entries[0].key_hash);
 }
@@ -151,8 +151,8 @@ TEST(FlowMatch, DifferentInputsDifferentHash)
     infmon_scratch_t s1{}, s2{};
     uint8_t kb1[INFMON_KEY_BUF_MAX]{}, kb2[INFMON_KEY_BUF_MAX]{};
 
-    infmon_flow_match(&rule, 1, &ff1, &s1, kb1);
-    infmon_flow_match(&rule, 1, &ff2, &s2, kb2);
+    infmon_flow_match(&rule, 1, &ff1, &s1, kb1, 100);
+    infmon_flow_match(&rule, 1, &ff2, &s2, kb2, 100);
 
     EXPECT_NE(s1.entries[0].key_hash, s2.entries[0].key_hash);
 }
@@ -176,7 +176,7 @@ TEST(CounterUpdate, UpdatesCounterTable)
     infmon_scratch_t scratch{};
     uint8_t key_buf[INFMON_KEY_BUF_MAX]{};
 
-    infmon_flow_match(&rule, 1, &ff, &scratch, key_buf);
+    infmon_flow_match(&rule, 1, &ff, &scratch, key_buf, 100);
     ASSERT_EQ(scratch.count, 1u);
 
     /* Set up tables array */
@@ -203,7 +203,7 @@ TEST(CounterUpdate, UpdatesCounterTable)
     EXPECT_TRUE(found);
 
     /* Update again — counters should accumulate */
-    infmon_counter_update(&scratch, tables, 200, 2, &retry, &full);
+    infmon_counter_update(&scratch, tables, 2, &retry, &full);
 
     found = false;
     for (uint32_t i = 0; i < table->num_slots; i++) {
@@ -236,7 +236,7 @@ TEST(CounterUpdate, NullTableSkipsGracefully)
     /* tables[0] is null */
 
     uint64_t retry = 0, full = 0;
-    infmon_counter_update(&scratch, tables, 100, 1, &retry, &full);
+    infmon_counter_update(&scratch, tables, 1, &retry, &full);
     /* Should not crash, and no errors */
     EXPECT_EQ(retry, 0u);
     EXPECT_EQ(full, 0u);

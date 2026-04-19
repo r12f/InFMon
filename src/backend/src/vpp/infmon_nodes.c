@@ -233,7 +233,8 @@ static uword infmon_flow_match_node_fn(vlib_main_t *vm, vlib_node_runtime_t *nod
         uint32_t matches = 0;
         if (extracted && rules && rule_count > 0) {
             matches = infmon_flow_match(rules, rule_count, &fields, &infmon_tls_scratch,
-                                        infmon_tls_key_buf);
+                                        infmon_tls_key_buf,
+                                        vlib_buffer_length_in_chain(vm, b));
         }
 
         if (matches > 0) {
@@ -298,11 +299,9 @@ static uword infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node, 
     u32 n_left_next = 0;
     vlib_get_next_frame(vm, node, INFMON_COUNTER_NEXT_DROP, to_next, n_left_next);
 
-    uint64_t total_bytes = 0;
     while (n_left > 0) {
         u32 bi = from[0];
         vlib_buffer_t *b = vlib_get_buffer(vm, bi);
-        total_bytes += vlib_buffer_length_in_chain(vm, b);
 
         to_next[0] = bi;
         to_next++;
@@ -312,7 +311,7 @@ static uword infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node, 
     }
 
     /* Update counters once for the entire scratch vector */
-    infmon_counter_update(&infmon_tls_scratch, tables, total_bytes, tick, &insert_retry,
+    infmon_counter_update(&infmon_tls_scratch, tables, tick, &insert_retry,
                           &table_full);
 
     node->errors[INFMON_NODE_ERR_COUNTER_INSERT_RETRY_EXHAUSTED] += insert_retry;

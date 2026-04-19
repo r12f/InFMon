@@ -119,7 +119,8 @@ typedef struct {
     uint16_t key_len;                     /*  4: length of key blob in bytes */
     uint16_t _pad;                        /*  6: alignment padding           */
     uint64_t key_hash;                    /*  8: full 64-bit hash            */
-    const uint8_t *key_ptr;               /* 16: pointer to key blob         */
+    uint64_t pkt_bytes;                   /* per-packet byte count           */
+    const uint8_t *key_ptr;               /* pointer to key blob             */
     uint8_t key_data[INFMON_KEY_BUF_MAX]; /* per-entry key copy  */
 } infmon_scratch_entry_t;
 
@@ -129,7 +130,7 @@ typedef struct {
  *             = 256 * 64 = 16384
  *
  * Sizing justification: 256 packets/frame x 64 rules = 16384 entries.
- * Each entry is ~88 bytes (with key_data), so ~1.4 MiB per worker.
+ * Each entry is ~96 bytes (with key_data + pkt_bytes), so ~1.5 MiB per worker.
  * With 4 workers that is ~5.6 MiB total TLS -- acceptable for a
  * dedicated appliance where VPP already consumes GiBs of hugepage.
  * A per-packet cap or dynamic allocation can be revisited in v2 if
@@ -193,7 +194,7 @@ bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed, const uint
  */
 uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
                            const infmon_flow_fields_t *fields, infmon_scratch_t *scratch,
-                           uint8_t *key_buf);
+                           uint8_t *key_buf, uint64_t pkt_bytes);
 
 /* ── Counter update (portable) ───────────────────────────────────── */
 
@@ -202,13 +203,11 @@ uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
  *
  * @param scratch   Per-worker scratch vector.
  * @param tables    Array of counter table pointers (indexed by flow_rule_index).
- * @param pkt_bytes Byte count of the packet.
  * @param tick      Current tick for LRU tracking.
  * @param insert_retry_exhausted  Incremented for each CAS-exhausted update.
  * @param table_full_count        Incremented for each table-full update.
  */
-void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table_t **tables,
-                           uint64_t pkt_bytes, uint64_t tick, uint64_t *insert_retry_exhausted,
+void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table_t **tables, uint64_t tick, uint64_t *insert_retry_exhausted,
                            uint64_t *table_full_count);
 
 /* ── Scratch vector helpers ──────────────────────────────────────── */
