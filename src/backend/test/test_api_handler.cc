@@ -11,6 +11,8 @@
 
 extern "C" {
 #include "infmon/api_handler.h"
+#include "infmon/snapshot.h"
+#include "infmon/stats_segment.h"
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
@@ -243,4 +245,182 @@ TEST_F(ApiHandlerTest, ListAfterDeleteReflectsRemoval)
     EXPECT_EQ(idx, 0u);
     ASSERT_NE(found, nullptr);
     EXPECT_STREQ(found->name, "rule_bb");
+}
+
+/* ── W10d: snapshot_and_clear tests ──────────────────────────────── */
+
+static uint64_t fake_clock_val = 1000000000ULL;
+static uint64_t fake_clock_ns(void)
+{
+    return fake_clock_val;
+}
+
+class ApiHandlerSnapTest : public ::testing::Test
+{
+  protected:
+    void SetUp() override
+    {
+        rule_set_ = infmon_flow_rule_set_create(INFMON_FLOW_RULE_MAX_KEYS_BUDGET);
+        ASSERT_NE(rule_set_, nullptr);
+        infmon_stats_registry_init(&stats_reg_, /* segment_base */ 0);
+
+        snap_mgr_ = new infmon_snapshot_mgr_t;
+        infmon_snapshot_mgr_init(snap_mgr_, /* num_workers */ 2, /* grace_ns */ 0, fake_clock_ns);
+
+        infmon_api_ctx_init(&ctx_, rule_set_, &stats_reg_);
+        ctx_.snap_mgr = snap_mgr_;
+    }
+
+    void TearDown() override
+    {
+        infmon_api_ctx_destroy(&ctx_);
+        infmon_snapshot_mgr_destroy(snap_mgr_);
+        delete snap_mgr_;
+        infmon_stats_registry_destroy(&stats_reg_);
+        infmon_flow_rule_set_destroy(rule_set_);
+    }
+
+    /** Helper: add a rule with an explicit ID. */
+    infmon_flow_rule_id_t add_rule_with_id(const char *name, uint64_t hi, uint64_t lo)
+    {
+        infmon_flow_rule_t r = make_rule(name);
+        infmon_flow_rule_id_t id = {hi, lo};
+        EXPECT_EQ(infmon_api_flow_rule_add_with_id(&ctx_, &r, id), INFMON_API_OK);
+        return id;
+    }
+
+    infmon_flow_rule_set_t *rule_set_ = nullptr;
+    infmon_stats_registry_t stats_reg_{};
+    infmon_snapshot_mgr_t *snap_mgr_ = nullptr;
+    infmon_api_ctx_t ctx_{};
+};
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearBasic)
+{
+    infmon_flow_rule_id_t id = add_rule_with_id("snap_rule", 0xAA, 0xBB);
+
+    infmon_api_snap_reply_t reply;
+    infmon_api_snapshot_and_clear(&ctx_, id, &reply);
+
+    EXPECT_EQ(reply.result, INFMON_API_OK);
+    EXPECT_EQ(reply.descriptor.flow_rule_id.hi, 0xAAu);
+    EXPECT_EQ(reply.descriptor.flow_rule_id.lo, 0xBBu);
+    EXPECT_EQ(reply.descriptor.flow_rule_index, 0u);
+    EXPECT_EQ(reply.descriptor.generation, 0u); /* retired table is gen 0 */
+    EXPECT_EQ(reply.descriptor.active, 1u);
+
+    /* New table should be at generation 1. */
+    EXPECT_NE(ctx_.tables[0], nullptr);
+    EXPECT_EQ(ctx_.tables[0]->generation, 1u);
+}
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearNotFoundId)
+{
+    add_rule_with_id("some_rule", 0x11, 0x22);
+
+    infmon_flow_rule_id_t bad_id = {0xFF, 0xFF};
+    infmon_api_snap_reply_t reply;
+    infmon_api_snapshot_and_clear(&ctx_, bad_id, &reply);
+
+    EXPECT_EQ(reply.result, INFMON_API_ERR_NOT_FOUND);
+}
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearNoSnapMgr)
+{
+    ctx_.snap_mgr = nullptr;
+
+    infmon_flow_rule_id_t id = {0x11, 0x22};
+    infmon_api_snap_reply_t reply;
+    infmon_api_snapshot_and_clear(&ctx_, id, &reply);
+
+    EXPECT_EQ(reply.result, INFMON_API_ERR_NO_SNAPSHOT_MGR);
+}
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearNullCtx)
+{
+    infmon_flow_rule_id_t id = {0x11, 0x22};
+    infmon_api_snap_reply_t reply;
+    infmon_api_snapshot_and_clear(nullptr, id, &reply);
+
+    EXPECT_EQ(reply.result, INFMON_API_ERR_INTERNAL);
+}
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearDescriptorFields)
+{
+    infmon_flow_rule_id_t id = add_rule_with_id("desc_rule", 0xDE, 0xAD);
+
+    /* The initial table has gen=0, epoch_ns=0 (counter_table_create zeroes everything). */
+    infmon_api_snap_reply_t reply;
+    infmon_api_snapshot_and_clear(&ctx_, id, &reply);
+
+    ASSERT_EQ(reply.result, INFMON_API_OK);
+
+    const infmon_stats_descriptor_t &d = reply.descriptor;
+    EXPECT_EQ(d.flow_rule_id.hi, 0xDEu);
+    EXPECT_EQ(d.flow_rule_id.lo, 0xADu);
+    EXPECT_EQ(d.flow_rule_index, 0u);
+    EXPECT_EQ(d.generation, 0u);
+    /* slots_len should match the table's num_slots (counter_table rounds up to power of 2). */
+    EXPECT_GT(d.slots_len, 0u);
+    EXPECT_EQ(d.active, 1u);
+}
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearMultipleSwaps)
+{
+    infmon_flow_rule_id_t id = add_rule_with_id("multi_rule", 0x01, 0x02);
+
+    /* First swap: retired gen=0, new gen=1. */
+    infmon_api_snap_reply_t reply1;
+    infmon_api_snapshot_and_clear(&ctx_, id, &reply1);
+    ASSERT_EQ(reply1.result, INFMON_API_OK);
+    EXPECT_EQ(reply1.descriptor.generation, 0u);
+
+    /* Second swap: retired gen=1, new gen=2. */
+    infmon_api_snap_reply_t reply2;
+    infmon_api_snapshot_and_clear(&ctx_, id, &reply2);
+    ASSERT_EQ(reply2.result, INFMON_API_OK);
+    EXPECT_EQ(reply2.descriptor.generation, 1u);
+    EXPECT_EQ(ctx_.tables[0]->generation, 2u);
+}
+
+TEST_F(ApiHandlerSnapTest, AddWithIdPreservesIdAcrossDelete)
+{
+    add_rule_with_id("rule_aa", 0x10, 0x20);
+    infmon_flow_rule_id_t id_bb = add_rule_with_id("rule_bb", 0x30, 0x40);
+
+    /* Delete first rule — rule_bb should compact to index 0 with its ID intact. */
+    EXPECT_EQ(infmon_api_flow_rule_del(&ctx_, "rule_aa"), INFMON_API_OK);
+
+    infmon_api_snap_reply_t reply;
+    infmon_api_snapshot_and_clear(&ctx_, id_bb, &reply);
+    ASSERT_EQ(reply.result, INFMON_API_OK);
+    EXPECT_EQ(reply.descriptor.flow_rule_id.hi, 0x30u);
+    EXPECT_EQ(reply.descriptor.flow_rule_id.lo, 0x40u);
+    EXPECT_EQ(reply.descriptor.flow_rule_index, 0u);
+}
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearRejectsZeroId)
+{
+    /* Add a rule via plain add (no explicit ID). */
+    infmon_flow_rule_t r = make_rule("plain_rule");
+    EXPECT_EQ(infmon_api_flow_rule_add(&ctx_, &r), INFMON_API_OK);
+
+    /* Calling snapshot_and_clear with a zero ID should return NOT_FOUND,
+     * not silently match the slot whose ID was zeroed by the add path. */
+    infmon_flow_rule_id_t zero_id = {0, 0};
+    infmon_api_snap_reply_t reply;
+    infmon_api_result_t rc = infmon_api_snapshot_and_clear(&ctx_, zero_id, &reply);
+    EXPECT_EQ(rc, INFMON_API_ERR_NOT_FOUND);
+    EXPECT_EQ(reply.result, INFMON_API_ERR_NOT_FOUND);
+}
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearReturnType)
+{
+    /* Verify the return value matches reply.result. */
+    infmon_flow_rule_id_t id = add_rule_with_id("ret_rule", 0xCC, 0xDD);
+
+    infmon_api_snap_reply_t reply;
+    infmon_api_result_t rc = infmon_api_snapshot_and_clear(&ctx_, id, &reply);
+    EXPECT_EQ(rc, INFMON_API_OK);
+    EXPECT_EQ(rc, reply.result);
 }
