@@ -235,4 +235,12 @@ TEST_F(ApiHandlerTest, ListAfterDeleteReflectsRemoval)
     /* get should also reflect removal. */
     EXPECT_EQ(infmon_api_flow_rule_get_by_name(&ctx_, "rule_aa", nullptr, nullptr),
               INFMON_API_ERR_NOT_FOUND);
+
+    /* Verify rule_bb shifted to index 0 after deletion. */
+    const infmon_flow_rule_t *found = nullptr;
+    uint32_t idx = (uint32_t)-1;
+    EXPECT_EQ(infmon_api_flow_rule_get_by_name(&ctx_, "rule_bb", &found, &idx), INFMON_API_OK);
+    EXPECT_EQ(idx, 0u);
+    ASSERT_NE(found, nullptr);
+    EXPECT_STREQ(found->name, "rule_bb");
 }

@@ -91,6 +91,10 @@ infmon_api_result_t infmon_api_flow_rule_list(const infmon_api_ctx_t *ctx,
  * Retrieve a single flow rule by name.
  * On success, *out_rule points into the rule set (valid until next add/rm)
  * and *out_index holds the rule's position.
+ *
+ * @return INFMON_API_OK on success.
+ * @return INFMON_API_ERR_INVALID_RULE if @p ctx or @p name is NULL.
+ * @return INFMON_API_ERR_NOT_FOUND if no rule with @p name exists.
  */
 infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx, const char *name,
                                                      const infmon_flow_rule_t **out_rule,
