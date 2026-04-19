@@ -16,8 +16,8 @@ static infmon_flow_rule_t make_rule(const char *name, const infmon_field_t *fiel
                                     uint32_t max_keys = 1024)
 {
     infmon_flow_rule_t r{};
-    std::strncpy(r.name, name, INFMON_FLOW_RULE_NAME_MAX);
-    r.name[INFMON_FLOW_RULE_NAME_MAX] = '\0';
+    std::memset(r.name, 0, sizeof(r.name));
+    std::strncpy(r.name, name, sizeof(r.name) - 1);
     if (fc > 0) {
         std::memcpy(r.fields, fields, fc * sizeof(infmon_field_t));
     }
