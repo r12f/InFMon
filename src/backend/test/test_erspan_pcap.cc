@@ -58,7 +58,7 @@ static bool read_first_packet(const std::string &path, std::vector<uint8_t> &out
 
     // Validate linktype: only DLT_EN10MB (Ethernet) is supported
     uint32_t lt = swap ? __builtin_bswap32(fh.linktype) : fh.linktype;
-    if (lt != 1) {  // DLT_EN10MB
+    if (lt != 1) { // DLT_EN10MB
         fclose(f);
         return false;
     }
@@ -225,10 +225,11 @@ TEST_F(PcapTest, ZeroLengthInput)
 // ---------------------------------------------------------------------------
 
 // SFINAE helper: detects if T has a `session_id` member.
-template <typename T, typename = void>
-struct has_session_id : std::false_type {};
+template <typename T, typename = void> struct has_session_id : std::false_type {
+};
 template <typename T>
-struct has_session_id<T, std::void_t<decltype(T::session_id)>> : std::true_type {};
+struct has_session_id<T, std::void_t<decltype(T::session_id)>> : std::true_type {
+};
 
 TEST_F(PcapTest, SessionIdNotExposed)
 {
