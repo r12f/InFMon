@@ -69,8 +69,7 @@ typedef infmon_flow_rule_id
 /** Descriptor of a counter table (returned by snapshot_and_clear). */
 typedef infmon_table_descriptor
 {
-    u64 flow_rule_id_hi;
-    u64 flow_rule_id_lo;
+    vl_api_infmon_flow_rule_id_t flow_rule_id;
     u32 flow_rule_index;
     u64 generation;
     u64 epoch_ns;
@@ -169,6 +168,13 @@ define infmon_flow_rule_list_details
     vl_api_infmon_flow_rule_details_t flow_rule;
 };
 
+/** Terminal reply for flow_rule_list — signals end of stream. */
+define infmon_flow_rule_list_reply
+{
+    u32 context;
+    i32 retval;
+};
+
 /**
  * Get the full definition of one flow_rule by its UUID.
  */
@@ -224,4 +230,11 @@ define infmon_status_details
     u32 context;
     u32 worker_count;
     vl_api_infmon_worker_status_t workers[worker_count];
+};
+
+/** Terminal reply for infmon_status — signals end of stream. */
+define infmon_status_reply
+{
+    u32 context;
+    i32 retval;
 };

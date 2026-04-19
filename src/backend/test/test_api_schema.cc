@@ -112,16 +112,16 @@ TEST_F(ApiSchemaTest, HasSnapErrorEnum)
 TEST_F(ApiSchemaTest, HasFlowRuleIdType)
 {
     expect_contains("typedef infmon_flow_rule_id", "Missing flow_rule_id typedef");
-    /* Must have hi/lo u64 fields */
-    expect_contains("u64 hi", "flow_rule_id must have u64 hi");
-    expect_contains("u64 lo", "flow_rule_id must have u64 lo");
+    /* Verify hi/lo fields exist within the flow_rule_id block */
+    expect_matches("typedef infmon_flow_rule_id[\\s\\S]*?u64 hi[\\s\\S]*?\\}", "flow_rule_id must have u64 hi");
+    expect_matches("typedef infmon_flow_rule_id[\\s\\S]*?u64 lo[\\s\\S]*?\\}", "flow_rule_id must have u64 lo");
 }
 
 TEST_F(ApiSchemaTest, HasTableDescriptorType)
 {
     expect_contains("typedef infmon_table_descriptor", "Missing table_descriptor typedef");
-    expect_contains("flow_rule_id_hi", "descriptor must have flow_rule_id_hi");
-    expect_contains("flow_rule_id_lo", "descriptor must have flow_rule_id_lo");
+    expect_matches("typedef infmon_table_descriptor[\\s\\S]*?flow_rule_id[\\s\\S]*?\\}",
+                   "descriptor must have flow_rule_id");
     expect_contains("flow_rule_index", "descriptor must have flow_rule_index");
     expect_contains("generation", "descriptor must have generation");
     expect_contains("epoch_ns", "descriptor must have epoch_ns");
@@ -175,6 +175,8 @@ TEST_F(ApiSchemaTest, W10c_FlowRuleList)
     expect_contains("define infmon_flow_rule_list", "Missing infmon_flow_rule_list message");
     expect_contains("define infmon_flow_rule_list_details",
                     "Missing infmon_flow_rule_list_details message");
+    expect_contains("define infmon_flow_rule_list_reply",
+                    "Missing infmon_flow_rule_list_reply terminal message");
 }
 
 TEST_F(ApiSchemaTest, W10c_FlowRuleGet)
@@ -196,6 +198,8 @@ TEST_F(ApiSchemaTest, W10e_Status)
 {
     expect_contains("define infmon_status", "Missing infmon_status message");
     expect_contains("define infmon_status_details", "Missing infmon_status_details message");
+    expect_contains("define infmon_status_reply",
+                    "Missing infmon_status_reply terminal message");
 }
 
 /* ── Message field checks ─────────────────────────────────────────── */
@@ -223,6 +227,10 @@ TEST_F(ApiSchemaTest, RepliesHaveRetval)
                    "flow_rule_get_reply must have retval");
     expect_matches("infmon_snapshot_and_clear_reply[\\s\\S]*?retval",
                    "snapshot_and_clear_reply must have retval");
+    expect_matches("infmon_flow_rule_list_reply[\\s\\S]*?retval",
+                   "flow_rule_list_reply must have retval");
+    expect_matches("infmon_status_reply[\\s\\S]*?retval",
+                   "status_reply must have retval");
 }
 
 /* ── All 6 messages present ───────────────────────────────────────── */
