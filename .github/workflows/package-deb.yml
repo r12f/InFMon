@@ -41,6 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Symlink packaging/debian → debian for dpkg tools
+        run: ln -s packaging/debian debian
+
       - name: Validate debian/changelog is in sync with CHANGELOG.md
         run: python3 packaging/tools/sync-debian-changelog.py --check
 
@@ -75,7 +78,7 @@ jobs:
           # IMPORTANT: only exclude ./debian and VCS metadata. Anything else
           # excluded from the orig tarball will be flagged as an unexpected
           # upstream change by `dpkg-source -b` under format '3.0 (quilt)'.
-          tar --exclude='./packaging/debian' --exclude-vcs \
+          tar --exclude='./packaging/debian' --exclude='./debian' --exclude-vcs \
               -czf "../${PKG}_${UVER}.orig.tar.gz" .
           ls -la "../${PKG}_${UVER}.orig.tar.gz"
 
