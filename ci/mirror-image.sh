@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mirror ligato/vpp-base:24.10 to ghcr.io/r12f/infmon-vpp-dev:24.10.
+# Mirror ligato/vpp-base:24.06 to ghcr.io/r12f/infmon-vpp-dev:24.06.
 #
 # See specs/001-ci-and-precommit.md §5.
 #
@@ -14,8 +14,8 @@
 # Usage: ci/mirror-image.sh [source_tag] [dest_tag]
 set -euo pipefail
 
-SOURCE="${1:-docker.io/ligato/vpp-base:24.10}"
-DEST="${2:-ghcr.io/r12f/infmon-vpp-dev:24.10}"
+SOURCE="${1:-docker.io/ligato/vpp-base:24.06}"
+DEST="${2:-ghcr.io/r12f/infmon-vpp-dev:24.06}"
 
 echo "Mirroring ${SOURCE} → ${DEST}"
 

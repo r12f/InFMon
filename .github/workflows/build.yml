@@ -50,7 +50,7 @@ jobs:
     name: build-cpp
     runs-on: ubuntu-24.04
     container:
-      image: ligato/vpp-base:24.10
+      image: ligato/vpp-base:24.06
       options: --user root
     steps:
       - name: Checkout
