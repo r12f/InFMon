@@ -326,8 +326,7 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
 
 /* ── Status ──────────────────────────────────────────────────────── */
 
-infmon_api_result_t infmon_api_status(const infmon_api_ctx_t *ctx,
-                                      infmon_api_status_reply_t *reply)
+infmon_api_result_t infmon_api_status(const infmon_api_ctx_t *ctx, infmon_api_status_reply_t *reply)
 {
     if (!reply)
         return INFMON_API_ERR_INTERNAL;
