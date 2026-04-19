@@ -21,18 +21,14 @@ pub struct InFMonControlClient {
 }
 
 impl InFMonControlClient {
-    /// Connect to the backend control socket.
-    pub async fn connect(path: &Path) -> Result<Self, CtlError> {
-        if !path.exists() {
-            return Err(CtlError::Connect(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("control socket not found: {}", path.display()),
-            )));
-        }
-
-        Ok(Self {
+    /// Create a new control client for the given socket path.
+    ///
+    /// Does not open the socket — connection is deferred to the first RPC call,
+    /// avoiding TOCTOU races on the path.
+    pub fn new(path: &Path) -> Self {
+        Self {
             socket_path: path.to_path_buf(),
-        })
+        }
     }
 
     /// Add a flow rule to the backend.
@@ -99,9 +95,9 @@ impl InFMonControlClient {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn connect_nonexistent_socket() {
-        let result = InFMonControlClient::connect(Path::new("/tmp/nonexistent.sock")).await;
-        assert!(matches!(result, Err(CtlError::Connect(_))));
+    #[test]
+    fn new_stores_path() {
+        let client = InFMonControlClient::new(Path::new("/tmp/test.sock"));
+        assert_eq!(client.path(), Path::new("/tmp/test.sock"));
     }
 }

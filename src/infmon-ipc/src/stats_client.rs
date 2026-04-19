@@ -43,7 +43,8 @@ impl InFMonStatsClient {
     /// Open the stats segment at the given path.
     /// Acquires an exclusive flock to enforce single-reader.
     pub fn open(path: &Path) -> Result<Self, IpcError> {
-        use std::os::unix::io::AsRawFd;
+        use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::io::{AsFd, AsRawFd};
 
         let lock_path = path.with_extension("lock");
         let lock_file = std::fs::OpenOptions::new()
@@ -51,10 +52,11 @@ impl InFMonStatsClient {
             .write(true)
             .create(true)
             .truncate(false)
+            .mode(0o600)
             .open(&lock_path)
             .map_err(IpcError::StatsOpen)?;
 
-        let rc = unsafe { libc::flock(lock_file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        let rc = unsafe { libc::flock(lock_file.as_fd().as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
         if rc != 0 {
             return Err(IpcError::StatsSegmentBusy);
         }

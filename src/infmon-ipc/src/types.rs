@@ -1,3 +1,4 @@
+use std::fmt;
 use std::net::IpAddr;
 use std::sync::Arc;
 
@@ -6,6 +7,12 @@ use std::sync::Arc;
 pub struct FlowRuleId {
     pub hi: u64,
     pub lo: u64,
+}
+
+impl fmt::Display for FlowRuleId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:016x}-{:016x}", self.hi, self.lo)
+    }
 }
 
 /// Field identifiers matching the backend's infmon_field_type
