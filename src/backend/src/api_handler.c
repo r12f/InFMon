@@ -7,6 +7,8 @@
 
 #include <string.h>
 
+#include "infmon/snapshot.h" /* INFMON_MAX_WORKERS */
+
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
 /** Map flow-rule CRUD result to API result. */
@@ -344,6 +346,11 @@ infmon_api_result_t infmon_api_status(const infmon_api_ctx_t *ctx, infmon_api_st
     }
 
     if (ctx->worker_count == 0) {
+        reply->result = INFMON_API_ERR_INTERNAL;
+        return INFMON_API_ERR_INTERNAL;
+    }
+
+    if (ctx->worker_count > INFMON_MAX_WORKERS) {
         reply->result = INFMON_API_ERR_INTERNAL;
         return INFMON_API_ERR_INTERNAL;
     }

@@ -78,6 +78,7 @@ extern const char *infmon_node_error_strings[];
  */
 typedef struct {
     uint32_t worker_id;
+    uint32_t _pad;                                     /**< Explicit padding for 8-byte alignment. */
     INFMON_COUNTER_U64 packets_seen;                   /**< Total packets entering infmon-erspan-decap. */
     INFMON_COUNTER_U64 erspan_unknown_proto;           /**< Outer header parsed, ERSPAN type unrecognised. */
     INFMON_COUNTER_U64 erspan_truncated;               /**< Buffer too short for declared ERSPAN header. */

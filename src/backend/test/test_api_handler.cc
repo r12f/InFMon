@@ -491,6 +491,19 @@ TEST_F(ApiHandlerTest, StatusNoWorkersReturnsError)
     EXPECT_EQ(reply.result, INFMON_API_ERR_INTERNAL);
 }
 
+TEST_F(ApiHandlerTest, StatusValidPointerZeroCountReturnsError)
+{
+    /* worker_counters is valid but worker_count is 0 — distinct failure mode. */
+    infmon_worker_counters_t wc;
+    infmon_worker_counters_init(&wc, 0);
+    ctx_.worker_counters = &wc;
+    ctx_.worker_count = 0;
+
+    infmon_api_status_reply_t reply;
+    EXPECT_EQ(infmon_api_status(&ctx_, &reply), INFMON_API_ERR_INTERNAL);
+    EXPECT_EQ(reply.result, INFMON_API_ERR_INTERNAL);
+}
+
 TEST_F(ApiHandlerTest, StatusSingleWorkerZeroCounters)
 {
     infmon_worker_counters_t wc;
