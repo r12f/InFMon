@@ -79,10 +79,11 @@ jobs:
           set -euo pipefail
           PKG=$(dpkg-parsechangelog -SSource)
           UVER=$(dpkg-parsechangelog -SVersion | sed 's/-[^-]*$//')
-          # IMPORTANT: only exclude ./debian and VCS metadata. Anything else
-          # excluded from the orig tarball will be flagged as an unexpected
-          # upstream change by `dpkg-source -b` under format '3.0 (quilt)'.
-          tar --exclude='./debian' --exclude-vcs \
+          # IMPORTANT: only exclude ./debian, VCS metadata, and __pycache__
+          # (created by the unittest step above). Anything else excluded from
+          # the orig tarball will be flagged as an unexpected upstream change
+          # by `dpkg-source -b` under format '3.0 (quilt)'.
+          tar --exclude='./debian' --exclude-vcs --exclude='__pycache__' \
               -czf "../${PKG}_${UVER}.orig.tar.gz" .
           ls -la "../${PKG}_${UVER}.orig.tar.gz"
 
