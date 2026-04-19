@@ -1,11 +1,11 @@
 # cppcheck suppressions for InFMon.
 # One suppression per line; format documented at
-# https://cppcheck.sourceforge.io/manual.pdf §8 ("Suppressions").
-#
+# https://cppcheck.sourceforge.io/manual.pdf section 8 ("Suppressions").
 # Add new entries with a short justification comment.
 
 # cppcheck cannot see VPP macro-generated symbols and false-positives on them.
 unknownMacro:src/infmon-backend/*
 
 # Headers in build/ are generated and not ours to fix.
-*:build/*
+# Use specific suppression IDs since wildcard '*' is not supported as an ID.
+unmatchedSuppression:build/*
