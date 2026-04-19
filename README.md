@@ -22,11 +22,14 @@ and active work are tracked in
 ```text
 .
 ├── specs/                  Design specs, RFCs, and protocol documents
+├── packaging/
+│   ├── debian/             Debian packaging (control, changelog, rules, …)
+│   └── tools/              Packaging helper scripts & their tests
 ├── src/
-│   ├── infmon-backend/     Backend (control plane + dataplane integration)
-│   ├── infmon-frontend/    Web UI
-│   └── infmon-cli/         Command-line client
-├── tests/                  Integration / end-to-end tests
+│   ├── backend/            Backend (control plane + dataplane integration)
+│   ├── frontend/           Web UI
+│   └── cli/                Command-line client
+├── tests/                  End-to-end and integration tests
 ├── CHANGELOG.md            Release notes (Keep a Changelog format)
 ├── CODEOWNERS              Required reviewers
 └── LICENSE                 Apache-2.0

@@ -15,15 +15,15 @@ on:
   push:
     branches: [main]
     paths:
-      - 'debian/**'
-      - 'tools/sync-debian-changelog.py'
+      - 'packaging/debian/**'
+      - 'packaging/tools/sync-debian-changelog.py'
       - 'CHANGELOG.md'
       - 'src/**'
       - '.github/workflows/package-deb.yml'
   pull_request:
     paths:
-      - 'debian/**'
-      - 'tools/sync-debian-changelog.py'
+      - 'packaging/debian/**'
+      - 'packaging/tools/sync-debian-changelog.py'
       - 'CHANGELOG.md'
       - 'src/**'
       - '.github/workflows/package-deb.yml'
@@ -41,11 +41,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Copy packaging/debian → debian for dpkg tools
+        # dpkg tools expect debian/ at the source root. Our packaging
+        # files live under packaging/debian/, so we copy them.
+        # A symlink doesn't work — dpkg-source's V2 format handler
+        # requires a real directory.
+        run: |
+          rm -rf debian
+          cp -a packaging/debian debian
+
       - name: Validate debian/changelog is in sync with CHANGELOG.md
-        run: python3 tools/sync-debian-changelog.py --check
+        run: python3 packaging/tools/sync-debian-changelog.py --check
 
       - name: Run sync script unit tests
-        run: python3 -m unittest discover -s tools/tests -v
+        run: python3 -m unittest discover -s packaging/tools/tests -v
 
       - name: Install build tooling
         run: |
@@ -72,10 +81,11 @@ jobs:
           set -euo pipefail
           PKG=$(dpkg-parsechangelog -SSource)
           UVER=$(dpkg-parsechangelog -SVersion | sed 's/-[^-]*$//')
-          # IMPORTANT: only exclude ./debian and VCS metadata. Anything else
-          # excluded from the orig tarball will be flagged as an unexpected
-          # upstream change by `dpkg-source -b` under format '3.0 (quilt)'.
-          tar --exclude='./debian' --exclude-vcs \
+          # IMPORTANT: only exclude ./debian, VCS metadata, and __pycache__
+          # (created by the unittest step above). Anything else excluded from
+          # the orig tarball will be flagged as an unexpected upstream change
+          # by `dpkg-source -b` under format '3.0 (quilt)'.
+          tar --exclude='./debian' --exclude-vcs --exclude='__pycache__' \
               -czf "../${PKG}_${UVER}.orig.tar.gz" .
           ls -la "../${PKG}_${UVER}.orig.tar.gz"
 

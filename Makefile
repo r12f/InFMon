@@ -29,16 +29,16 @@ test:
 	    echo "    (no Cargo.toml yet — skipped)"; \
 	fi
 	@echo "==> C/C++ backend"
-	@if [ -f backend/CMakeLists.txt ]; then \
+	@if [ -f src/backend/CMakeLists.txt ]; then \
 	    cmake_launchers=""; \
 	    if command -v ccache >/dev/null 2>&1; then \
 	        cmake_launchers="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"; \
 	    fi; \
-	    cmake -S backend -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug $$cmake_launchers \
+	    cmake -S src/backend -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug $$cmake_launchers \
 	        && cmake --build build \
 	        && ctest --test-dir build --output-on-failure; \
 	else \
-	    echo "    (no backend/CMakeLists.txt yet — skipped)"; \
+	    echo "    (no src/backend/CMakeLists.txt yet — skipped)"; \
 	fi
 	@echo ""
 	@echo "NOTE: E2E tests are NOT run by 'make test'. They live under tests/ and"

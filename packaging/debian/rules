@@ -51,7 +51,7 @@ override_dh_auto_configure:
 	# Sync the Debian changelog from the canonical CHANGELOG.md before
 	# the source package metadata is consumed downstream. The script is
 	# idempotent.
-	python3 tools/sync-debian-changelog.py
+	python3 packaging/tools/sync-debian-changelog.py
 	dh_auto_configure
 
 # ----------------------------------------------------------------------

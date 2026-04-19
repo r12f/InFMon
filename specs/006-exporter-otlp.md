@@ -476,7 +476,7 @@ relevant; they do **not** carry flow-rule or flow attributes.
 
 ## 10. Test plan
 
-- **Unit (Rust, `frontend/`):**
+- **Unit (Rust, `src/frontend/`):**
   - Attribute mapping: every v1 field → expected OTLP attribute key/type,
     including IPv4-mapped-IPv6 rendering and DSCP integer form.
   - Resource attribute assembly: precedence of operator config over

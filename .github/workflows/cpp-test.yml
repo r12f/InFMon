@@ -41,24 +41,24 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-ccache-${{ hashFiles('backend/**/CMakeLists.txt') }}
+          key: ${{ runner.os }}-ccache-${{ hashFiles('src/backend/**/CMakeLists.txt') }}
           restore-keys: |
             ${{ runner.os }}-ccache-
 
       - name: Detect backend source
         id: detect
         run: |
-          if [ -f backend/CMakeLists.txt ]; then
+          if [ -f src/backend/CMakeLists.txt ]; then
             echo "have_backend=true" >> "$GITHUB_OUTPUT"
           else
             echo "have_backend=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::backend/CMakeLists.txt not present yet; cpp-test is a no-op until the backend lands."
+            echo "::notice::src/backend/CMakeLists.txt not present yet; cpp-test is a no-op until the backend lands."
           fi
 
       - name: Configure
         if: steps.detect.outputs.have_backend == 'true'
         run: |
-          cmake -S backend -B build -G Ninja \
+          cmake -S src/backend -B build -G Ninja \
               -DCMAKE_BUILD_TYPE=Debug \
               -DCMAKE_C_COMPILER_LAUNCHER=ccache \
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -77,7 +77,7 @@ jobs:
               --error-exitcode=1 \
               --inline-suppr \
               --suppressions-list=.cppcheck-suppressions \
-              backend
+              src/backend
 
       - name: ctest
         if: steps.detect.outputs.have_backend == 'true'

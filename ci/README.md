@@ -43,7 +43,7 @@ See [spec §8][spec] for the full table. Summary:
 - `pre-commit` cache keyed on `.pre-commit-config.yaml`.
 - `cargo` registry / git keyed on `Cargo.lock`; `target/` cached by
   `Swatinem/rust-cache@v2` (per-job, per-target).
-- `ccache` keyed on `backend/**/CMakeLists.txt`, with separate
+- `ccache` keyed on `src/backend/**/CMakeLists.txt`, with separate
   arm64 namespace for the cross job.
 
 ## E2E is NOT in CI
