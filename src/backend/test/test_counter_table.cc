@@ -267,8 +267,8 @@ TEST(CounterTable, ConcurrentStress)
             uint32_t kid = (tid * 7 + i) % kDistinctKeys;
             uint8_t key[4];
             memcpy(key, &kid, sizeof(kid));
-            uint64_t hash = (uint64_t)kid * 0x9E3779B97F4A7C15ULL;
-            infmon_counter_table_update(t, hash, key, 4, 1, (uint64_t)(tid * kOpsPerThread + i));
+            uint64_t hash = (uint64_t) kid * 0x9E3779B97F4A7C15ULL;
+            infmon_counter_table_update(t, hash, key, 4, 1, (uint64_t) (tid * kOpsPerThread + i));
         }
     };
 
@@ -283,13 +283,12 @@ TEST(CounterTable, ConcurrentStress)
     uint64_t total_packets = 0;
     infmon_slot_t slot;
     for (uint32_t i = 0; i < t->num_slots; i++) {
-        if (infmon_counter_table_read_slot(t, i, &slot) &&
-            slot.flags == INFMON_SLOT_OCCUPIED) {
+        if (infmon_counter_table_read_slot(t, i, &slot) && slot.flags == INFMON_SLOT_OCCUPIED) {
             total_packets += slot.packets;
         }
     }
     /* Every update call should have incremented exactly one slot's packet counter */
-    EXPECT_EQ(total_packets, (uint64_t)kThreads * kOpsPerThread);
+    EXPECT_EQ(total_packets, (uint64_t) kThreads * kOpsPerThread);
 
     infmon_counter_table_destroy(t);
 }

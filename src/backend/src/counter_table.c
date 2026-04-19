@@ -239,9 +239,8 @@ bool infmon_counter_table_update(infmon_counter_table_t *table, uint64_t key_has
             bool ok = false;
             for (int retry = 0; retry < INFMON_INSERT_RETRY; retry++) {
                 expected = f;
-                if (__atomic_compare_exchange_n(&slot->flags, &expected,
-                                                INFMON_SLOT_INSERTING, false,
-                                                __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+                if (__atomic_compare_exchange_n(&slot->flags, &expected, INFMON_SLOT_INSERTING,
+                                                false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
                     ok = true;
                     break;
                 }
@@ -311,8 +310,8 @@ bool infmon_counter_table_update(infmon_counter_table_t *table, uint64_t key_has
 
         if (f == INFMON_SLOT_FREE || f == INFMON_SLOT_TOMBSTONE) {
             uint16_t expected = f;
-            if (__atomic_compare_exchange_n(&slot->flags, &expected, INFMON_SLOT_INSERTING,
-                                            false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
+            if (__atomic_compare_exchange_n(&slot->flags, &expected, INFMON_SLOT_INSERTING, false,
+                                            __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
                 uint32_t key_off = arena_alloc(table, key, key_len);
                 if (key_off == UINT32_MAX) {
                     __atomic_store_n(&slot->flags, INFMON_SLOT_FREE, __ATOMIC_RELEASE);
