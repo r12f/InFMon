@@ -26,7 +26,6 @@
 #error "API_FILE must be defined at compile time (path to infmon.api)"
 #endif
 
-
 class ApiSchemaTest : public ::testing::Test
 {
   protected:
@@ -121,8 +120,10 @@ TEST_F(ApiSchemaTest, HasFlowRuleIdType)
 {
     expect_contains("typedef infmon_flow_rule_id", "Missing flow_rule_id typedef");
     /* Verify hi/lo fields exist within the flow_rule_id block */
-    expect_matches("typedef infmon_flow_rule_id[\\s\\S]*?u64 hi[\\s\\S]*?\\}", "flow_rule_id must have u64 hi");
-    expect_matches("typedef infmon_flow_rule_id[\\s\\S]*?u64 lo[\\s\\S]*?\\}", "flow_rule_id must have u64 lo");
+    expect_matches("typedef infmon_flow_rule_id[\\s\\S]*?u64 hi[\\s\\S]*?\\}",
+                   "flow_rule_id must have u64 hi");
+    expect_matches("typedef infmon_flow_rule_id[\\s\\S]*?u64 lo[\\s\\S]*?\\}",
+                   "flow_rule_id must have u64 lo");
 }
 
 TEST_F(ApiSchemaTest, HasTableDescriptorType)
@@ -206,8 +207,7 @@ TEST_F(ApiSchemaTest, W10e_Status)
 {
     expect_contains("define infmon_status", "Missing infmon_status message");
     expect_contains("define infmon_status_details", "Missing infmon_status_details message");
-    expect_contains("define infmon_status_reply",
-                    "Missing infmon_status_reply terminal message");
+    expect_contains("define infmon_status_reply", "Missing infmon_status_reply terminal message");
 }
 
 /* ── Message field checks ─────────────────────────────────────────── */
@@ -237,8 +237,7 @@ TEST_F(ApiSchemaTest, RepliesHaveRetval)
                    "snapshot_and_clear_reply must have retval");
     expect_matches("infmon_flow_rule_list_reply[\\s\\S]*?retval",
                    "flow_rule_list_reply must have retval");
-    expect_matches("infmon_status_reply[\\s\\S]*?retval",
-                   "status_reply must have retval");
+    expect_matches("infmon_status_reply[\\s\\S]*?retval", "status_reply must have retval");
 }
 
 /* ── All 6 messages present ───────────────────────────────────────── */
@@ -273,8 +272,7 @@ TEST_F(ApiSchemaTest, NoDuplicateMessageDefinitions)
         "define infmon_status_reply\n",
     };
     for (const auto &pat : critical) {
-        EXPECT_EQ(count_occurrences(pat), 1)
-            << "Expected exactly 1 occurrence of '" << pat << "' but found "
-            << count_occurrences(pat);
+        EXPECT_EQ(count_occurrences(pat), 1) << "Expected exactly 1 occurrence of '" << pat
+                                             << "' but found " << count_occurrences(pat);
     }
 }
