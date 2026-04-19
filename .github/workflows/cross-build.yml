@@ -1,0 +1,114 @@
+name: cross-build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: cross-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+jobs:
+  rust-aarch64:
+    name: cross-build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install aarch64 cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+              gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Install Rust toolchain (with aarch64 target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Cargo / target cache (aarch64)
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cross-build-aarch64
+          key: aarch64-unknown-linux-gnu
+
+      - name: Detect Cargo workspace
+        id: detect_rust
+        run: |
+          if [ -f Cargo.toml ]; then
+            echo "have_workspace=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_workspace=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No Cargo.toml at repo root yet; Rust cross-build is a no-op."
+          fi
+
+      - name: cargo build (aarch64, release)
+        if: steps.detect_rust.outputs.have_workspace == 'true'
+        run: |
+          cargo build --workspace \
+              --target aarch64-unknown-linux-gnu \
+              --release \
+              --locked
+
+  cpp-aarch64:
+    name: cross-build-cpp
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Detect backend source
+        id: detect_cpp
+        run: |
+          if [ -f src/backend/CMakeLists.txt ]; then
+            echo "have_backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_backend=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::src/backend/CMakeLists.txt not present yet; C++ cross-build is a no-op."
+          fi
+
+      - name: ccache cache (arm64)
+        if: steps.detect_cpp.outputs.have_backend == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache-arm64-${{ hashFiles('src/backend/**/CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-arm64-
+
+      - name: Configure + build (compile only, no tests)
+        if: steps.detect_cpp.outputs.have_backend == 'true'
+        run: |
+          docker run --rm --platform linux/arm64 \
+              -v "$PWD:/work" -w /work \
+              -v "$HOME/.ccache:/root/.ccache" \
+              ligato/vpp-base:24.02 \
+              bash -euxc '
+                  apt-get update
+                  apt-get install -y --no-install-recommends \
+                      cmake ninja-build g++ clang libgtest-dev ccache pkg-config
+                  if [ ! -d /usr/include/vpp ]; then
+                      echo "::error::VPP aarch64 headers missing — see specs/001-ci-and-precommit.md §4.4."
+                      exit 1
+                  fi
+                  cmake -S src/backend -B build-arm64 -G Ninja \
+                      -DCMAKE_BUILD_TYPE=Release \
+                      -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+                  cmake --build build-arm64
+              '
