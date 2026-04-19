@@ -12,8 +12,7 @@
 
 /* ── Utility ─────────────────────────────────────────────────────── */
 
-uint32_t
-infmon_next_pow2(uint32_t v)
+uint32_t infmon_next_pow2(uint32_t v)
 {
     if (v == 0)
         return 1;
@@ -28,29 +27,25 @@ infmon_next_pow2(uint32_t v)
 
 /* ── Seqlock helpers ─────────────────────────────────────────────── */
 
-static inline void
-seqlock_write_begin(infmon_seqlock_t *sl)
+static inline void seqlock_write_begin(infmon_seqlock_t *sl)
 {
     uint32_t s = __atomic_load_n(&sl->seq, __ATOMIC_RELAXED);
     __atomic_store_n(&sl->seq, s + 1, __ATOMIC_RELEASE);
 }
 
-static inline void
-seqlock_write_end(infmon_seqlock_t *sl)
+static inline void seqlock_write_end(infmon_seqlock_t *sl)
 {
     uint32_t s = __atomic_load_n(&sl->seq, __ATOMIC_RELAXED);
     __atomic_store_n(&sl->seq, s + 1, __ATOMIC_RELEASE);
 }
 
-static inline uint32_t
-seqlock_read_begin(const infmon_seqlock_t *sl)
+static inline uint32_t seqlock_read_begin(const infmon_seqlock_t *sl)
 {
     uint32_t s = __atomic_load_n(&sl->seq, __ATOMIC_ACQUIRE);
     return s;
 }
 
-static inline bool
-seqlock_read_retry(const infmon_seqlock_t *sl, uint32_t start)
+static inline bool seqlock_read_retry(const infmon_seqlock_t *sl, uint32_t start)
 {
     __atomic_thread_fence(__ATOMIC_ACQUIRE);
     uint32_t s = __atomic_load_n(&sl->seq, __ATOMIC_RELAXED);
@@ -59,8 +54,7 @@ seqlock_read_retry(const infmon_seqlock_t *sl, uint32_t start)
 
 /* ── Arena allocator ─────────────────────────────────────────────── */
 
-static uint32_t
-arena_alloc(infmon_counter_table_t *table, const uint8_t *key, uint16_t key_len)
+static uint32_t arena_alloc(infmon_counter_table_t *table, const uint8_t *key, uint16_t key_len)
 {
     uint32_t offset = table->key_arena_used;
     if (offset + key_len > table->key_arena_capacity)
@@ -72,12 +66,8 @@ arena_alloc(infmon_counter_table_t *table, const uint8_t *key, uint16_t key_len)
 
 /* ── Key comparison ──────────────────────────────────────────────── */
 
-static inline bool
-key_matches(const infmon_counter_table_t *table,
-            const infmon_slot_t *slot,
-            uint64_t key_hash,
-            const uint8_t *key,
-            uint16_t key_len)
+static inline bool key_matches(const infmon_counter_table_t *table, const infmon_slot_t *slot,
+                               uint64_t key_hash, const uint8_t *key, uint16_t key_len)
 {
     if (slot->key_hash != key_hash)
         return false;
@@ -90,8 +80,7 @@ key_matches(const infmon_counter_table_t *table,
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
 
-infmon_counter_table_t *
-infmon_counter_table_create(uint32_t max_keys, uint32_t max_key_width)
+infmon_counter_table_t *infmon_counter_table_create(uint32_t max_keys, uint32_t max_key_width)
 {
     if (max_keys == 0 || max_key_width == 0)
         return NULL;
@@ -105,7 +94,7 @@ infmon_counter_table_create(uint32_t max_keys, uint32_t max_key_width)
     if (num_groups == 0)
         num_groups = 1;
 
-    uint64_t arena_cap = (uint64_t)num_slots * max_key_width;
+    uint64_t arena_cap = (uint64_t) num_slots * max_key_width;
     if (arena_cap > UINT32_MAX)
         return NULL;
 
@@ -115,25 +104,25 @@ infmon_counter_table_create(uint32_t max_keys, uint32_t max_key_width)
 
     /* 64-byte aligned slot array */
     void *slot_mem = NULL;
-    if (posix_memalign(&slot_mem, 64, (size_t)num_slots * sizeof(infmon_slot_t)) != 0) {
+    if (posix_memalign(&slot_mem, 64, (size_t) num_slots * sizeof(infmon_slot_t)) != 0) {
         free(table);
         return NULL;
     }
-    memset(slot_mem, 0, (size_t)num_slots * sizeof(infmon_slot_t));
+    memset(slot_mem, 0, (size_t) num_slots * sizeof(infmon_slot_t));
 
-    table->slots             = (infmon_slot_t *)slot_mem;
-    table->num_slots         = num_slots;
-    table->slot_mask         = num_slots - 1;
-    table->key_arena         = (uint8_t *)malloc((uint32_t)arena_cap);
-    table->key_arena_capacity = (uint32_t)arena_cap;
-    table->key_arena_used    = 0;
-    table->seqlocks          = (infmon_seqlock_t *)calloc(num_groups, sizeof(infmon_seqlock_t));
-    table->num_groups        = num_groups;
-    table->generation        = 0;
-    table->epoch_ns          = 0;
-    table->insert_failed     = 0;
-    table->table_full        = 0;
-    table->occupied_count    = 0;
+    table->slots = (infmon_slot_t *) slot_mem;
+    table->num_slots = num_slots;
+    table->slot_mask = num_slots - 1;
+    table->key_arena = (uint8_t *) malloc((uint32_t) arena_cap);
+    table->key_arena_capacity = (uint32_t) arena_cap;
+    table->key_arena_used = 0;
+    table->seqlocks = (infmon_seqlock_t *) calloc(num_groups, sizeof(infmon_seqlock_t));
+    table->num_groups = num_groups;
+    table->generation = 0;
+    table->epoch_ns = 0;
+    table->insert_failed = 0;
+    table->table_full = 0;
+    table->occupied_count = 0;
 
     if (!table->key_arena || !table->seqlocks) {
         infmon_counter_table_destroy(table);
@@ -143,8 +132,7 @@ infmon_counter_table_create(uint32_t max_keys, uint32_t max_key_width)
     return table;
 }
 
-void
-infmon_counter_table_destroy(infmon_counter_table_t *table)
+void infmon_counter_table_destroy(infmon_counter_table_t *table)
 {
     if (!table)
         return;
@@ -156,8 +144,8 @@ infmon_counter_table_destroy(infmon_counter_table_t *table)
 
 /* ── LRU eviction ────────────────────────────────────────────────── */
 
-static bool
-evict_lru(infmon_counter_table_t *table, uint32_t probe_start, uint64_t tick __attribute__((unused)))
+static bool evict_lru(infmon_counter_table_t *table, uint32_t probe_start,
+                      uint64_t tick __attribute__((unused)))
 {
     /* Scan a window of num_slots (full table) to find LRU victim */
     uint32_t victim = UINT32_MAX;
@@ -193,15 +181,11 @@ evict_lru(infmon_counter_table_t *table, uint32_t probe_start, uint64_t tick __a
 
 /* ── Data-path operations ────────────────────────────────────────── */
 
-bool
-infmon_counter_table_update(infmon_counter_table_t *table,
-                             uint64_t key_hash,
-                             const uint8_t *key,
-                             uint16_t key_len,
-                             uint64_t pkt_bytes,
-                             uint64_t tick)
+bool infmon_counter_table_update(infmon_counter_table_t *table, uint64_t key_hash,
+                                 const uint8_t *key, uint16_t key_len, uint64_t pkt_bytes,
+                                 uint64_t tick)
 {
-    uint32_t start = (uint32_t)(key_hash & table->slot_mask);
+    uint32_t start = (uint32_t) (key_hash & table->slot_mask);
 
     /* Phase 1: search for existing key or a free/tombstone slot */
     for (uint32_t i = 0; i < table->num_slots; i++) {
@@ -227,9 +211,8 @@ infmon_counter_table_update(infmon_counter_table_t *table,
             bool ok = false;
             for (int retry = 0; retry < INFMON_INSERT_RETRY; retry++) {
                 expected = f;
-                if (__atomic_compare_exchange_n(&slot->flags, &expected, desired,
-                                                false, __ATOMIC_ACQ_REL,
-                                                __ATOMIC_ACQUIRE)) {
+                if (__atomic_compare_exchange_n(&slot->flags, &expected, desired, false,
+                                                __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
                     ok = true;
                     break;
                 }
@@ -260,11 +243,11 @@ infmon_counter_table_update(infmon_counter_table_t *table,
             }
 
             seqlock_write_begin(sl);
-            slot->key_hash   = key_hash;
-            slot->packets    = 1;
-            slot->bytes      = pkt_bytes;
+            slot->key_hash = key_hash;
+            slot->packets = 1;
+            slot->bytes = pkt_bytes;
             slot->key_offset = key_off;
-            slot->key_len    = key_len;
+            slot->key_len = key_len;
             slot->last_update = tick;
             seqlock_write_end(sl);
 
@@ -286,10 +269,8 @@ infmon_counter_table_update(infmon_counter_table_t *table,
 
 /* ── Read-side operations ────────────────────────────────────────── */
 
-bool
-infmon_counter_table_read_slot(const infmon_counter_table_t *table,
-                                uint32_t index,
-                                infmon_slot_t *out)
+bool infmon_counter_table_read_slot(const infmon_counter_table_t *table, uint32_t index,
+                                    infmon_slot_t *out)
 {
     if (index >= table->num_slots)
         return false;
@@ -306,9 +287,8 @@ infmon_counter_table_read_slot(const infmon_counter_table_t *table,
     return false;
 }
 
-const uint8_t *
-infmon_counter_table_key(const infmon_counter_table_t *table,
-                          const infmon_slot_t *slot)
+const uint8_t *infmon_counter_table_key(const infmon_counter_table_t *table,
+                                        const infmon_slot_t *slot)
 {
     if (!slot || slot->flags != INFMON_SLOT_OCCUPIED)
         return NULL;

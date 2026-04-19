@@ -5,8 +5,8 @@
  * Unit tests for counter_table
  */
 
-#include <gtest/gtest.h>
 #include <cstring>
+#include <gtest/gtest.h>
 
 extern "C" {
 #include "infmon/counter_table.h"
@@ -14,13 +14,34 @@ extern "C" {
 
 /* ── infmon_next_pow2 ────────────────────────────────────────────── */
 
-TEST(NextPow2, Zero)       { EXPECT_EQ(infmon_next_pow2(0), 1u); }
-TEST(NextPow2, One)        { EXPECT_EQ(infmon_next_pow2(1), 1u); }
-TEST(NextPow2, Two)        { EXPECT_EQ(infmon_next_pow2(2), 2u); }
-TEST(NextPow2, Three)      { EXPECT_EQ(infmon_next_pow2(3), 4u); }
-TEST(NextPow2, Five)       { EXPECT_EQ(infmon_next_pow2(5), 8u); }
-TEST(NextPow2, PowerOf2)   { EXPECT_EQ(infmon_next_pow2(1024), 1024u); }
-TEST(NextPow2, Large)      { EXPECT_EQ(infmon_next_pow2(0x7FFFFFFFu), 0x80000000u); }
+TEST(NextPow2, Zero)
+{
+    EXPECT_EQ(infmon_next_pow2(0), 1u);
+}
+TEST(NextPow2, One)
+{
+    EXPECT_EQ(infmon_next_pow2(1), 1u);
+}
+TEST(NextPow2, Two)
+{
+    EXPECT_EQ(infmon_next_pow2(2), 2u);
+}
+TEST(NextPow2, Three)
+{
+    EXPECT_EQ(infmon_next_pow2(3), 4u);
+}
+TEST(NextPow2, Five)
+{
+    EXPECT_EQ(infmon_next_pow2(5), 8u);
+}
+TEST(NextPow2, PowerOf2)
+{
+    EXPECT_EQ(infmon_next_pow2(1024), 1024u);
+}
+TEST(NextPow2, Large)
+{
+    EXPECT_EQ(infmon_next_pow2(0x7FFFFFFFu), 0x80000000u);
+}
 
 /* ── Create / Destroy ────────────────────────────────────────────── */
 
@@ -125,7 +146,7 @@ TEST(CounterTable, MultipleKeys)
     for (uint32_t i = 0; i < 8; i++) {
         uint8_t key[4];
         memcpy(key, &i, sizeof(i));
-        EXPECT_TRUE(infmon_counter_table_update(t, (uint64_t)i + 1, key, 4, 100, i));
+        EXPECT_TRUE(infmon_counter_table_update(t, (uint64_t) i + 1, key, 4, 100, i));
     }
     EXPECT_EQ(t->occupied_count, 8u);
 
@@ -183,7 +204,7 @@ TEST(CounterTable, TableFullAndEviction)
     for (uint32_t i = 0; i < 8; i++) {
         uint8_t key[4];
         memcpy(key, &i, sizeof(i));
-        uint64_t hash = (uint64_t)(i + 1) * 0x100;
+        uint64_t hash = (uint64_t) (i + 1) * 0x100;
         bool ok = infmon_counter_table_update(t, hash, key, 4, 64, i + 1);
         EXPECT_TRUE(ok);
     }
