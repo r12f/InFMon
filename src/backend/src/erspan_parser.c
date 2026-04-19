@@ -30,7 +30,8 @@ const char *infmon_parse_counter_names[] = {
     [INFMON_PARSE_ERR_INNER_DOUBLE_ENCAP_DROPPED] = "inner_double_encap_dropped",
 };
 
-_Static_assert(sizeof(infmon_parse_counter_names) / sizeof(infmon_parse_counter_names[0]) == INFMON_PARSE_ERR__COUNT,
+_Static_assert(sizeof(infmon_parse_counter_names) / sizeof(infmon_parse_counter_names[0]) ==
+                   INFMON_PARSE_ERR__COUNT,
                "counter_names out of sync with infmon_parse_result_t");
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
@@ -47,9 +48,8 @@ static inline uint32_t read_u32(const uint8_t *p)
 
 /* ── Extract inner L4 fields (TCP/UDP) ───────────────────────────── */
 
-static void extract_inner_l4(const uint8_t *inner_ptr, uint32_t inner_l4_off,
-                             uint32_t inner_len, uint8_t inner_ip_proto,
-                             infmon_parsed_packet_t *out)
+static void extract_inner_l4(const uint8_t *inner_ptr, uint32_t inner_l4_off, uint32_t inner_len,
+                             uint8_t inner_ip_proto, infmon_parsed_packet_t *out)
 {
     if (inner_ip_proto == 6 || inner_ip_proto == 17) {
         /* Need at least 4 bytes for ports */
