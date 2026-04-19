@@ -146,7 +146,8 @@ TEST_F(ApiSchemaTest, HasTableDescriptorType)
 TEST_F(ApiSchemaTest, HasFlowRuleDetailsType)
 {
     expect_contains("typedef infmon_flow_rule_details", "Missing flow_rule_details typedef");
-    expect_contains("infmon_flow_rule_id_t flow_rule_id", "details must embed flow_rule_id typedef");
+    expect_contains("infmon_flow_rule_id_t flow_rule_id",
+                    "details must embed flow_rule_id typedef");
     expect_contains("flow_rule_index", "details must have flow_rule_index");
 }
 
