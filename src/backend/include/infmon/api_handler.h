@@ -60,8 +60,7 @@ void infmon_api_ctx_destroy(infmon_api_ctx_t *ctx);
  * Add a flow rule: validate → insert into the rule set → create a
  * counter table → publish stats descriptor.
  */
-infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx,
-                                             const infmon_flow_rule_t *rule);
+infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx, const infmon_flow_rule_t *rule);
 
 /**
  * Delete a flow rule by name: unpublish stats → destroy counter table →
