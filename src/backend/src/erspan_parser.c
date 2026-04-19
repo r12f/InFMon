@@ -223,8 +223,7 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
             return INFMON_PARSE_ERR_OUTER_ETHERTYPE_UNSUPPORTED;
         }
 
-        outer_ip_payload_len =
-            payload_length > v6_ext_len ? payload_length - v6_ext_len : 0;
+        outer_ip_payload_len = payload_length > v6_ext_len ? payload_length - v6_ext_len : 0;
     }
 
     /* ── GRE ────────────────────────────────────────────────────── */
@@ -341,8 +340,7 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
         } else {
             uint32_t inner_ip_hdr_len = (uint32_t) inner_ihl * 4;
             uint32_t inner_l4_off = inner_l3_off + inner_ip_hdr_len;
-            extract_inner_l4(inner_ptr, inner_l4_off, inner_len,
-                             out->inner_ip_proto, out);
+            extract_inner_l4(inner_ptr, inner_l4_off, inner_len, out->inner_ip_proto, out);
         }
 
     } else if (inner_ethertype == 0x86DD) {
@@ -359,8 +357,7 @@ infmon_parse_result_t infmon_parse_erspan(const uint8_t *data, uint32_t len,
         out->inner_ip_proto = inner_ptr[inner_l3_off + 6];
 
         uint32_t inner_l4_off = inner_l3_off + 40;
-        extract_inner_l4(inner_ptr, inner_l4_off, inner_len,
-                         out->inner_ip_proto, out);
+        extract_inner_l4(inner_ptr, inner_l4_off, inner_len, out->inner_ip_proto, out);
     } else {
         /* Non-IP inner: we still accept it but can't extract L3/L4 */
         out->flow_key_partial = true;
