@@ -39,7 +39,7 @@ static uint32_t find_rule_index(const infmon_flow_rule_set_t *set, const char *n
     uint32_t n = infmon_flow_rule_count(set);
     for (uint32_t i = 0; i < n; i++) {
         const infmon_flow_rule_t *r = infmon_flow_rule_get(set, i);
-        if (r && strcmp(r->name, name) == 0)
+        if (r && r->name && strcmp(r->name, name) == 0)
             return i;
     }
     return (uint32_t) -1;
@@ -142,13 +142,22 @@ infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *
 infmon_api_result_t infmon_api_flow_rule_list(const infmon_api_ctx_t *ctx,
                                               infmon_api_flow_rule_list_cb_t cb, void *user)
 {
+    /* ERR_INVALID_RULE is reused for null-ctx: no dedicated "invalid context"
+     * code yet — the rule is the primary domain object, so this is the closest
+     * semantic match.  Same applies to get_by_name with null name. */
     if (!ctx)
         return INFMON_API_ERR_INVALID_RULE;
 
+    if (!cb)
+        return INFMON_API_OK;
+
+    /* The rule set is dense (add appends, rm compacts), so
+     * infmon_flow_rule_get() should not return NULL for i < count.
+     * The NULL guard is purely defensive. */
     uint32_t n = infmon_flow_rule_count(ctx->rule_set);
     for (uint32_t i = 0; i < n; i++) {
         const infmon_flow_rule_t *r = infmon_flow_rule_get(ctx->rule_set, i);
-        if (r && cb)
+        if (r)
             cb(r, i, user);
     }
     return INFMON_API_OK;
@@ -164,7 +173,7 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
     uint32_t n = infmon_flow_rule_count(ctx->rule_set);
     for (uint32_t i = 0; i < n; i++) {
         const infmon_flow_rule_t *r = infmon_flow_rule_get(ctx->rule_set, i);
-        if (r && strcmp(r->name, name) == 0) {
+        if (r && r->name && strcmp(r->name, name) == 0) {
             if (out_rule)
                 *out_rule = r;
             if (out_index)
