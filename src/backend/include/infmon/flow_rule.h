@@ -96,6 +96,8 @@ infmon_flow_rule_set_t *infmon_flow_rule_set_create(uint32_t max_keys_budget);
 void infmon_flow_rule_set_destroy(infmon_flow_rule_set_t *set);
 
 /* ── CRUD ────────────────────────────────────────────────────────── */
+/* NOTE: Pointers returned by find()/get() point into the internal array
+ * and are invalidated by any subsequent add() or rm() call. */
 
 infmon_flow_rule_result_t infmon_flow_rule_add(infmon_flow_rule_set_t *set,
                                                const infmon_flow_rule_t *rule);

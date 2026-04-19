@@ -197,6 +197,8 @@ struct infmon_flow_rule_set {
 
 infmon_flow_rule_set_t *infmon_flow_rule_set_create(uint32_t max_keys_budget)
 {
+    if (max_keys_budget > INFMON_FLOW_RULE_MAX_KEYS_BUDGET)
+        return NULL;
     infmon_flow_rule_set_t *s = calloc(1, sizeof(*s));
     if (!s)
         return NULL;
@@ -271,6 +273,7 @@ infmon_flow_rule_result_t infmon_flow_rule_rm(infmon_flow_rule_set_t *set, const
             for (uint32_t j = i; j + 1 < set->count; j++)
                 set->rules[j] = set->rules[j + 1];
             set->count--;
+            memset(&set->rules[set->count], 0, sizeof(set->rules[0]));
             return INFMON_FLOW_RULE_OK;
         }
     }
