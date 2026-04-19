@@ -605,16 +605,25 @@ mod tests {
     }
 
     impl Exporter for PermanentFailExporter {
-        fn kind(&self) -> &'static str { "test-fail" }
-        fn name(&self) -> &str { &self.name }
-        fn export(&self, _snap: Arc<FlowStatsSnapshot>) -> BoxFuture<'_, Result<(), ExporterError>> {
-            self.export_count.fetch_add(1, Ordering::Relaxed);
-            Box::pin(async {
-                Err(ExporterError::Permanent("fatal".into()))
-            })
+        fn kind(&self) -> &'static str {
+            "test-fail"
         }
-        fn reload(&self, _cfg: &ExporterConfig) -> Result<(), ConfigError> { Ok(()) }
-        fn shutdown(&self) -> BoxFuture<'_, ()> { Box::pin(async {}) }
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn export(
+            &self,
+            _snap: Arc<FlowStatsSnapshot>,
+        ) -> BoxFuture<'_, Result<(), ExporterError>> {
+            self.export_count.fetch_add(1, Ordering::Relaxed);
+            Box::pin(async { Err(ExporterError::Permanent("fatal".into())) })
+        }
+        fn reload(&self, _cfg: &ExporterConfig) -> Result<(), ConfigError> {
+            Ok(())
+        }
+        fn shutdown(&self) -> BoxFuture<'_, ()> {
+            Box::pin(async {})
+        }
     }
 
     #[test]
@@ -650,14 +659,23 @@ mod tests {
 
     impl TransientThenOkExporter {
         fn new() -> Self {
-            Self { call_count: AtomicU64::new(0) }
+            Self {
+                call_count: AtomicU64::new(0),
+            }
         }
     }
 
     impl Exporter for TransientThenOkExporter {
-        fn kind(&self) -> &'static str { "test-transient" }
-        fn name(&self) -> &str { "transient-exp" }
-        fn export(&self, _snap: Arc<FlowStatsSnapshot>) -> BoxFuture<'_, Result<(), ExporterError>> {
+        fn kind(&self) -> &'static str {
+            "test-transient"
+        }
+        fn name(&self) -> &str {
+            "transient-exp"
+        }
+        fn export(
+            &self,
+            _snap: Arc<FlowStatsSnapshot>,
+        ) -> BoxFuture<'_, Result<(), ExporterError>> {
             let n = self.call_count.fetch_add(1, Ordering::Relaxed);
             Box::pin(async move {
                 if n == 0 {
@@ -667,8 +685,12 @@ mod tests {
                 }
             })
         }
-        fn reload(&self, _cfg: &ExporterConfig) -> Result<(), ConfigError> { Ok(()) }
-        fn shutdown(&self) -> BoxFuture<'_, ()> { Box::pin(async {}) }
+        fn reload(&self, _cfg: &ExporterConfig) -> Result<(), ConfigError> {
+            Ok(())
+        }
+        fn shutdown(&self) -> BoxFuture<'_, ()> {
+            Box::pin(async {})
+        }
     }
 
     #[test]

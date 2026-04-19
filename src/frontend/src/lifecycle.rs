@@ -383,8 +383,14 @@ mod tests {
     #[test]
     fn entry_to_config_with_extra_fields() {
         let mut extra = std::collections::HashMap::new();
-        extra.insert("endpoint".to_string(), serde_yaml::Value::String("http://localhost:4317".into()));
-        extra.insert("timeout".to_string(), serde_yaml::Value::Number(serde_yaml::Number::from(30)));
+        extra.insert(
+            "endpoint".to_string(),
+            serde_yaml::Value::String("http://localhost:4317".into()),
+        );
+        extra.insert(
+            "timeout".to_string(),
+            serde_yaml::Value::Number(serde_yaml::Number::from(30)),
+        );
 
         let entry = infmon_config::model::ExporterEntry {
             kind: "otlp".into(),
@@ -467,7 +473,10 @@ mod tests {
         let shutdown = Arc::new(AtomicBool::new(false));
         let result = Frontend::start(&cfg_path, shutdown);
         assert!(result.is_err());
-        assert!(matches!(result.err().unwrap(), LifecycleError::ConfigError(_)));
+        assert!(matches!(
+            result.err().unwrap(),
+            LifecycleError::ConfigError(_)
+        ));
     }
 
     #[test]
@@ -487,7 +496,10 @@ flow-rules: []
         let shutdown = Arc::new(AtomicBool::new(false));
         let result = Frontend::start(&cfg_path, shutdown);
         assert!(result.is_err());
-        assert!(matches!(result.err().unwrap(), LifecycleError::BackendUnreachable(_)));
+        assert!(matches!(
+            result.err().unwrap(),
+            LifecycleError::BackendUnreachable(_)
+        ));
     }
 
     #[test]
