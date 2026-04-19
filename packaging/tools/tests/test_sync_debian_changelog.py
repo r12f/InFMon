@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Unit tests for tools/sync-debian-changelog.py.
+Unit tests for packaging/tools/sync-debian-changelog.py.
 
 Run from repo root:
 
-    python3 -m unittest discover -s tools/tests -v
+    python3 -m unittest discover -s packaging/tools/tests -v
 """
 
 import datetime as _dt
@@ -13,8 +13,8 @@ import sys
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "tools" / "sync-debian-changelog.py"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SCRIPT = REPO_ROOT / "packaging" / "tools" / "sync-debian-changelog.py"
 
 spec = importlib.util.spec_from_file_location("sync_changelog", SCRIPT)
 sync = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]

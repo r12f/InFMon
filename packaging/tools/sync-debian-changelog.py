@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-sync-debian-changelog.py — regenerate debian/changelog from CHANGELOG.md.
+sync-debian-changelog.py — regenerate packaging/debian/changelog from CHANGELOG.md.
 
 Per spec 008 §9.2, CHANGELOG.md (Keep a Changelog format) is the
-single source of truth for release notes. debian/changelog is a
+single source of truth for release notes. packaging/debian/changelog is a
 mechanical projection of it, generated at source-package build time
 so the two cannot drift.
 
@@ -18,7 +18,7 @@ For every released section in CHANGELOG.md, e.g.
     ### Fixed
     - Bar
 
-we emit one debian/changelog stanza:
+we emit one packaging/debian/changelog stanza:
 
     infmon (1.4.2-1) UNRELEASED; urgency=medium
 
@@ -53,9 +53,9 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CHANGELOG_MD = REPO_ROOT / "CHANGELOG.md"
-DEBIAN_CHANGELOG = REPO_ROOT / "debian" / "changelog"
+DEBIAN_CHANGELOG = REPO_ROOT / "packaging" / "debian" / "changelog"
 
 PKG = "infmon"
 MAINTAINER = os.environ.get(
@@ -257,8 +257,8 @@ def main(argv: List[str]) -> int:
 
     if args.check:
         sys.stderr.write(
-            "debian/changelog is out of sync with CHANGELOG.md.\n"
-            "Run: python3 tools/sync-debian-changelog.py\n"
+            "packaging/debian/changelog is out of sync with CHANGELOG.md.\n"
+            "Run: python3 packaging/tools/sync-debian-changelog.py\n"
         )
         return 2
 

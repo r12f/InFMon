@@ -75,11 +75,11 @@ jobs:
       - name: Detect backend source
         id: detect_cpp
         run: |
-          if [ -f backend/CMakeLists.txt ]; then
+          if [ -f src/backend/CMakeLists.txt ]; then
             echo "have_backend=true" >> "$GITHUB_OUTPUT"
           else
             echo "have_backend=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::backend/CMakeLists.txt not present yet; C++ cross-build is a no-op."
+            echo "::notice::src/backend/CMakeLists.txt not present yet; C++ cross-build is a no-op."
           fi
 
       - name: ccache cache (arm64)
@@ -87,7 +87,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-ccache-arm64-${{ hashFiles('backend/**/CMakeLists.txt') }}
+          key: ${{ runner.os }}-ccache-arm64-${{ hashFiles('src/backend/**/CMakeLists.txt') }}
           restore-keys: |
             ${{ runner.os }}-ccache-arm64-
 
@@ -106,7 +106,7 @@ jobs:
                       echo "::error::VPP aarch64 headers missing — see specs/001-ci-and-precommit.md §4.4."
                       exit 1
                   fi
-                  cmake -S backend -B build-arm64 -G Ninja \
+                  cmake -S src/backend -B build-arm64 -G Ninja \
                       -DCMAKE_BUILD_TYPE=Release \
                       -DCMAKE_C_COMPILER_LAUNCHER=ccache \
                       -DCMAKE_CXX_COMPILER_LAUNCHER=ccache

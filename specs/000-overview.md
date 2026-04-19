@@ -114,7 +114,7 @@ packets         |     v                                         |
 > **Backend language note.** "C/C++" here means: production VPP plugin code
 > (graph nodes, parser, flow-table) is **C11**, matching VPP's own conventions
 > and its C-only node registration macros (`VLIB_REGISTER_NODE` etc.). C++17
-> is allowed only inside `backend/tests/` for GoogleTest fixtures and helpers,
+> is allowed only inside `src/backend/test/` for GoogleTest fixtures and helpers,
 > which link against the plugin's C ABI through `extern "C"` headers. No C++
 > runtime is loaded into the VPP process in production.
 >
@@ -168,23 +168,26 @@ InFMon/
 │   ├── 000-overview.md     # this file
 │   ├── TEMPLATE.md         # canonical copy of the spec skeleton
 │   └── NNN-<slug>.md       # one spec per accepted feature
-├── backend/                # infmon-backend (C/C++ VPP plugin)
-│   ├── src/
-│   ├── include/
-│   ├── tests/              # gtest unit tests
-│   └── CMakeLists.txt
-├── frontend/               # infmon-frontend (Rust)
-│   ├── src/
-│   ├── tests/
-│   └── Cargo.toml
-├── cli/                    # infmon-cli (Rust)
-│   ├── src/
-│   └── Cargo.toml
+├── src/
+│   ├── backend/            # infmon-backend (C/C++ VPP plugin)
+│   │   ├── src/
+│   │   ├── include/
+│   │   ├── test/           # gtest unit tests
+│   │   └── CMakeLists.txt
+│   ├── frontend/           # infmon-frontend (Rust)
+│   │   ├── src/
+│   │   ├── test/
+│   │   └── Cargo.toml
+│   └── cli/                # infmon-cli (Rust)
+│       ├── src/
+│       ├── test/
+│       └── Cargo.toml
 ├── tests/                  # E2E, real-packet replay (NOT in CI)
 │   ├── pcaps/
 │   └── scenarios/
 ├── packaging/
-│   └── debian/             # aarch64 .deb build files
+│   ├── debian/             # aarch64 .deb build files
+│   └── tools/              # build & release helpers
 └── .github/workflows/      # CI: build + unit tests for all components
 ```
 
@@ -193,7 +196,7 @@ InFMon/
 - **C/C++ (backend):**
   - C11 / C++17. Match VPP's existing style (4-space indent, snake_case
     functions, `vlib_*` / `vnet_*` patterns).
-  - `clang-format` enforced in CI. Headers in `backend/include/`.
+  - `clang-format` enforced in CI. Headers in `src/backend/include/`.
   - Unit tests: GoogleTest (`gtest`). Built only when
     `-DINFMON_BUILD_TESTS=ON`.
 - **Rust (frontend, cli):**

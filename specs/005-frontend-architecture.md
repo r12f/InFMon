@@ -42,7 +42,7 @@ In scope:
 - The IPC client to the backend: stats-segment reader plus control
   API, packaged as a reusable crate shared with `infmon-cli`.
 - Process model, threading, and the crate layout under
-  `src/infmon-frontend/`.
+  `src/frontend/src/infmon-frontend/`.
 
 Out of scope (deferred or owned elsewhere):
 
@@ -260,12 +260,12 @@ The `[[exporter]]` blocks in §5 are matched to registrations by
 ### 6.2 Crate layout
 
 ```text
-src/infmon-frontend/
+src/frontend/src/infmon-frontend/
 ├── core/                 # tick loop, lifecycle, FlowStatsSnapshot
 ├── exporter/             # Exporter trait, registration, dispatch
 ├── ipc/                  # shared with infmon-cli (Spec 007)
 └── bin/                  # main(), config loading, signal wiring
-src/exporters/
+src/frontend/src/exporters/
 └── otlp/                 # the v1 exporter (Spec 006)
 ```
 
@@ -273,7 +273,7 @@ Directory names are short (`core/`, `exporter/`, etc.) but Cargo crate
 names use an `infmon-` prefix (e.g. `infmon-core`, `infmon-exporter`)
 to avoid workspace-level collisions.
 
-Adding an exporter is: new crate under `src/exporters/`, depend on
+Adding an exporter is: new crate under `src/frontend/src/exporters/`, depend on
 `exporter`, `inventory::submit!` a registration, declare the
 crate as a dep of `bin`. No changes to the loop or the trait.
 

@@ -15,15 +15,15 @@ on:
   push:
     branches: [main]
     paths:
-      - 'debian/**'
-      - 'tools/sync-debian-changelog.py'
+      - 'packaging/debian/**'
+      - 'packaging/tools/sync-debian-changelog.py'
       - 'CHANGELOG.md'
       - 'src/**'
       - '.github/workflows/package-deb.yml'
   pull_request:
     paths:
-      - 'debian/**'
-      - 'tools/sync-debian-changelog.py'
+      - 'packaging/debian/**'
+      - 'packaging/tools/sync-debian-changelog.py'
       - 'CHANGELOG.md'
       - 'src/**'
       - '.github/workflows/package-deb.yml'
@@ -42,10 +42,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate debian/changelog is in sync with CHANGELOG.md
-        run: python3 tools/sync-debian-changelog.py --check
+        run: python3 packaging/tools/sync-debian-changelog.py --check
 
       - name: Run sync script unit tests
-        run: python3 -m unittest discover -s tools/tests -v
+        run: python3 -m unittest discover -s packaging/tools/tests -v
 
       - name: Install build tooling
         run: |
@@ -75,7 +75,7 @@ jobs:
           # IMPORTANT: only exclude ./debian and VCS metadata. Anything else
           # excluded from the orig tarball will be flagged as an unexpected
           # upstream change by `dpkg-source -b` under format '3.0 (quilt)'.
-          tar --exclude='./debian' --exclude-vcs \
+          tar --exclude='./packaging/debian' --exclude-vcs \
               -czf "../${PKG}_${UVER}.orig.tar.gz" .
           ls -la "../${PKG}_${UVER}.orig.tar.gz"
 
