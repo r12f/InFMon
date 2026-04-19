@@ -91,6 +91,7 @@ typedef infmon_flow_rule_details
     u32 flow_rule_index;
     string name[32];       /* NUL-terminated, max 31 chars + NUL */
     u32 field_count;
+    /** Fixed-size: max 5 fields per rule. Bump array + version if more needed. */
     vl_api_infmon_field_type_t fields[5];
     u32 max_keys;
     vl_api_infmon_eviction_policy_t eviction_policy;
@@ -116,7 +117,7 @@ typedef infmon_worker_status
  * Register a new flow_rule.  Allocates a counter table and returns
  * the assigned flow_rule_id.
  */
-autoreply define infmon_flow_rule_add
+define infmon_flow_rule_add
 {
     u32 client_index;
     u32 context;
@@ -209,7 +210,8 @@ define infmon_snapshot_and_clear_reply
 
 /**
  * Retrieve per-worker error/health counters.
- * Returns one infmon_status_details per worker.
+ * Returns all workers in a single infmon_status_details message
+ * via a variable-length array (workers[worker_count]).
  */
 define infmon_status
 {

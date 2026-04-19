@@ -14,7 +14,7 @@
 #   endif()
 #
 # The generated header is: ${OUTPUT_DIR}/<basename>.api.h
-# A CMake target "infmon_api_generated" is created that depends on it.
+# A CMake target "${basename}_api_generated" is created that depends on it.
 
 # Try to find vppapigen — shipped with vpp-dev
 find_program(VPPAPIGEN_EXECUTABLE
@@ -74,13 +74,15 @@ function(vpp_generate_api_header)
             VERBATIM
         )
 
-        add_custom_target(infmon_api_generated
+        get_filename_component(_api_stem "${ARG_API_FILE}" NAME_WE)
+        add_custom_target(${_api_stem}_api_generated
             DEPENDS "${OUTPUT_HEADER}" "${OUTPUT_JSON}"
         )
     else()
         message(STATUS "vppapigen not found — API header generation skipped (pre-generated headers required)")
         # Create a dummy target so dependents don't break
-        add_custom_target(infmon_api_generated)
+        get_filename_component(_api_stem "${ARG_API_FILE}" NAME_WE)
+        add_custom_target(${_api_stem}_api_generated)
     endif()
 
     # Export variables to parent scope
