@@ -26,14 +26,6 @@
 #error "API_FILE must be defined at compile time (path to infmon.api)"
 #endif
 
-static std::string read_file(const char *path)
-{
-    std::ifstream f(path);
-    EXPECT_TRUE(f.is_open()) << "Cannot open " << path;
-    std::stringstream ss;
-    ss << f.rdbuf();
-    return ss.str();
-}
 
 class ApiSchemaTest : public ::testing::Test
 {
@@ -42,7 +34,11 @@ class ApiSchemaTest : public ::testing::Test
 
     void SetUp() override
     {
-        api = read_file(API_FILE);
+        std::ifstream f(API_FILE);
+        ASSERT_TRUE(f.is_open()) << "Cannot open " << API_FILE;
+        std::stringstream ss;
+        ss << f.rdbuf();
+        api = ss.str();
     }
 
     /* Check that a pattern appears in the .api text. */
@@ -57,6 +53,18 @@ class ApiSchemaTest : public ::testing::Test
     {
         std::regex re(regex_str);
         EXPECT_TRUE(std::regex_search(api, re)) << msg << "\n  Missing regex: " << regex_str;
+    }
+
+    /* Count occurrences of a substring in the .api text. */
+    int count_occurrences(const std::string &pattern)
+    {
+        int count = 0;
+        size_t pos = 0;
+        while ((pos = api.find(pattern, pos)) != std::string::npos) {
+            ++count;
+            pos += pattern.size();
+        }
+        return count;
     }
 };
 
@@ -244,5 +252,29 @@ TEST_F(ApiSchemaTest, AllSixMessagesPresent)
 
     for (const auto &msg : required_messages) {
         expect_contains("define " + msg, "Missing required message: " + msg);
+    }
+}
+
+/* ── Uniqueness — no duplicate message definitions ────────────────── */
+
+TEST_F(ApiSchemaTest, NoDuplicateMessageDefinitions)
+{
+    const std::vector<std::string> critical = {
+        "define infmon_flow_rule_add\n",
+        "define infmon_flow_rule_add_reply\n",
+        "define infmon_flow_rule_del\n",
+        "define infmon_flow_rule_list\n",
+        "define infmon_flow_rule_list_details\n",
+        "define infmon_flow_rule_list_reply\n",
+        "define infmon_snapshot_and_clear\n",
+        "define infmon_snapshot_and_clear_reply\n",
+        "define infmon_status\n",
+        "define infmon_status_details\n",
+        "define infmon_status_reply\n",
+    };
+    for (const auto &pat : critical) {
+        EXPECT_EQ(count_occurrences(pat), 1)
+            << "Expected exactly 1 occurrence of '" << pat << "' but found "
+            << count_occurrences(pat);
     }
 }
