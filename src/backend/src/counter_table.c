@@ -16,6 +16,8 @@ uint32_t infmon_next_pow2(uint32_t v)
 {
     if (v == 0)
         return 1;
+    if (v > 0x80000000u)
+        return 0; /* overflow — caller must check */
     v--;
     v |= v >> 1;
     v |= v >> 2;
@@ -148,11 +150,11 @@ void infmon_counter_table_destroy(infmon_counter_table_t *table)
 static bool evict_lru(infmon_counter_table_t *table, uint32_t probe_start,
                       uint64_t tick __attribute__((unused)))
 {
-    /* Scan a window of num_slots (full table) to find LRU victim */
+    /* Scan a bounded window to find approximate LRU victim */
     uint32_t victim = UINT32_MAX;
     uint64_t min_tick = UINT64_MAX;
 
-    uint32_t window = table->num_slots;
+    uint32_t window = (table->num_slots < 32) ? table->num_slots : 32;
     for (uint32_t i = 0; i < window; i++) {
         uint32_t idx = (probe_start + i) & table->slot_mask;
         uint16_t f = __atomic_load_n(&table->slots[idx].flags, __ATOMIC_ACQUIRE);
@@ -172,8 +174,13 @@ static bool evict_lru(infmon_counter_table_t *table, uint32_t probe_start,
     infmon_seqlock_t *sl = &table->seqlocks[group];
 
     seqlock_write_begin(sl);
+    /* Re-check under seqlock — another thread may have evicted or re-inserted */
+    if (__atomic_load_n(&table->slots[victim].flags, __ATOMIC_RELAXED) != INFMON_SLOT_OCCUPIED) {
+        seqlock_write_end(sl);
+        return false;
+    }
     /* Mark as tombstone; note: arena bytes for this key are not reclaimed */
-    table->slots[victim].flags = INFMON_SLOT_TOMBSTONE;
+    __atomic_store_n(&table->slots[victim].flags, INFMON_SLOT_TOMBSTONE, __ATOMIC_RELEASE);
     __atomic_fetch_sub(&table->occupied_count, 1, __ATOMIC_RELAXED);
     seqlock_write_end(sl);
 
@@ -188,7 +195,9 @@ bool infmon_counter_table_update(infmon_counter_table_t *table, uint64_t key_has
 {
     uint32_t start = (uint32_t) (key_hash & table->slot_mask);
 
-    /* Phase 1: search for existing key or a free/tombstone slot */
+    /* Phase 1: search for existing key, tracking first reusable slot */
+    uint32_t candidate_idx = UINT32_MAX;
+
     for (uint32_t i = 0; i < table->num_slots; i++) {
         uint32_t idx = (start + i) & table->slot_mask;
         infmon_slot_t *slot = &table->slots[idx];
@@ -206,23 +215,36 @@ bool infmon_counter_table_update(infmon_counter_table_t *table, uint64_t key_has
         }
 
         if (f == INFMON_SLOT_INSERTING) {
-            /* Another thread is populating this slot — skip, don't match. */
             continue;
         }
 
-        /* Free or tombstone — try to claim via CAS */
+        if (f == INFMON_SLOT_TOMBSTONE) {
+            if (candidate_idx == UINT32_MAX)
+                candidate_idx = idx;
+            continue; /* keep probing — key may exist past the tombstone */
+        }
+
+        /* FREE — key definitely doesn't exist in the table */
+        if (candidate_idx == UINT32_MAX)
+            candidate_idx = idx;
+        break;
+    }
+
+    /* Try to insert at the candidate slot */
+    if (candidate_idx != UINT32_MAX) {
+        infmon_slot_t *slot = &table->slots[candidate_idx];
+        uint16_t f = __atomic_load_n(&slot->flags, __ATOMIC_ACQUIRE);
         if (f == INFMON_SLOT_FREE || f == INFMON_SLOT_TOMBSTONE) {
             uint16_t expected = f;
-            uint16_t desired = INFMON_SLOT_INSERTING;
             bool ok = false;
             for (int retry = 0; retry < INFMON_INSERT_RETRY; retry++) {
                 expected = f;
-                if (__atomic_compare_exchange_n(&slot->flags, &expected, desired, false,
+                if (__atomic_compare_exchange_n(&slot->flags, &expected,
+                                                INFMON_SLOT_INSERTING, false,
                                                 __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
                     ok = true;
                     break;
                 }
-                /* If someone else made it occupied with our key, check */
                 if (expected == INFMON_SLOT_OCCUPIED &&
                     key_matches(table, slot, key_hash, key, key_len)) {
                     __atomic_fetch_add(&slot->packets, 1, __ATOMIC_RELAXED);
@@ -236,13 +258,11 @@ bool infmon_counter_table_update(infmon_counter_table_t *table, uint64_t key_has
                 return false;
             }
 
-            /* We claimed the slot — fill it under seqlock */
-            uint32_t group = idx / INFMON_SLOTS_PER_GROUP;
+            uint32_t group = candidate_idx / INFMON_SLOTS_PER_GROUP;
             infmon_seqlock_t *sl = &table->seqlocks[group];
 
             uint32_t key_off = arena_alloc(table, key, key_len);
             if (key_off == UINT32_MAX) {
-                /* Arena full — release slot */
                 __atomic_store_n(&slot->flags, INFMON_SLOT_FREE, __ATOMIC_RELEASE);
                 __atomic_fetch_add(&table->insert_failed, 1, __ATOMIC_RELAXED);
                 return false;

@@ -246,3 +246,50 @@ TEST(CounterTable, KeyOnFreeSlotReturnsNull)
     EXPECT_EQ(infmon_counter_table_key(t, &slot), nullptr);
     infmon_counter_table_destroy(t);
 }
+
+/* ── Concurrent stress test ─────────────────────────────────────── */
+
+#include <thread>
+#include <vector>
+
+TEST(CounterTable, ConcurrentStress)
+{
+    /* 256 slots, 64-byte max key */
+    auto *t = infmon_counter_table_create(256, 64);
+    ASSERT_NE(t, nullptr);
+
+    constexpr int kThreads = 4;
+    constexpr int kOpsPerThread = 10000;
+    constexpr int kDistinctKeys = 50;
+
+    auto worker = [&](int tid) {
+        for (int i = 0; i < kOpsPerThread; i++) {
+            uint32_t kid = (tid * 7 + i) % kDistinctKeys;
+            uint8_t key[4];
+            memcpy(key, &kid, sizeof(kid));
+            uint64_t hash = (uint64_t)kid * 0x9E3779B97F4A7C15ULL;
+            infmon_counter_table_update(t, hash, key, 4, 1, (uint64_t)(tid * kOpsPerThread + i));
+        }
+    };
+
+    std::vector<std::thread> threads;
+    for (int i = 0; i < kThreads; i++)
+        threads.emplace_back(worker, i);
+    for (auto &th : threads)
+        th.join();
+
+    /* Verify: total packets across all slots for each key should equal the
+     * number of times that key was updated across all threads. */
+    uint64_t total_packets = 0;
+    infmon_slot_t slot;
+    for (uint32_t i = 0; i < t->num_slots; i++) {
+        if (infmon_counter_table_read_slot(t, i, &slot) &&
+            slot.flags == INFMON_SLOT_OCCUPIED) {
+            total_packets += slot.packets;
+        }
+    }
+    /* Every update call should have incremented exactly one slot's packet counter */
+    EXPECT_EQ(total_packets, (uint64_t)kThreads * kOpsPerThread);
+
+    infmon_counter_table_destroy(t);
+}
