@@ -16,6 +16,7 @@ target_include_directories(infmon_parser PUBLIC include)
 
 # --- Tests ---
 find_package(GTest REQUIRED)
+find_package(Threads REQUIRED)
 enable_testing()
 
 add_executable(test_erspan_parser
@@ -73,7 +74,7 @@ target_link_libraries(infmon_snapshot PUBLIC infmon_counter_table)
 add_executable(test_snapshot
     test/test_snapshot.cc
 )
-target_link_libraries(test_snapshot PRIVATE infmon_snapshot infmon_counter_table GTest::gtest GTest::gtest_main pthread)
+target_link_libraries(test_snapshot PRIVATE infmon_snapshot infmon_counter_table GTest::gtest GTest::gtest_main Threads::Threads)
 target_include_directories(test_snapshot PRIVATE include)
 add_test(NAME snapshot COMMAND test_snapshot)
 
@@ -90,6 +91,27 @@ add_executable(test_stats_segment
 target_link_libraries(test_stats_segment PRIVATE infmon_stats_segment infmon_counter_table GTest::gtest GTest::gtest_main)
 target_include_directories(test_stats_segment PRIVATE include)
 add_test(NAME stats_segment COMMAND test_stats_segment)
+
+# --- Graph node library (portable processing functions, no VPP dependency) ---
+add_library(infmon_graph_node STATIC
+    src/graph_node.c
+)
+target_include_directories(infmon_graph_node PUBLIC include)
+target_link_libraries(infmon_graph_node PUBLIC
+    infmon_parser
+    infmon_flow_rule
+    infmon_counter_table
+)
+
+add_executable(test_graph_node
+    test/test_graph_node.cc
+)
+target_link_libraries(test_graph_node PRIVATE
+    infmon_graph_node
+    GTest::gtest GTest::gtest_main
+)
+target_include_directories(test_graph_node PRIVATE include)
+add_test(NAME graph_node COMMAND test_graph_node)
 
 # --- API handler library (flow_rule_add / flow_rule_del orchestration) ---
 add_library(infmon_api_handler STATIC
@@ -133,6 +155,18 @@ target_link_libraries(test_api_schema PRIVATE GTest::gtest GTest::gtest_main)
 target_compile_definitions(test_api_schema PRIVATE
     API_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/api/infmon.api\")
 add_test(NAME api_schema COMMAND test_api_schema)
+
+add_executable(test_integration
+    test/test_integration.cc
+)
+target_link_libraries(test_integration PRIVATE
+    infmon_api_handler
+    infmon_graph_node
+    GTest::gtest GTest::gtest_main
+    Threads::Threads
+)
+target_include_directories(test_integration PRIVATE include)
+add_test(NAME integration COMMAND test_integration)
 
 if(ENABLE_FUZZER)
     add_executable(fuzz_erspan_parser
