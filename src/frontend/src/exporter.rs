@@ -137,6 +137,10 @@ pub struct ExporterRegistration {
 inventory::collect!(ExporterRegistration);
 
 /// Look up a registered exporter factory by kind.
+///
+/// Returns the first match. If multiple plugins register the same `kind`,
+/// only the first is reachable — duplicates are detected and logged at
+/// startup by [`validate_registrations`].
 pub fn find_factory(kind: &str) -> Option<ExporterFactory> {
     for reg in inventory::iter::<ExporterRegistration> {
         if reg.kind == kind {
@@ -146,7 +150,30 @@ pub fn find_factory(kind: &str) -> Option<ExporterFactory> {
     None
 }
 
+/// Check for duplicate `kind` registrations and log warnings.
+/// Should be called once at startup.
+pub fn validate_registrations() {
+    let mut seen = std::collections::HashSet::new();
+    for reg in inventory::iter::<ExporterRegistration> {
+        if !seen.insert(reg.kind) {
+            log::warn!(
+                "duplicate exporter registration for kind '{}' — only the first will be used",
+                reg.kind,
+            );
+        }
+    }
+}
+
 // ── Bounded snapshot channel (drop_newest) ─────────────────────────
+
+/// Error returned by [`SnapshotSender::try_send`].
+#[derive(Debug)]
+pub enum TrySendError {
+    /// The channel is full (backpressure). The snapshot was dropped.
+    Full,
+    /// The receiver has been dropped — the exporter thread is gone.
+    Disconnected,
+}
 
 /// Sender half of a bounded snapshot channel with `drop_newest` overflow.
 #[derive(Clone)]
@@ -160,22 +187,29 @@ pub struct SnapshotReceiver {
 }
 
 /// Create a bounded channel pair with the given capacity.
+///
+/// A `capacity` of zero is clamped to 1 with a warning log, since a
+/// zero-capacity `sync_channel` would require a rendezvous and break
+/// the drop-newest overflow policy.
 pub fn snapshot_channel(capacity: usize) -> (SnapshotSender, SnapshotReceiver) {
-    let cap = capacity.max(1);
+    let cap = if capacity == 0 {
+        log::warn!("snapshot_channel: capacity 0 clamped to 1");
+        1
+    } else {
+        capacity
+    };
     let (tx, rx) = std::sync::mpsc::sync_channel(cap);
     (SnapshotSender { inner: tx }, SnapshotReceiver { inner: rx })
 }
 
 impl SnapshotSender {
-    /// Try to send a snapshot. If the channel is full, the snapshot is
-    /// dropped (drop_newest policy) and `Err(())` is returned so the
-    /// caller can bump a metric.
-    #[allow(clippy::result_unit_err)]
-    pub fn try_send(&self, snap: Arc<FlowStatsSnapshot>) -> Result<(), ()> {
+    /// Try to send a snapshot. Returns a typed error distinguishing
+    /// backpressure (`Full`) from a dead exporter thread (`Disconnected`).
+    pub fn try_send(&self, snap: Arc<FlowStatsSnapshot>) -> Result<(), TrySendError> {
         match self.inner.try_send(snap) {
             Ok(()) => Ok(()),
-            Err(std::sync::mpsc::TrySendError::Full(_)) => Err(()),
-            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => Err(()),
+            Err(std::sync::mpsc::TrySendError::Full(_)) => Err(TrySendError::Full),
+            Err(std::sync::mpsc::TrySendError::Disconnected(_)) => Err(TrySendError::Disconnected),
         }
     }
 }
@@ -195,6 +229,14 @@ impl SnapshotReceiver {
 // ── Per-exporter dispatch thread ───────────────────────────────────
 
 /// Handle to a running exporter thread.
+///
+/// # Shutdown contract
+///
+/// The caller MUST drop all [`SnapshotSender`] clones **before** dropping
+/// `ExporterHandle` (or calling [`join`](Self::join)). The thread exits
+/// when `rx.recv()` returns `None`, which only happens once every sender
+/// is dropped. If senders are still alive when `Drop` runs, the `join()`
+/// call will block indefinitely.
 pub struct ExporterHandle {
     join: Option<thread::JoinHandle<()>>,
     _name: String,
@@ -204,16 +246,22 @@ impl ExporterHandle {
     /// Wait for the exporter thread to finish (call after closing the channel).
     pub fn join(mut self) {
         if let Some(h) = self.join.take() {
-            let _ = h.join();
+            if let Err(e) = h.join() {
+                log::error!("exporter thread panicked: {:?}", e);
+            }
         }
     }
 }
 
 impl Drop for ExporterHandle {
     fn drop(&mut self) {
-        // Thread will exit once the sender is dropped and the channel drains.
+        // Explicit join to ensure the thread finishes before the handle is
+        // reclaimed. `JoinHandle` detaches on drop (does NOT join), so
+        // without this the thread could outlive resources it references.
         if let Some(h) = self.join.take() {
-            let _ = h.join();
+            if let Err(e) = h.join() {
+                log::error!("exporter thread panicked: {:?}", e);
+            }
         }
     }
 }
@@ -222,37 +270,68 @@ impl Drop for ExporterHandle {
 ///
 /// The thread runs a single-threaded tokio runtime and consumes snapshots
 /// from `rx`, calling `exporter.export()` with the configured timeout.
+///
+/// Returns `Err` if the tokio runtime or the OS thread fails to spawn.
 pub fn spawn_exporter_thread(
     exporter: Arc<dyn Exporter>,
     rx: SnapshotReceiver,
     export_timeout: Duration,
-) -> ExporterHandle {
+) -> Result<ExporterHandle, Box<dyn std::error::Error + Send + Sync>> {
     let name = format!("exporter-{}", exporter.name());
     let thread_name = name.clone();
 
     let join = thread::Builder::new()
         .name(thread_name)
         .spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
+            let rt = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
-                .expect("failed to build tokio current-thread runtime for exporter");
+            {
+                Ok(rt) => rt,
+                Err(e) => {
+                    log::error!(
+                        "exporter '{}': failed to build tokio runtime: {}",
+                        exporter.name(),
+                        e,
+                    );
+                    return;
+                }
+            };
 
             rt.block_on(async {
+                let mut backoff = Duration::from_millis(100);
+                const MAX_BACKOFF: Duration = Duration::from_secs(30);
+
                 while let Some(snap) = rx.recv() {
                     let result = tokio::time::timeout(export_timeout, exporter.export(snap)).await;
 
                     match result {
-                        Ok(Ok(())) => {}
-                        Ok(Err(ExporterError::Timeout)) | Err(_) => {
+                        Ok(Ok(())) => {
+                            backoff = Duration::from_millis(100); // reset on success
+                        }
+                        Ok(Err(ExporterError::Timeout)) => {
                             log::warn!(
-                                "exporter '{}' timed out (limit {:?})",
+                                "exporter '{}' self-reported timeout",
+                                exporter.name(),
+                            );
+                            // Transient-like, apply backoff
+                            tokio::time::sleep(backoff).await;
+                            backoff = (backoff * 2).min(MAX_BACKOFF);
+                        }
+                        Err(_) => {
+                            log::warn!(
+                                "exporter '{}' export exceeded framework deadline ({:?})",
                                 exporter.name(),
                                 export_timeout,
                             );
+                            // Transient-like, apply backoff
+                            tokio::time::sleep(backoff).await;
+                            backoff = (backoff * 2).min(MAX_BACKOFF);
                         }
                         Ok(Err(ExporterError::Transient(e))) => {
-                            log::warn!("exporter '{}' transient error: {}", exporter.name(), e,);
+                            log::warn!("exporter '{}' transient error: {}", exporter.name(), e);
+                            tokio::time::sleep(backoff).await;
+                            backoff = (backoff * 2).min(MAX_BACKOFF);
                         }
                         Ok(Err(ExporterError::Permanent(e))) => {
                             log::error!(
@@ -264,15 +343,17 @@ pub fn spawn_exporter_thread(
                         }
                     }
                 }
+
+                // Flush exporter buffers on shutdown (spec §9.3).
+                exporter.shutdown().await;
                 log::info!("exporter '{}' thread exiting", exporter.name());
             });
-        })
-        .expect("failed to spawn exporter thread");
+        })?;
 
-    ExporterHandle {
+    Ok(ExporterHandle {
         join: Some(join),
         _name: name,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -332,7 +413,10 @@ mod tests {
         // First send succeeds.
         assert!(tx.try_send(snap.clone()).is_ok());
         // Second send should fail (channel full, drop_newest).
-        assert!(tx.try_send(snap.clone()).is_err());
+        assert!(matches!(
+            tx.try_send(snap.clone()),
+            Err(TrySendError::Full)
+        ));
 
         // Consume and verify.
         let received = rx.recv().unwrap();
@@ -345,7 +429,7 @@ mod tests {
         let (tx, rx) = snapshot_channel(4);
 
         let exp_clone = exporter.clone();
-        let handle = spawn_exporter_thread(exp_clone, rx, Duration::from_secs(5));
+        let handle = spawn_exporter_thread(exp_clone, rx, Duration::from_secs(5)).unwrap();
 
         // Send 3 snapshots.
         for i in 1..=3 {
