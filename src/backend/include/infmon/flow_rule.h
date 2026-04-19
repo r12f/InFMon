@@ -48,7 +48,7 @@ typedef enum {
 /* ── Constants ───────────────────────────────────────────────────── */
 
 #define INFMON_FLOW_RULE_NAME_MAX 31
-#define INFMON_FLOW_RULE_KEY_MAX  64
+#define INFMON_FLOW_RULE_KEY_MAX 64
 #define INFMON_FLOW_RULE_FIELDS_MAX INFMON_FIELD__COUNT
 #define INFMON_FLOW_RULE_MAX_KEYS_BUDGET (16u * 1024 * 1024) /* 16 Mi */
 #define INFMON_FLOW_RULE_SET_MAX 16
@@ -56,12 +56,12 @@ typedef enum {
 /* ── Flow rule (immutable after creation) ────────────────────────── */
 
 typedef struct {
-    char                    name[INFMON_FLOW_RULE_NAME_MAX + 1];
-    infmon_field_t          fields[INFMON_FLOW_RULE_FIELDS_MAX];
-    uint32_t                field_count;
-    uint32_t                max_keys;
+    char name[INFMON_FLOW_RULE_NAME_MAX + 1];
+    infmon_field_t fields[INFMON_FLOW_RULE_FIELDS_MAX];
+    uint32_t field_count;
+    uint32_t max_keys;
     infmon_eviction_policy_t eviction_policy;
-    uint32_t                key_width; /* computed, cached */
+    uint32_t key_width; /* computed, cached */
 } infmon_flow_rule_t;
 
 /* ── Per-flow-rule metrics ───────────────────────────────────────── */
@@ -81,7 +81,7 @@ typedef struct {
     uint8_t dst_ip[16];        /* IPv4-mapped-IPv6, network byte order */
     uint8_t mirror_src_ip[16]; /* IPv4-mapped-IPv6, network byte order */
     uint8_t ip_proto;
-    uint8_t dscp;              /* 0..63, upper 2 bits zero */
+    uint8_t dscp; /* 0..63, upper 2 bits zero */
 } infmon_flow_fields_t;
 
 /* ── Flow rule set (opaque) ──────────────────────────────────────── */
@@ -91,19 +91,17 @@ typedef struct infmon_flow_rule_set infmon_flow_rule_set_t;
 /* ── Lifecycle ───────────────────────────────────────────────────── */
 
 infmon_flow_rule_set_t *infmon_flow_rule_set_create(uint32_t max_keys_budget);
-void                    infmon_flow_rule_set_destroy(infmon_flow_rule_set_t *set);
+void infmon_flow_rule_set_destroy(infmon_flow_rule_set_t *set);
 
 /* ── CRUD ────────────────────────────────────────────────────────── */
 
 infmon_flow_rule_result_t infmon_flow_rule_add(infmon_flow_rule_set_t *set,
                                                const infmon_flow_rule_t *rule);
-infmon_flow_rule_result_t infmon_flow_rule_rm(infmon_flow_rule_set_t *set,
-                                              const char *name);
+infmon_flow_rule_result_t infmon_flow_rule_rm(infmon_flow_rule_set_t *set, const char *name);
 const infmon_flow_rule_t *infmon_flow_rule_find(const infmon_flow_rule_set_t *set,
                                                 const char *name);
-uint32_t                  infmon_flow_rule_count(const infmon_flow_rule_set_t *set);
-const infmon_flow_rule_t *infmon_flow_rule_get(const infmon_flow_rule_set_t *set,
-                                               uint32_t index);
+uint32_t infmon_flow_rule_count(const infmon_flow_rule_set_t *set);
+const infmon_flow_rule_t *infmon_flow_rule_get(const infmon_flow_rule_set_t *set, uint32_t index);
 
 /* ── Validation (single rule, no set constraints) ────────────────── */
 
@@ -111,21 +109,18 @@ infmon_flow_rule_result_t infmon_flow_rule_validate(const infmon_flow_rule_t *ru
 
 /* ── Key encoding ────────────────────────────────────────────────── */
 
-uint32_t infmon_flow_rule_key_width(const infmon_field_t *fields,
-                                    uint32_t field_count);
+uint32_t infmon_flow_rule_key_width(const infmon_field_t *fields, uint32_t field_count);
 
-void infmon_flow_rule_encode_key(const infmon_flow_rule_t *rule,
-                                 const infmon_flow_fields_t *fields,
+void infmon_flow_rule_encode_key(const infmon_flow_rule_t *rule, const infmon_flow_fields_t *fields,
                                  uint8_t *key_buf);
 
 /* ── Field / policy metadata ─────────────────────────────────────── */
 
-uint32_t    infmon_field_width(infmon_field_t field);
+uint32_t infmon_field_width(infmon_field_t field);
 const char *infmon_field_name(infmon_field_t field);
-bool        infmon_field_parse(const char *name, infmon_field_t *out);
+bool infmon_field_parse(const char *name, infmon_field_t *out);
 const char *infmon_eviction_policy_name(infmon_eviction_policy_t policy);
-bool        infmon_eviction_policy_parse(const char *name,
-                                         infmon_eviction_policy_t *out);
+bool infmon_eviction_policy_parse(const char *name, infmon_eviction_policy_t *out);
 
 #ifdef __cplusplus
 }
