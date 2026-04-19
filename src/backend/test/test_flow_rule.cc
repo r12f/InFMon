@@ -18,7 +18,8 @@ static infmon_flow_rule_t make_rule(const char *name, const infmon_field_t *fiel
     infmon_flow_rule_t r{};
     std::memset(r.name, 0, sizeof(r.name));
     std::size_t len = std::strlen(name);
-    if (len > sizeof(r.name) - 1) len = sizeof(r.name) - 1;
+    if (len > sizeof(r.name) - 1)
+        len = sizeof(r.name) - 1;
     std::memcpy(r.name, name, len);
     if (fc > 0) {
         std::memcpy(r.fields, fields, fc * sizeof(infmon_field_t));
