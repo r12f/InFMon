@@ -54,11 +54,14 @@ pub struct Frontend {
 impl Frontend {
     /// Start the frontend daemon.
     ///
+    /// The caller-provided `shutdown` flag is shared with the signal handler
+    /// in `main()`, so `is_shutting_down()` reflects external signals.
+    ///
     /// 1. Parse config
     /// 2. Validate backend is reachable (fail-fast)
     /// 3. Build exporters from config
     /// 4. Spawn poller and exporter threads
-    pub fn start(config_path: &Path) -> Result<Self, LifecycleError> {
+    pub fn start(config_path: &Path, shutdown: Arc<AtomicBool>) -> Result<Self, LifecycleError> {
         log::info!("starting infmon-frontend");
 
         // Validate exporter registrations
@@ -83,7 +86,10 @@ impl Frontend {
         let startup_timeout =
             parse_duration(&frontend_cfg.startup_timeout).unwrap_or(Duration::from_secs(5));
 
-        // Try to connect to stats socket within startup_timeout
+        // Try to connect to stats socket within startup_timeout.
+        // The client is intentionally opened and dropped — we only need to
+        // verify that the stats segment is mmappable, not hold it open.
+        // The poller will open its own long-lived connection.
         let start_time = std::time::Instant::now();
         let mut connected = false;
         while start_time.elapsed() < startup_timeout {
@@ -122,9 +128,8 @@ impl Frontend {
             let exporter_instance = factory(&ecfg)
                 .map_err(|e| LifecycleError::ExporterInit(format!("{}: {e}", entry.name)))?;
 
-            let (tx, rx) = snapshot_channel(entry.queue_depth);
-            let export_timeout =
-                parse_duration(&entry.export_timeout).unwrap_or(Duration::from_millis(800));
+            let (tx, rx) = snapshot_channel(ecfg.queue_depth);
+            let export_timeout = ecfg.export_timeout;
 
             let handle = exporter::spawn_exporter_thread(
                 Arc::from(exporter_instance),
@@ -149,8 +154,6 @@ impl Frontend {
             .collect();
         let poller_handle = poller::spawn(poller_config, raw_senders);
 
-        let shutdown = Arc::new(AtomicBool::new(false));
-
         Ok(Frontend {
             poller_handle: Some(poller_handle),
             exporter_handles,
@@ -161,7 +164,11 @@ impl Frontend {
     }
 
     /// Reload configuration (triggered by SIGHUP).
-    /// All-or-nothing with rollback on failure.
+    ///
+    /// **Current limitation:** this is a stub that validates the new config
+    /// but does not yet apply changes to running exporters or flow rules.
+    /// A future iteration will diff the old and new configs and hot-swap
+    /// exporters / update flow rules via the control client.
     pub fn reload(&mut self) -> Result<(), LifecycleError> {
         log::info!(
             "reloading configuration from {}",
@@ -179,7 +186,7 @@ impl Frontend {
 
         // TODO: diff flow rules, apply via control client
         // TODO: reload existing exporters, add/remove as needed
-        log::info!("configuration reloaded successfully");
+        log::warn!("reload: config validated but hot-swap not yet implemented — changes take effect on restart");
         Ok(())
     }
 
@@ -213,10 +220,22 @@ impl Frontend {
 }
 
 /// Convert an ExporterEntry to ExporterConfig for the factory.
+///
+/// `queue_depth` and `export_timeout` are read exclusively from the returned
+/// `ExporterConfig` by `start()`, avoiding a second source of truth.
 fn entry_to_exporter_config(entry: &infmon_config::model::ExporterEntry) -> ExporterConfig {
     let mut extra = std::collections::HashMap::new();
     for (k, v) in &entry.extra {
-        extra.insert(k.clone(), v.clone());
+        // Convert serde_yaml::Value to a string representation for the
+        // exporter plugin's key-value interface.
+        let s = match v {
+            serde_yaml::Value::String(s) => s.clone(),
+            other => serde_yaml::to_string(other)
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
+        };
+        extra.insert(k.clone(), s);
     }
     ExporterConfig {
         kind: entry.kind.clone(),
@@ -227,16 +246,36 @@ fn entry_to_exporter_config(entry: &infmon_config::model::ExporterEntry) -> Expo
     }
 }
 
-/// Parse a duration string like "800ms", "5s", "1s".
+/// Parse a duration string like `"800ms"`, `"5s"`, `"2m"`, `"1h"`.
+///
+/// Supported suffixes: `ms`, `s`, `m`, `h`. Bare integers are treated as
+/// milliseconds. Unrecognised suffixes return `None` and log a warning so
+/// the caller can fall back to a default without silent surprises.
 pub fn parse_duration(s: &str) -> Option<Duration> {
     let s = s.trim();
     if let Some(ms) = s.strip_suffix("ms") {
         ms.trim().parse::<u64>().ok().map(Duration::from_millis)
+    } else if let Some(h) = s.strip_suffix('h') {
+        h.trim()
+            .parse::<u64>()
+            .ok()
+            .map(|v| Duration::from_secs(v * 3600))
+    } else if let Some(m) = s.strip_suffix('m') {
+        m.trim()
+            .parse::<u64>()
+            .ok()
+            .map(|v| Duration::from_secs(v * 60))
     } else if let Some(secs) = s.strip_suffix('s') {
         secs.trim().parse::<u64>().ok().map(Duration::from_secs)
-    } else {
-        // Try as milliseconds
+    } else if s.chars().all(|c| c.is_ascii_digit()) {
+        // Bare integer → milliseconds
         s.parse::<u64>().ok().map(Duration::from_millis)
+    } else {
+        log::warn!(
+            "parse_duration: unrecognised format {:?}, returning None",
+            s
+        );
+        None
     }
 }
 
@@ -252,6 +291,16 @@ mod tests {
     #[test]
     fn parse_duration_s() {
         assert_eq!(parse_duration("5s"), Some(Duration::from_secs(5)));
+    }
+
+    #[test]
+    fn parse_duration_m() {
+        assert_eq!(parse_duration("2m"), Some(Duration::from_secs(120)));
+    }
+
+    #[test]
+    fn parse_duration_h() {
+        assert_eq!(parse_duration("1h"), Some(Duration::from_secs(3600)));
     }
 
     #[test]

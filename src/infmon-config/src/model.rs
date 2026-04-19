@@ -69,9 +69,11 @@ pub struct ExporterEntry {
     pub export_timeout: String,
     #[serde(default = "default_on_overflow")]
     pub on_overflow: String,
-    /// Extra exporter-specific key-value pairs
+    /// Extra exporter-specific key-value pairs.
+    /// Uses `serde_yaml::Value` so non-string YAML values (integers,
+    /// booleans, etc.) survive deserialization through `#[serde(flatten)]`.
     #[serde(flatten)]
-    pub extra: HashMap<String, String>,
+    pub extra: HashMap<String, serde_yaml::Value>,
 }
 
 fn default_queue_depth() -> usize {
