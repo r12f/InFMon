@@ -68,6 +68,31 @@ infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx, const infmon
  */
 infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *name);
 
+/**
+ * Callback invoked once per active flow rule during infmon_api_flow_rule_list().
+ * @p rule  points into the rule set (valid only for the duration of the callback).
+ * @p index is the rule's position in the set.
+ * @p user  is the opaque pointer passed to infmon_api_flow_rule_list().
+ */
+typedef void (*infmon_api_flow_rule_list_cb_t)(const infmon_flow_rule_t *rule, uint32_t index,
+                                               void *user);
+
+/**
+ * Enumerate all active flow rules, invoking @p cb once per rule.
+ * Returns INFMON_API_OK on success, or an error if @p ctx is NULL.
+ */
+infmon_api_result_t infmon_api_flow_rule_list(const infmon_api_ctx_t *ctx,
+                                              infmon_api_flow_rule_list_cb_t cb, void *user);
+
+/**
+ * Retrieve a single flow rule by name.
+ * On success, *out_rule points into the rule set (valid until next add/rm)
+ * and *out_index holds the rule's position.
+ */
+infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx, const char *name,
+                                                     const infmon_flow_rule_t **out_rule,
+                                                     uint32_t *out_index);
+
 #ifdef __cplusplus
 }
 #endif
