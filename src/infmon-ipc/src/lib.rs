@@ -7,7 +7,9 @@ pub mod types;
 
 #[cfg(feature = "control")]
 pub use control_client::{ExporterStatus, InFMonControlClient};
-pub use error::{CtlError, IpcError};
+#[cfg(feature = "control")]
+pub use error::CtlError;
+pub use error::IpcError;
 pub use stats_client::{InFMonStatsClient, RawDescriptor, RawSlot, RawSnapshot};
 pub use types::{
     FieldId, FieldValue, FlowCounters, FlowRuleCounters, FlowRuleId, FlowRuleStats, FlowStats,

@@ -67,7 +67,7 @@ impl InFMonStatsClient {
         if rc != 0 {
             let err = std::io::Error::last_os_error();
             return match err.raw_os_error() {
-                Some(libc::EWOULDBLOCK) | Some(libc::EAGAIN) => Err(IpcError::StatsSegmentBusy),
+                Some(libc::EWOULDBLOCK) => Err(IpcError::StatsSegmentBusy),
                 _ => Err(IpcError::StatsIo(err)),
             };
         }
