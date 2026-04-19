@@ -323,3 +323,29 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
 
     return INFMON_API_OK;
 }
+
+/* ── Status ──────────────────────────────────────────────────────── */
+
+infmon_api_result_t infmon_api_status(const infmon_api_ctx_t *ctx,
+                                      infmon_api_status_reply_t *reply)
+{
+    if (!reply)
+        return INFMON_API_ERR_INTERNAL;
+
+    memset(reply, 0, sizeof(*reply));
+
+    if (!ctx) {
+        reply->result = INFMON_API_ERR_INTERNAL;
+        return INFMON_API_ERR_INTERNAL;
+    }
+
+    if (!ctx->worker_counters || ctx->worker_count == 0) {
+        reply->result = INFMON_API_ERR_INTERNAL;
+        return INFMON_API_ERR_INTERNAL;
+    }
+
+    reply->workers = ctx->worker_counters;
+    reply->worker_count = ctx->worker_count;
+    reply->result = INFMON_API_OK;
+    return INFMON_API_OK;
+}

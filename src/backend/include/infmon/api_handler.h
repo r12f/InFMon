@@ -13,6 +13,7 @@
 
 #include "infmon/counter_table.h"
 #include "infmon/flow_rule.h"
+#include "infmon/graph_node.h"
 #include "infmon/snapshot.h"
 #include "infmon/stats_segment.h"
 
@@ -48,6 +49,9 @@ typedef struct {
     infmon_counter_table_t *tables[INFMON_FLOW_RULE_SET_MAX];
     /* Per-rule UUID, indexed in parallel with tables[]. */
     infmon_flow_rule_id_t flow_rule_ids[INFMON_FLOW_RULE_SET_MAX];
+    /* Per-worker status counters (set by caller, read by infmon_api_status). */
+    infmon_worker_counters_t *worker_counters; /**< Array of worker_count elements. */
+    uint32_t worker_count;                     /**< Number of workers. */
 } infmon_api_ctx_t;
 
 /* ── Snapshot reply ──────────────────────────────────────────────── */
@@ -145,6 +149,34 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
 infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
                                                   infmon_flow_rule_id_t flow_rule_id,
                                                   infmon_api_snap_reply_t *reply);
+
+/* ── Status ─────────────────────────────────────────────────────── */
+
+/**
+ * Result of infmon_api_status().
+ *
+ * On success, @p workers points to the internal worker_counters array
+ * (valid as long as the context is alive) and @p worker_count is set.
+ * The caller must NOT free the workers pointer.
+ */
+typedef struct {
+    infmon_api_result_t result;
+    const infmon_worker_counters_t *workers; /**< Points into ctx->worker_counters. */
+    uint32_t worker_count;
+} infmon_api_status_reply_t;
+
+/**
+ * Retrieve per-worker error/health counters.
+ *
+ * Populates @p reply with a pointer to the internal worker_counters
+ * array and the worker count.  The counters are a live snapshot — they
+ * may continue to be updated by worker threads after this call returns.
+ *
+ * @return INFMON_API_OK on success.
+ * @return INFMON_API_ERR_INTERNAL if @p ctx, @p reply, or worker_counters is NULL.
+ */
+infmon_api_result_t infmon_api_status(const infmon_api_ctx_t *ctx,
+                                      infmon_api_status_reply_t *reply);
 
 #ifdef __cplusplus
 }

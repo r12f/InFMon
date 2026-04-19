@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "infmon/counter_table.h"
 #include "infmon/erspan_parser.h"
@@ -48,6 +49,39 @@ typedef enum {
 extern const char *infmon_node_error_names[];
 extern const char *infmon_node_error_strings[];
 
+/* ── Per-worker status counters (§11, exposed via infmon_status) ─── */
+
+/**
+ * Per-worker health/error counters.  One instance per VPP worker thread.
+ * In production these live in VPP's thread-local storage; for unit tests
+ * they are allocated as a flat array indexed by worker_id.
+ *
+ * All counters are monotonically increasing (never reset except on
+ * plugin teardown).  The infmon_status API message reads them and
+ * returns a snapshot.
+ */
+typedef struct {
+    uint32_t worker_id;
+    uint64_t packets_seen;                    /**< Total packets entering infmon-erspan-decap. */
+    uint64_t erspan_unknown_proto;            /**< Outer header parsed, ERSPAN type unrecognised. */
+    uint64_t erspan_truncated;                /**< Buffer too short for declared ERSPAN header. */
+    uint64_t inner_parse_failed;              /**< Inner L2/L3/L4 parse error after decap. */
+    uint64_t flow_rule_no_match;              /**< Packet matched zero flow rules. */
+    uint64_t counter_insert_retry_exhausted;  /**< CAS retries exceeded INFMON_INSERT_RETRY. */
+    uint64_t counter_table_full;              /**< Table reached max_keys_per_flow_rule. */
+} infmon_worker_counters_t;
+
+/**
+ * Initialise a worker-counters struct (zero all fields, set worker_id).
+ */
+static inline void infmon_worker_counters_init(infmon_worker_counters_t *wc, uint32_t worker_id)
+{
+    if (!wc)
+        return;
+    memset(wc, 0, sizeof(*wc));
+    wc->worker_id = worker_id;
+}
+
 /* ── Next-index enum for each node ───────────────────────────────── */
 
 typedef enum {
@@ -79,8 +113,10 @@ typedef struct {
 } infmon_buffer_opaque_t;
 
 /* Compile-time check: must fit in vlib_buffer opaque2 (64 bytes) */
+#ifndef __cplusplus
 _Static_assert(sizeof(infmon_buffer_opaque_t) <= 64,
                "infmon_buffer_opaque_t exceeds VLIB_BUFFER_OPAQUE2_SIZE (64 bytes)");
+#endif
 
 /* -- Atomic flow-rule reference (TOCTOU-safe) */
 
