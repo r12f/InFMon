@@ -18,6 +18,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#ifndef __cplusplus
+#include <stdatomic.h>
+#endif
+
 #include "infmon/counter_table.h"
 #include "infmon/erspan_parser.h"
 #include "infmon/flow_rule.h"
@@ -51,6 +55,18 @@ extern const char *infmon_node_error_strings[];
 
 /* ── Per-worker status counters (§11, exposed via infmon_status) ─── */
 
+/*
+ * Counter fields are written by VPP worker threads and read by the API
+ * thread, so they must be atomic to avoid data races (UB under C11/C++11).
+ * In C we use _Atomic; in C++ test builds we keep plain uint64_t because
+ * the tests are single-threaded (no real race).
+ */
+#ifdef __cplusplus
+#define INFMON_COUNTER_U64 uint64_t
+#else
+#define INFMON_COUNTER_U64 _Atomic uint64_t
+#endif
+
 /**
  * Per-worker health/error counters.  One instance per VPP worker thread.
  * In production these live in VPP's thread-local storage; for unit tests
@@ -62,13 +78,13 @@ extern const char *infmon_node_error_strings[];
  */
 typedef struct {
     uint32_t worker_id;
-    uint64_t packets_seen;                   /**< Total packets entering infmon-erspan-decap. */
-    uint64_t erspan_unknown_proto;           /**< Outer header parsed, ERSPAN type unrecognised. */
-    uint64_t erspan_truncated;               /**< Buffer too short for declared ERSPAN header. */
-    uint64_t inner_parse_failed;             /**< Inner L2/L3/L4 parse error after decap. */
-    uint64_t flow_rule_no_match;             /**< Packet matched zero flow rules. */
-    uint64_t counter_insert_retry_exhausted; /**< CAS retries exceeded INFMON_INSERT_RETRY. */
-    uint64_t counter_table_full;             /**< Table reached max_keys_per_flow_rule. */
+    INFMON_COUNTER_U64 packets_seen;                   /**< Total packets entering infmon-erspan-decap. */
+    INFMON_COUNTER_U64 erspan_unknown_proto;           /**< Outer header parsed, ERSPAN type unrecognised. */
+    INFMON_COUNTER_U64 erspan_truncated;               /**< Buffer too short for declared ERSPAN header. */
+    INFMON_COUNTER_U64 inner_parse_failed;             /**< Inner L2/L3/L4 parse error after decap. */
+    INFMON_COUNTER_U64 flow_rule_no_match;             /**< Packet matched zero flow rules. */
+    INFMON_COUNTER_U64 counter_insert_retry_exhausted; /**< CAS retries exceeded INFMON_INSERT_RETRY. */
+    INFMON_COUNTER_U64 counter_table_full;             /**< Table reached max_keys_per_flow_rule. */
 } infmon_worker_counters_t;
 
 /**
@@ -113,7 +129,10 @@ typedef struct {
 } infmon_buffer_opaque_t;
 
 /* Compile-time check: must fit in vlib_buffer opaque2 (64 bytes) */
-#ifndef __cplusplus
+#ifdef __cplusplus
+static_assert(sizeof(infmon_buffer_opaque_t) <= 64,
+              "infmon_buffer_opaque_t exceeds VLIB_BUFFER_OPAQUE2_SIZE (64 bytes)");
+#else
 _Static_assert(sizeof(infmon_buffer_opaque_t) <= 64,
                "infmon_buffer_opaque_t exceeds VLIB_BUFFER_OPAQUE2_SIZE (64 bytes)");
 #endif

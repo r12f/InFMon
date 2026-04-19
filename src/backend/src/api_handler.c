@@ -338,7 +338,12 @@ infmon_api_result_t infmon_api_status(const infmon_api_ctx_t *ctx, infmon_api_st
         return INFMON_API_ERR_INTERNAL;
     }
 
-    if (!ctx->worker_counters || ctx->worker_count == 0) {
+    if (!ctx->worker_counters) {
+        reply->result = INFMON_API_ERR_INTERNAL;
+        return INFMON_API_ERR_INTERNAL;
+    }
+
+    if (ctx->worker_count == 0) {
         reply->result = INFMON_API_ERR_INTERNAL;
         return INFMON_API_ERR_INTERNAL;
     }

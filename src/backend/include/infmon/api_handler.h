@@ -169,8 +169,10 @@ typedef struct {
  * Retrieve per-worker error/health counters.
  *
  * Populates @p reply with a pointer to the internal worker_counters
- * array and the worker count.  The counters are a live snapshot — they
+ * array and the worker count.  The counters are a live view — they
  * may continue to be updated by worker threads after this call returns.
+ * The caller sees the latest values but does not get a point-in-time
+ * snapshot; use memcpy on the returned array if a frozen copy is needed.
  *
  * @return INFMON_API_OK on success.
  * @return INFMON_API_ERR_INTERNAL if @p ctx, @p reply, or worker_counters is NULL.
