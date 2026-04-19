@@ -20,7 +20,7 @@ jobs:
     # VPP-in-CI image; see specs/001-ci-and-precommit.md §5.
     # Consumed from the ghcr.io mirror to avoid Docker Hub rate-limits.
     container:
-      image: ghcr.io/r12f/infmon-vpp-dev:24.10
+      image: ligato/vpp-base:24.10
       options: --user root
     steps:
       - name: Checkout
