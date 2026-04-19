@@ -102,8 +102,9 @@ flow-rules:
     }
 
     #[test]
-    fn reject_key_width_exceeded() {
-        // 5 fields of 16 bytes = 80 > 64
+    fn accept_within_key_width_limit() {
+        // 16+16+16+1+1 = 50 bytes, within the 64-byte limit.
+        // v1 fields cannot exceed 64 bytes (max is 3×16+1+1=50).
         let rule = make_rule(
             "ab",
             vec![
@@ -115,8 +116,6 @@ flow-rules:
             ],
             10,
         );
-        // 16+16+16+1+1 = 50, that's fine. We can't exceed 64 with v1 fields.
-        // Actually max is 16*3+1+1=50. So this test needs adjustment.
         assert!(validate_rule(&rule).is_ok());
     }
 

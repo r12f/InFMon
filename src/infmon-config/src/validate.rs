@@ -24,10 +24,19 @@ pub enum ValidationError {
     KeyWidthExceeded { name: String, width: u32 },
     #[error("total max_keys {total} exceeds budget {MAX_KEYS_BUDGET}")]
     BudgetExceeded { total: u64 },
+    #[error("too many flow rules: {count} exceeds maximum {max}")]
+    TooManyRules { count: usize, max: usize },
     #[error("flow-rule name '{name}' is invalid: must match ^[a-z0-9][a-z0-9_-]{{1,30}}$")]
     InvalidName { name: String },
 }
 
+/// Validate a flow-rule name.
+///
+/// Names must match `^[a-z0-9][a-z0-9_-]{1,30}$` — i.e. 2–31 chars,
+/// starting with a lowercase letter **or digit**, followed by lowercase
+/// alphanumerics, hyphens, or underscores. Leading digits are intentionally
+/// allowed since flow-rule names are never used as programming-language
+/// identifiers.
 fn is_valid_name(name: &str) -> bool {
     let len = name.len();
     if !(NAME_MIN_LEN..=NAME_MAX_LEN).contains(&len) {
@@ -90,10 +99,16 @@ pub fn validate_rule(rule: &FlowRule) -> Result<(), ValidationError> {
 pub fn validate_config(config: &Config) -> Result<(), ValidationError> {
     let mut names = HashSet::new();
     for rule in &config.flow_rules {
-        validate_rule(rule)?;
         if !names.insert(&rule.name) {
             return Err(ValidationError::DuplicateName(rule.name.clone()));
         }
+        validate_rule(rule)?;
+    }
+    if config.flow_rules.len() > crate::crud::FLOW_RULE_SET_MAX {
+        return Err(ValidationError::TooManyRules {
+            count: config.flow_rules.len(),
+            max: crate::crud::FLOW_RULE_SET_MAX,
+        });
     }
     let total: u64 = config.flow_rules.iter().map(|r| r.max_keys as u64).sum();
     if total > MAX_KEYS_BUDGET as u64 {

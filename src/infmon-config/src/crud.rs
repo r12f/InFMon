@@ -24,6 +24,7 @@ pub enum CrudError {
     SetFull { max: usize },
 }
 
+#[derive(Debug)]
 pub struct FlowRuleSet {
     rules: Vec<FlowRule>,
     max_keys_budget: u32,
