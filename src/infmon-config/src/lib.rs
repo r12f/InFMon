@@ -280,7 +280,7 @@ mod frontend_config_tests {
                 queue_depth: 2,
                 export_timeout: "800ms".into(),
                 on_overflow: "drop_newest".into(),
-                extra: HashMap::new(),
+                extra: HashMap::from([("endpoint".to_string(), serde_yaml::Value::String("http://collector:4317".into()))]),
             }]),
         }
     }
@@ -405,6 +405,66 @@ mod frontend_config_tests {
                 name: "primary".into(),
                 policy: "drop_oldest".into(),
                 valid: "drop_newest".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn reject_zero_startup_timeout() {
+        let mut config = make_valid_config();
+        config.frontend.as_mut().unwrap().startup_timeout = "0s".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::ZeroStartupTimeout)
+        );
+    }
+
+    #[test]
+    fn reject_zero_export_timeout() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].export_timeout = "0ms".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::ZeroExportTimeout {
+                name: "primary".into()
+            })
+        );
+    }
+
+    #[test]
+    fn reject_invalid_exporter_name() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].name = "A".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::InvalidExporterName {
+                name: "A".into()
+            })
+        );
+    }
+
+    #[test]
+    fn reject_otlp_missing_endpoint() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].extra.remove("endpoint");
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::MissingOtlpEndpoint {
+                name: "primary".into()
+            })
+        );
+    }
+
+    #[test]
+    fn reject_otlp_empty_endpoint() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0]
+            .extra
+            .insert("endpoint".to_string(), serde_yaml::Value::String("".into()));
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::MissingOtlpEndpoint {
+                name: "primary".into()
             })
         );
     }

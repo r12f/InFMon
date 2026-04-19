@@ -62,6 +62,14 @@ pub enum ValidationError {
         policy: String,
         valid: String,
     },
+    #[error("frontend: startup_timeout must be > 0")]
+    ZeroStartupTimeout,
+    #[error("exporter '{name}': export_timeout must be > 0")]
+    ZeroExportTimeout { name: String },
+    #[error("exporter '{name}': name is invalid: must match ^[a-z0-9][a-z0-9_-]{{1,30}}$")]
+    InvalidExporterName { name: String },
+    #[error("exporter '{name}': OTLP exporter must have a non-empty 'endpoint'")]
+    MissingOtlpEndpoint { name: String },
 }
 
 /// Validate a flow-rule name.
@@ -158,10 +166,16 @@ pub fn validate_frontend(cfg: &FrontendConfig) -> Result<(), ValidationError> {
     if cfg.shutdown_grace_ms == 0 {
         return Err(ValidationError::ZeroShutdownGrace);
     }
-    if parse_duration_str(&cfg.startup_timeout).is_none() {
-        return Err(ValidationError::InvalidStartupTimeout {
-            value: cfg.startup_timeout.clone(),
-        });
+    match parse_duration_str(&cfg.startup_timeout) {
+        None => {
+            return Err(ValidationError::InvalidStartupTimeout {
+                value: cfg.startup_timeout.clone(),
+            });
+        }
+        Some(0) => {
+            return Err(ValidationError::ZeroStartupTimeout);
+        }
+        Some(_) => {}
     }
     Ok(())
 }
@@ -172,6 +186,11 @@ pub fn validate_frontend(cfg: &FrontendConfig) -> Result<(), ValidationError> {
 pub fn validate_exporter(entry: &ExporterEntry, index: usize) -> Result<(), ValidationError> {
     if entry.name.is_empty() {
         return Err(ValidationError::EmptyExporterName { index });
+    }
+    if !is_valid_name(&entry.name) {
+        return Err(ValidationError::InvalidExporterName {
+            name: entry.name.clone(),
+        });
     }
     if entry.kind.is_empty() {
         return Err(ValidationError::EmptyExporterType {
@@ -190,11 +209,32 @@ pub fn validate_exporter(entry: &ExporterEntry, index: usize) -> Result<(), Vali
             name: entry.name.clone(),
         });
     }
-    if parse_duration_str(&entry.export_timeout).is_none() {
-        return Err(ValidationError::InvalidExportTimeout {
-            name: entry.name.clone(),
-            value: entry.export_timeout.clone(),
-        });
+    match parse_duration_str(&entry.export_timeout) {
+        None => {
+            return Err(ValidationError::InvalidExportTimeout {
+                name: entry.name.clone(),
+                value: entry.export_timeout.clone(),
+            });
+        }
+        Some(0) => {
+            return Err(ValidationError::ZeroExportTimeout {
+                name: entry.name.clone(),
+            });
+        }
+        Some(_) => {}
+    }
+    // OTLP exporters must have a non-empty endpoint
+    if entry.kind == "otlp" {
+        let has_endpoint = entry
+            .extra
+            .get("endpoint")
+            .and_then(|v| v.as_str())
+            .map_or(false, |s| !s.is_empty());
+        if !has_endpoint {
+            return Err(ValidationError::MissingOtlpEndpoint {
+                name: entry.name.clone(),
+            });
+        }
     }
     if !VALID_OVERFLOW_POLICIES.contains(&entry.on_overflow.as_str()) {
         return Err(ValidationError::InvalidOverflowPolicy {
