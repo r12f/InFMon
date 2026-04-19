@@ -78,7 +78,7 @@ jobs:
           # IMPORTANT: only exclude ./debian and VCS metadata. Anything else
           # excluded from the orig tarball will be flagged as an unexpected
           # upstream change by `dpkg-source -b` under format '3.0 (quilt)'.
-          tar --exclude='./packaging/debian' --exclude='./debian' --exclude-vcs \
+          tar --exclude='./debian' --exclude-vcs \
               -czf "../${PKG}_${UVER}.orig.tar.gz" .
           ls -la "../${PKG}_${UVER}.orig.tar.gz"
 
