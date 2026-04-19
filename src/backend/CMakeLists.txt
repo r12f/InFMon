@@ -107,9 +107,6 @@ add_executable(test_graph_node
 )
 target_link_libraries(test_graph_node PRIVATE
     infmon_graph_node
-    infmon_parser
-    infmon_flow_rule
-    infmon_counter_table
     GTest::gtest GTest::gtest_main
 )
 target_include_directories(test_graph_node PRIVATE include)
