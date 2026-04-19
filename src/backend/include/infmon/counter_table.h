@@ -21,6 +21,7 @@ extern "C" {
 #define INFMON_SLOT_FREE 0x0000
 #define INFMON_SLOT_OCCUPIED 0x0001
 #define INFMON_SLOT_TOMBSTONE 0x0002
+#define INFMON_SLOT_INSERTING 0x0003
 
 #define INFMON_SLOTS_PER_GROUP 8
 #define INFMON_INSERT_RETRY 4
@@ -59,7 +60,7 @@ typedef struct {
     uint32_t slot_mask; /* num_slots - 1 */
     uint8_t *key_arena;
     uint32_t key_arena_capacity;
-    uint32_t key_arena_used;    /* bump allocator head */
+    uint32_t key_arena_used;    /* bump allocator head; not reclaimed on eviction */
     infmon_seqlock_t *seqlocks; /* num_slots / INFMON_SLOTS_PER_GROUP */
     uint32_t num_groups;
     uint64_t generation;
