@@ -37,7 +37,7 @@ typedef enum {
 typedef struct {
     infmon_flow_rule_set_t *rule_set;
     infmon_stats_registry_t *stats_reg;
-    /* Per-rule counter tables, indexed by rule position in the set.
+    /* private: Per-rule counter tables, indexed by rule position in the set.
      * Managed internally by add/del; caller must not touch. */
     infmon_counter_table_t *tables[INFMON_FLOW_RULE_SET_MAX];
 } infmon_api_ctx_t;

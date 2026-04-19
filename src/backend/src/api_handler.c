@@ -50,6 +50,8 @@ static uint32_t find_rule_index(const infmon_flow_rule_set_t *set, const char *n
 void infmon_api_ctx_init(infmon_api_ctx_t *ctx, infmon_flow_rule_set_t *rule_set,
                          infmon_stats_registry_t *stats_reg)
 {
+    if (!ctx)
+        return;
     memset(ctx, 0, sizeof(*ctx));
     ctx->rule_set = rule_set;
     ctx->stats_reg = stats_reg;
@@ -57,12 +59,15 @@ void infmon_api_ctx_init(infmon_api_ctx_t *ctx, infmon_flow_rule_set_t *rule_set
 
 void infmon_api_ctx_destroy(infmon_api_ctx_t *ctx)
 {
+    if (!ctx)
+        return;
     for (uint32_t i = 0; i < INFMON_FLOW_RULE_SET_MAX; i++) {
         if (ctx->tables[i]) {
             infmon_counter_table_destroy(ctx->tables[i]);
             ctx->tables[i] = NULL;
         }
     }
+    memset(ctx, 0, sizeof(*ctx));
 }
 
 /* ── Operations ──────────────────────────────────────────────────── */
@@ -87,6 +92,10 @@ infmon_api_result_t infmon_api_flow_rule_add(infmon_api_ctx_t *ctx, const infmon
 
     /* 3. Retrieve the inserted rule (key_width is now computed). */
     const infmon_flow_rule_t *inserted = infmon_flow_rule_get(ctx->rule_set, idx);
+    if (!inserted) {
+        infmon_flow_rule_rm(ctx->rule_set, rule->name);
+        return INFMON_API_ERR_INTERNAL;
+    }
 
     /* 4. Create a counter table. */
     infmon_counter_table_t *ct =
@@ -110,16 +119,16 @@ infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *
     if (idx == (uint32_t) -1)
         return INFMON_API_ERR_NOT_FOUND;
 
-    /* 2. Destroy the counter table. */
+    /* 2. Remove from the rule set first (so on failure we still have the table). */
+    infmon_flow_rule_result_t rr = infmon_flow_rule_rm(ctx->rule_set, name);
+    if (rr != INFMON_FLOW_RULE_OK)
+        return map_rule_result(rr);
+
+    /* 3. Destroy the counter table (rule is already gone, safe to free). */
     if (ctx->tables[idx]) {
         infmon_counter_table_destroy(ctx->tables[idx]);
         ctx->tables[idx] = NULL;
     }
-
-    /* 3. Remove from the rule set. */
-    infmon_flow_rule_result_t rr = infmon_flow_rule_rm(ctx->rule_set, name);
-    if (rr != INFMON_FLOW_RULE_OK)
-        return map_rule_result(rr);
 
     /* 4. Compact the tables array (rm shifts entries in the set). */
     uint32_t count = infmon_flow_rule_count(ctx->rule_set);

@@ -3,6 +3,7 @@
  * Copyright 2026 Riff
  */
 
+#include <cstdio>
 #include <cstring>
 #include <gtest/gtest.h>
 
@@ -15,7 +16,7 @@ extern "C" {
 static infmon_flow_rule_t make_rule(const char *name, uint32_t max_keys = 1024)
 {
     infmon_flow_rule_t r{};
-    std::strncpy(r.name, name, INFMON_FLOW_RULE_NAME_MAX);
+    snprintf(r.name, sizeof(r.name), "%s", name);
     r.fields[0] = INFMON_FIELD_SRC_IP;
     r.fields[1] = INFMON_FIELD_DST_IP;
     r.field_count = 2;
@@ -86,10 +87,39 @@ TEST_F(ApiHandlerTest, AddMultipleThenDeleteFirst)
     const infmon_flow_rule_t *found = infmon_flow_rule_find(rule_set_, "rule_bb");
     ASSERT_NE(found, nullptr);
     EXPECT_STREQ(found->name, "rule_bb");
+
+    /* counter table for rule_bb should have been compacted into slot 0. */
+    EXPECT_NE(ctx_.tables[0], nullptr);
+    EXPECT_EQ(ctx_.tables[1], nullptr);
 }
 
 TEST_F(ApiHandlerTest, NullInputsReturnInvalidRule)
 {
     EXPECT_EQ(infmon_api_flow_rule_add(nullptr, nullptr), INFMON_API_ERR_INVALID_RULE);
     EXPECT_EQ(infmon_api_flow_rule_del(nullptr, nullptr), INFMON_API_ERR_INVALID_RULE);
+}
+
+TEST_F(ApiHandlerTest, AddBudgetExceeded)
+{
+    /* Exhaust the key budget with one rule, then try adding another. */
+    infmon_flow_rule_t big = make_rule("big_rule", INFMON_FLOW_RULE_MAX_KEYS_BUDGET);
+    EXPECT_EQ(infmon_api_flow_rule_add(&ctx_, &big), INFMON_API_OK);
+
+    infmon_flow_rule_t extra = make_rule("extra_rule", 1);
+    EXPECT_EQ(infmon_api_flow_rule_add(&ctx_, &extra), INFMON_API_ERR_BUDGET_EXCEEDED);
+}
+
+TEST_F(ApiHandlerTest, AddSetFull)
+{
+    /* Fill all slots in the rule set. */
+    for (uint32_t i = 0; i < INFMON_FLOW_RULE_SET_MAX; i++) {
+        char name[INFMON_FLOW_RULE_NAME_MAX];
+        snprintf(name, sizeof(name), "rule_%u", i);
+        infmon_flow_rule_t r = make_rule(name, 1);
+        ASSERT_EQ(infmon_api_flow_rule_add(&ctx_, &r), INFMON_API_OK) << "Failed at i=" << i;
+    }
+
+    /* Next add should fail with SET_FULL. */
+    infmon_flow_rule_t overflow = make_rule("overflow");
+    EXPECT_EQ(infmon_api_flow_rule_add(&ctx_, &overflow), INFMON_API_ERR_SET_FULL);
 }
