@@ -39,7 +39,7 @@ static uint32_t find_rule_index(const infmon_flow_rule_set_t *set, const char *n
     uint32_t n = infmon_flow_rule_count(set);
     for (uint32_t i = 0; i < n; i++) {
         const infmon_flow_rule_t *r = infmon_flow_rule_get(set, i);
-        if (r && r->name && strcmp(r->name, name) == 0)
+        if (r && strcmp(r->name, name) == 0)
             return i;
     }
     return (uint32_t) -1;
@@ -173,7 +173,7 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
     uint32_t n = infmon_flow_rule_count(ctx->rule_set);
     for (uint32_t i = 0; i < n; i++) {
         const infmon_flow_rule_t *r = infmon_flow_rule_get(ctx->rule_set, i);
-        if (r && r->name && strcmp(r->name, name) == 0) {
+        if (r && strcmp(r->name, name) == 0) {
             if (out_rule)
                 *out_rule = r;
             if (out_index)
