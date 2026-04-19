@@ -111,6 +111,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "infmon-frontend"
+version = "0.1.0"
+dependencies = [
+ "infmon-ipc",
+ "libc",
+ "log",
+ "tempfile",
+]
+
+[[package]]
 name = "infmon-ipc"
 version = "0.1.0"
 dependencies = [
