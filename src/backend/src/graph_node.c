@@ -86,8 +86,10 @@ bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed, const uint
         out->mirror_src_ip[10] = 0xff;
         out->mirror_src_ip[11] = 0xff;
         memcpy(out->mirror_src_ip + 12, parsed->mirror_src_ip.addr.v4, 4);
-    } else {
+    } else if (parsed->mirror_src_ip.family == INFMON_AF_V6) {
         memcpy(out->mirror_src_ip, parsed->mirror_src_ip.addr.v6, 16);
+    } else {
+        return false; /* unknown address family */
     }
 
     /* Inner L3 addresses and protocol */
@@ -98,6 +100,9 @@ bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed, const uint
         uint16_t inner_et = read_u16(inner + 12);
         if (inner_et == 0x8100) {
             inner_l3_off = 18;
+        } else if (inner_et == 0x88a8) {
+            /* QinQ / 802.1ad -- not supported in v1 */
+            return false;
         }
     }
 
@@ -181,7 +186,9 @@ uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
             e->key_len = (uint16_t) kw;
             e->_pad = 0;
             e->key_hash = hash;
-            e->key_ptr = key_buf;
+            /* Copy key into per-entry storage to avoid aliasing */
+            memcpy(e->key_data, key_buf, kw);
+            e->key_ptr = e->key_data;
             matches++;
         }
     }
@@ -212,9 +219,11 @@ void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table
                                               tick);
 
         if (!ok) {
-            /* Distinguish: table full vs CAS exhausted.
-             * The counter_table_update doesn't distinguish these — it returns
-             * false for both. Check table stats. */
+            /* Distinguish: table full vs CAS exhausted.  Note: reading
+             * occupied_count after the failed update is racy (another
+             * worker could have changed it), but this is best-effort
+             * diagnostics -- exact attribution requires returning an
+             * enum from counter_table_update (tracked for v2). */
             if (table->occupied_count >= table->num_slots) {
                 if (table_full_count)
                     (*table_full_count)++;

@@ -75,6 +75,8 @@ TEST(FlowMatch, SingleRuleSingleMatch)
     EXPECT_EQ(scratch.entries[0].flow_rule_index, 0u);
     EXPECT_NE(scratch.entries[0].key_hash, 0u);
     EXPECT_EQ(scratch.entries[0].key_len, 32u); /* 16+16 */
+    /* Verify key_ptr points to per-entry storage (not shared key_buf) */
+    EXPECT_EQ(scratch.entries[0].key_ptr, scratch.entries[0].key_data);
 }
 
 /* ── Flow match — multiple rules ────────────────────────────────── */
@@ -101,6 +103,9 @@ TEST(FlowMatch, MultipleRulesAllMatch)
     EXPECT_EQ(scratch.entries[0].key_len, 16u);
     EXPECT_EQ(scratch.entries[1].flow_rule_index, 1u);
     EXPECT_EQ(scratch.entries[1].key_len, 1u);
+    /* Each entry owns its own key copy */
+    EXPECT_EQ(scratch.entries[0].key_ptr, scratch.entries[0].key_data);
+    EXPECT_EQ(scratch.entries[1].key_ptr, scratch.entries[1].key_data);
 }
 
 /* ── Flow match — NULL inputs ───────────────────────────────────── */
@@ -300,4 +305,33 @@ TEST(ExtractFlowFields, IPv4InnerFrame)
     EXPECT_EQ(out.mirror_src_ip[10], 0xff);
     EXPECT_EQ(out.mirror_src_ip[11], 0xff);
     EXPECT_EQ(out.mirror_src_ip[12], 172u);
+}
+
+TEST(ExtractFlowFields, QinQRejected)
+{
+    uint8_t inner[20]{};
+    /* 802.1ad ethertype */
+    inner[12] = 0x88;
+    inner[13] = 0xa8;
+
+    infmon_parsed_packet_t parsed{};
+    parsed.mirror_src_ip.family = INFMON_AF_V4;
+
+    infmon_flow_fields_t out{};
+    EXPECT_FALSE(infmon_extract_flow_fields(&parsed, inner, sizeof(inner), &out));
+}
+
+TEST(ExtractFlowFields, UnknownAfRejected)
+{
+    /* Minimal valid IPv4 inner frame */
+    uint8_t inner[34]{};
+    inner[12] = 0x08;
+    inner[13] = 0x00;
+    inner[14] = 0x45;
+
+    infmon_parsed_packet_t parsed{};
+    parsed.mirror_src_ip.family = (infmon_af_t)99;
+
+    infmon_flow_fields_t out{};
+    EXPECT_FALSE(infmon_extract_flow_fields(&parsed, inner, sizeof(inner), &out));
 }

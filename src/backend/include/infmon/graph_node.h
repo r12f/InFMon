@@ -67,30 +67,36 @@ typedef enum {
     INFMON_COUNTER_NEXT__COUNT,
 } infmon_counter_next_t;
 
-/* ── Scratch vector entry (§9) ───────────────────────────────────── */
+/* -- VPP buffer opaque (inter-node data) */
 
 /**
- * One (flow_rule_index, key_hash, key_blob_ptr) triple.
- * Size: 24 bytes on both 32-bit and 64-bit platforms.
+ * Data stashed in vlib_buffer opaque2 by infmon-erspan-decap for
+ * consumption by downstream nodes (infmon-flow-match).  Must fit in
+ * VLIB_BUFFER_OPAQUE2_SIZE (64 bytes).
  */
 typedef struct {
-    uint32_t flow_rule_index; /*  0: index into flow_rule vector */
-    uint16_t key_len;         /*  4: length of key blob in bytes */
-    uint16_t _pad;            /*  6: alignment padding           */
-    uint64_t key_hash;        /*  8: full 64-bit hash            */
-    const uint8_t *key_ptr;   /* 16: pointer to key blob         */
-} infmon_scratch_entry_t;
+    infmon_mirror_src_ip_t mirror_src_ip;
+} infmon_buffer_opaque_t;
+
+/* -- Atomic flow-rule reference (TOCTOU-safe) */
 
 /**
- * Per-worker scratch vector.  Statically sized, lives in TLS.
- * Max entries = INFMON_FRAME_SIZE * INFMON_MAX_ACTIVE_FLOW_RULES
- *             = 256 * 64 = 16384
- * At 24 bytes each = 384 KiB per worker.
+ * Packed pointer+count for single-pointer atomic swap.  The control
+ * plane allocates a new instance, populates it, then does a single
+ * __atomic_store_n of the pointer.  Data-plane loads it with ACQUIRE.
  */
 typedef struct {
-    infmon_scratch_entry_t entries[INFMON_FRAME_SIZE * INFMON_MAX_ACTIVE_FLOW_RULES];
-    uint32_t count; /* number of valid entries this frame */
-} infmon_scratch_t;
+    const infmon_flow_rule_t *rules;
+    uint32_t count;
+} infmon_flow_rule_set_ref_t;
+
+/* -- Shared plugin state (set by control plane) */
+
+typedef struct {
+    const infmon_flow_rule_set_ref_t *flow_rule_set;
+    infmon_counter_table_t *tables[INFMON_MAX_ACTIVE_FLOW_RULES];
+    uint64_t tick;
+} infmon_plugin_main_t;
 
 /* ── Key encoding buffer (per-worker, reused across packets) ─────── */
 
@@ -99,6 +105,40 @@ typedef struct {
  * Round up to 64 for alignment.
  */
 #define INFMON_KEY_BUF_MAX 64
+
+/* ── Scratch vector entry (§9) ───────────────────────────────────── */
+
+/**
+ * One (flow_rule_index, key_hash, key_blob_ptr) triple.
+ * The key_data[] array stores a per-entry copy of the encoded key so that
+ * each scratch entry owns its key independently (no aliasing of a shared
+ * key buffer).
+ */
+typedef struct {
+    uint32_t flow_rule_index; /*  0: index into flow_rule vector */
+    uint16_t key_len;         /*  4: length of key blob in bytes */
+    uint16_t _pad;            /*  6: alignment padding           */
+    uint64_t key_hash;        /*  8: full 64-bit hash            */
+    const uint8_t *key_ptr;   /* 16: pointer to key blob         */
+    uint8_t key_data[INFMON_KEY_BUF_MAX]; /* per-entry key copy  */
+} infmon_scratch_entry_t;
+
+/**
+ * Per-worker scratch vector.  Statically sized, lives in TLS.
+ * Max entries = INFMON_FRAME_SIZE * INFMON_MAX_ACTIVE_FLOW_RULES
+ *             = 256 * 64 = 16384
+ *
+ * Sizing justification: 256 packets/frame x 64 rules = 16384 entries.
+ * Each entry is ~88 bytes (with key_data), so ~1.4 MiB per worker.
+ * With 4 workers that is ~5.6 MiB total TLS -- acceptable for a
+ * dedicated appliance where VPP already consumes GiBs of hugepage.
+ * A per-packet cap or dynamic allocation can be revisited in v2 if
+ * memory-constrained deployments appear.
+ */
+typedef struct {
+    infmon_scratch_entry_t entries[INFMON_FRAME_SIZE * INFMON_MAX_ACTIVE_FLOW_RULES];
+    uint32_t count; /* number of valid entries this frame */
+} infmon_scratch_t;
 
 /* ── ERSPAN decap result (portable) ──────────────────────────────── */
 
