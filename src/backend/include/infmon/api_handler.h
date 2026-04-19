@@ -139,7 +139,7 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
  * otherwise).
  */
 void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t flow_rule_id,
-                                  infmon_api_snap_reply_t *reply);
+                                   infmon_api_snap_reply_t *reply);
 
 #ifdef __cplusplus
 }

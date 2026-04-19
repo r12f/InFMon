@@ -245,7 +245,7 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
 /* ── Snapshot and clear ──────────────────────────────────────────── */
 
 void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t flow_rule_id,
-                                  infmon_api_snap_reply_t *reply)
+                                   infmon_api_snap_reply_t *reply)
 {
     memset(reply, 0, sizeof(*reply));
 
@@ -269,7 +269,7 @@ void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t 
     /* Delegate to the snapshot manager. */
     infmon_snap_reply_t snap_reply;
     infmon_snapshot_and_clear(ctx->snap_mgr, ctx->tables, idx, INFMON_FLOW_RULE_SET_MAX,
-                             infmon_flow_rule_get(ctx->rule_set, idx)->key_width, &snap_reply);
+                              infmon_flow_rule_get(ctx->rule_set, idx)->key_width, &snap_reply);
 
     reply->result = map_snap_result(snap_reply.result);
 

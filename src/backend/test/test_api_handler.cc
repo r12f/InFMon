@@ -250,7 +250,10 @@ TEST_F(ApiHandlerTest, ListAfterDeleteReflectsRemoval)
 /* ── W10d: snapshot_and_clear tests ──────────────────────────────── */
 
 static uint64_t fake_clock_val = 1000000000ULL;
-static uint64_t fake_clock_ns(void) { return fake_clock_val; }
+static uint64_t fake_clock_ns(void)
+{
+    return fake_clock_val;
+}
 
 class ApiHandlerSnapTest : public ::testing::Test
 {
