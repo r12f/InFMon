@@ -58,8 +58,15 @@ jobs:
           set -eux
           curl -fsSL https://packagecloud.io/fdio/release/gpgkey \
             | sudo gpg --dearmor -o /usr/share/keyrings/fdio-archive-keyring.gpg
+          expected="59A8E0DB0B611CA471C9FBDE9E9FE7A46C37F7CD"
+          actual=$(gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/fdio-archive-keyring.gpg \
+            --list-keys --with-colons 2>/dev/null \
+            | awk -F: '/^fpr/{print $10; exit}')
+          [[ "$actual" == "$expected" ]] || { echo "GPG key mismatch: got $actual"; exit 1; }
           echo "deb [signed-by=/usr/share/keyrings/fdio-archive-keyring.gpg] \
-            https://packagecloud.io/fdio/release/ubuntu $(lsb_release -cs) main" \
+            https://packagecloud.io/fdio/release/ubuntu \
+            $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
             | sudo tee /etc/apt/sources.list.d/fdio.list
 
       - name: Install build deps
@@ -68,7 +75,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
               cmake ninja-build g++ ccache pkg-config \
-              vpp-dev libvppinfra-dev
+              vpp-dev=24.06* libvppinfra-dev=24.06*
 
       - name: Detect backend source
         id: detect_cpp
