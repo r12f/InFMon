@@ -89,8 +89,7 @@ typedef infmon_table_descriptor
 /** Per-flow-rule summary (used in list/get replies). */
 typedef infmon_flow_rule_details
 {
-    u64 flow_rule_id_hi;
-    u64 flow_rule_id_lo;
+    vl_api_infmon_flow_rule_id_t flow_rule_id;
     u32 flow_rule_index;
     string name[32];       /* NUL-terminated, max 31 chars + NUL */
     u32 field_count;
