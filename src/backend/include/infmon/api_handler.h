@@ -136,10 +136,15 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
  * retired table's metadata (generation, offsets, counters).
  *
  * Requires ctx->snap_mgr and ctx->stats_reg to be set.
- * @p reply must be non-NULL; if NULL, the call is a no-op.
+ * @p reply must be non-NULL; if NULL, returns INFMON_API_ERR_INTERNAL.
+ * @p flow_rule_id must be non-zero (zero is a sentinel for "no ID assigned").
+ *
+ * @return INFMON_API_OK on success, or an error code.  The same code is also
+ *         stored in reply->result for callers that prefer struct-based checking.
  */
-void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t flow_rule_id,
-                                   infmon_api_snap_reply_t *reply);
+infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
+                                                  infmon_flow_rule_id_t flow_rule_id,
+                                                  infmon_api_snap_reply_t *reply);
 
 #ifdef __cplusplus
 }

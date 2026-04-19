@@ -247,29 +247,36 @@ infmon_api_result_t infmon_api_flow_rule_get_by_name(const infmon_api_ctx_t *ctx
 
 /* ── Snapshot and clear ──────────────────────────────────────────── */
 
-void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t flow_rule_id,
-                                   infmon_api_snap_reply_t *reply)
+infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
+                                                  infmon_flow_rule_id_t flow_rule_id,
+                                                  infmon_api_snap_reply_t *reply)
 {
     if (!reply)
-        return;
+        return INFMON_API_ERR_INTERNAL;
 
     memset(reply, 0, sizeof(*reply));
 
     if (!ctx) {
-        reply->result = INFMON_API_ERR_INVALID_RULE;
-        return;
+        reply->result = INFMON_API_ERR_INTERNAL;
+        return INFMON_API_ERR_INTERNAL;
     }
 
     if (!ctx->snap_mgr) {
         reply->result = INFMON_API_ERR_NO_SNAPSHOT_MGR;
-        return;
+        return INFMON_API_ERR_NO_SNAPSHOT_MGR;
+    }
+
+    /* Reject zero IDs — they are a sentinel for "no ID assigned". */
+    if (infmon_flow_rule_id_is_zero(flow_rule_id)) {
+        reply->result = INFMON_API_ERR_NOT_FOUND;
+        return INFMON_API_ERR_NOT_FOUND;
     }
 
     /* Resolve flow_rule_id → index. */
     uint32_t idx = find_rule_index_by_id(ctx, flow_rule_id);
     if (idx == (uint32_t) -1) {
         reply->result = INFMON_API_ERR_NOT_FOUND;
-        return;
+        return INFMON_API_ERR_NOT_FOUND;
     }
 
     /* Delegate to the snapshot manager. */
@@ -277,7 +284,7 @@ void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t 
     const infmon_flow_rule_t *rule = infmon_flow_rule_get(ctx->rule_set, idx);
     if (!rule) {
         reply->result = INFMON_API_ERR_INTERNAL;
-        return;
+        return INFMON_API_ERR_INTERNAL;
     }
     infmon_snapshot_and_clear(ctx->snap_mgr, ctx->tables, idx, INFMON_FLOW_RULE_SET_MAX,
                               rule->key_width, &snap_reply);
@@ -285,7 +292,7 @@ void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t 
     reply->result = map_snap_result(snap_reply.result);
 
     if (snap_reply.result != INFMON_SNAP_OK)
-        return;
+        return reply->result;
 
     /* Build the descriptor from the retired table. */
     infmon_counter_table_t *retired = snap_reply.retired_table;
@@ -300,7 +307,7 @@ void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t 
      * stats_reg is required — without a valid base the offsets are meaningless. */
     if (!ctx->stats_reg) {
         reply->result = INFMON_API_ERR_INTERNAL;
-        return;
+        return INFMON_API_ERR_INTERNAL;
     }
     uintptr_t seg_base = ctx->stats_reg->segment_base;
     desc->slots_offset = infmon_stats_offset_of(seg_base, retired->slots);
@@ -311,4 +318,6 @@ void infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx, infmon_flow_rule_id_t 
     desc->insert_failed = retired->insert_failed;
     desc->table_full = retired->table_full;
     desc->active = 1;
+
+    return INFMON_API_OK;
 }

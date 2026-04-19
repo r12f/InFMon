@@ -342,7 +342,7 @@ TEST_F(ApiHandlerSnapTest, SnapshotAndClearNullCtx)
     infmon_api_snap_reply_t reply;
     infmon_api_snapshot_and_clear(nullptr, id, &reply);
 
-    EXPECT_EQ(reply.result, INFMON_API_ERR_INVALID_RULE);
+    EXPECT_EQ(reply.result, INFMON_API_ERR_INTERNAL);
 }
 
 TEST_F(ApiHandlerSnapTest, SnapshotAndClearDescriptorFields)
@@ -397,4 +397,30 @@ TEST_F(ApiHandlerSnapTest, AddWithIdPreservesIdAcrossDelete)
     EXPECT_EQ(reply.descriptor.flow_rule_id.hi, 0x30u);
     EXPECT_EQ(reply.descriptor.flow_rule_id.lo, 0x40u);
     EXPECT_EQ(reply.descriptor.flow_rule_index, 0u);
+}
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearRejectsZeroId)
+{
+    /* Add a rule via plain add (no explicit ID). */
+    infmon_flow_rule_t r = make_rule("plain_rule");
+    EXPECT_EQ(infmon_api_flow_rule_add(&ctx_, &r), INFMON_API_OK);
+
+    /* Calling snapshot_and_clear with a zero ID should return NOT_FOUND,
+     * not silently match the slot whose ID was zeroed by the add path. */
+    infmon_flow_rule_id_t zero_id = {0, 0};
+    infmon_api_snap_reply_t reply;
+    infmon_api_result_t rc = infmon_api_snapshot_and_clear(&ctx_, zero_id, &reply);
+    EXPECT_EQ(rc, INFMON_API_ERR_NOT_FOUND);
+    EXPECT_EQ(reply.result, INFMON_API_ERR_NOT_FOUND);
+}
+
+TEST_F(ApiHandlerSnapTest, SnapshotAndClearReturnType)
+{
+    /* Verify the return value matches reply.result. */
+    infmon_flow_rule_id_t id = add_rule_with_id("ret_rule", 0xCC, 0xDD);
+
+    infmon_api_snap_reply_t reply;
+    infmon_api_result_t rc = infmon_api_snapshot_and_clear(&ctx_, id, &reply);
+    EXPECT_EQ(rc, INFMON_API_OK);
+    EXPECT_EQ(rc, reply.result);
 }
