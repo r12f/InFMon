@@ -1,5 +1,6 @@
 use std::fmt;
 use std::net::IpAddr;
+use std::str::FromStr;
 
 /// Identifies a flow rule (128-bit UUID from the backend)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -11,6 +12,22 @@ pub struct FlowRuleId {
 impl fmt::Display for FlowRuleId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:016x}-{:016x}", self.hi, self.lo)
+    }
+}
+
+impl FromStr for FlowRuleId {
+    type Err = String;
+
+    /// Parse a `FlowRuleId` from a "{hi:016x}-{lo:016x}" string.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (hi_str, lo_str) = s
+            .split_once('-')
+            .ok_or_else(|| format!("invalid FlowRuleId: missing '-' in '{s}'"))?;
+        let hi =
+            u64::from_str_radix(hi_str, 16).map_err(|e| format!("invalid FlowRuleId hi: {e}"))?;
+        let lo =
+            u64::from_str_radix(lo_str, 16).map_err(|e| format!("invalid FlowRuleId lo: {e}"))?;
+        Ok(Self { hi, lo })
     }
 }
 
@@ -60,13 +77,40 @@ pub struct FlowRuleCounters {
     pub bytes: u64,
 }
 
-/// Stats for one flow rule in a snapshot
+/// Stats for one flow rule in a snapshot.
+///
+/// Uses owned `String`/`Vec` for simplicity. If profiling shows allocation
+/// overhead from repeated snapshots, consider `Arc<str>`/`Arc<[FieldId]>` for
+/// metadata that stays constant across ticks.
 #[derive(Debug, Clone)]
 pub struct FlowRuleStats {
     pub name: String,
     pub fields: Vec<FieldId>,
     pub flows: Vec<FlowStats>,
     pub counters: FlowRuleCounters,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flow_rule_id_display_parse_roundtrip() {
+        let id = FlowRuleId {
+            hi: 0x0123456789abcdef,
+            lo: 0xfedcba9876543210,
+        };
+        let s = id.to_string();
+        assert_eq!(s, "0123456789abcdef-fedcba9876543210");
+        let parsed: FlowRuleId = s.parse().unwrap();
+        assert_eq!(parsed, id);
+    }
+
+    #[test]
+    fn flow_rule_id_parse_invalid() {
+        assert!("not-a-valid-id".parse::<FlowRuleId>().is_err());
+        assert!("nodashatall".parse::<FlowRuleId>().is_err());
+    }
 }
 
 /// One tick's worth of snapshot data

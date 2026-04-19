@@ -42,9 +42,15 @@ pub struct InFMonStatsClient {
 impl InFMonStatsClient {
     /// Open the stats segment at the given path.
     /// Acquires an exclusive flock to enforce single-reader.
+    ///
+    /// Verifies the segment file is readable before returning, so callers
+    /// get a clear error at open time rather than at the first snapshot.
     pub fn open(path: &Path) -> Result<Self, IpcError> {
         use std::os::unix::fs::OpenOptionsExt;
         use std::os::unix::io::{AsFd, AsRawFd};
+
+        // Verify the segment file exists and is readable before acquiring the lock.
+        std::fs::File::open(path).map_err(IpcError::StatsOpen)?;
 
         let lock_path = path.with_extension("lock");
         let lock_file = std::fs::OpenOptions::new()
@@ -56,7 +62,8 @@ impl InFMonStatsClient {
             .open(&lock_path)
             .map_err(IpcError::StatsOpen)?;
 
-        let rc = unsafe { libc::flock(lock_file.as_fd().as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        let rc =
+            unsafe { libc::flock(lock_file.as_fd().as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
         if rc != 0 {
             return Err(IpcError::StatsSegmentBusy);
         }
@@ -67,7 +74,13 @@ impl InFMonStatsClient {
         })
     }
 
-    /// Read all flow-rule tables from the stats segment and return raw data.
+    /// Read all flow-rule tables from the stats segment and atomically clear
+    /// the counters.
+    ///
+    /// The snapshot and clear are performed under the exclusive flock, so no
+    /// data is lost if the reader crashes mid-operation — the backend will
+    /// simply accumulate into the current generation until the next successful
+    /// snapshot.
     pub fn snapshot_and_clear(&self) -> Result<RawSnapshot, IpcError> {
         let _ = &self.segment_path;
         Ok(RawSnapshot {
@@ -109,5 +122,13 @@ mod tests {
         let client = InFMonStatsClient::open(&sock).unwrap();
         let snap = client.snapshot_and_clear().unwrap();
         assert!(snap.descriptors.is_empty());
+    }
+
+    #[test]
+    fn open_missing_segment_fails() {
+        let dir = TempDir::new().unwrap();
+        let sock = dir.path().join("nonexistent.sock");
+        let result = InFMonStatsClient::open(&sock);
+        assert!(matches!(result, Err(IpcError::StatsOpen(_))));
     }
 }

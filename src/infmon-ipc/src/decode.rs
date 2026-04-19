@@ -19,26 +19,32 @@ pub fn decode_key(fields: &[FieldId], key_bytes: &[u8]) -> Result<Vec<FieldValue
                         key_bytes.len() - offset
                     )));
                 }
-                let bytes: [u8; 16] = key_bytes[offset..offset + 16]
-                    .try_into()
-                    .map_err(|_| IpcError::StatsFormat(format!(
+                let bytes: [u8; 16] = key_bytes[offset..offset + 16].try_into().map_err(|_| {
+                    IpcError::StatsFormat(format!(
                         "failed to convert {:?} bytes at offset {}",
                         field, offset
-                    )))?;
+                    ))
+                })?;
                 let ip = decode_ip(bytes);
                 values.push(FieldValue::Ip(ip));
                 offset += 16;
             }
             FieldId::IpProto => {
                 if offset >= key_bytes.len() {
-                    return Err(IpcError::StatsFormat(format!("key too short for IpProto at offset {}", offset)));
+                    return Err(IpcError::StatsFormat(format!(
+                        "key too short for IpProto at offset {}",
+                        offset
+                    )));
                 }
                 values.push(FieldValue::Proto(key_bytes[offset]));
                 offset += 1;
             }
             FieldId::Dscp => {
                 if offset >= key_bytes.len() {
-                    return Err(IpcError::StatsFormat(format!("key too short for Dscp at offset {}", offset)));
+                    return Err(IpcError::StatsFormat(format!(
+                        "key too short for Dscp at offset {}",
+                        offset
+                    )));
                 }
                 values.push(FieldValue::Dscp(key_bytes[offset]));
                 offset += 1;
@@ -117,5 +123,13 @@ mod tests {
         let fields = vec![FieldId::SrcIp];
         let key = vec![0u8; 10];
         assert!(decode_key(&fields, &key).is_err());
+    }
+
+    #[test]
+    fn decode_key_trailing_bytes() {
+        let fields = vec![FieldId::IpProto];
+        let key = vec![6, 0]; // 1 byte for proto + 1 trailing byte
+        let err = decode_key(&fields, &key).unwrap_err();
+        assert!(err.to_string().contains("trailing bytes"));
     }
 }
