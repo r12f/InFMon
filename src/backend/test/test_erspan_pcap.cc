@@ -212,6 +212,14 @@ TEST_F(PcapTest, ErspanGREKeyed)
     EXPECT_EQ(rc, INFMON_PARSE_ERR_GRE_UNEXPECTED_FLAGS);
 }
 
+TEST_F(PcapTest, ZeroLengthInput)
+{
+    // Empty / zero-length buffer must not crash.
+    auto rc = infmon_parse_erspan(nullptr, 0, &out);
+    // Any error code is acceptable — just must not segfault.
+    EXPECT_NE(rc, INFMON_PARSE_OK);
+}
+
 // ---------------------------------------------------------------------------
 // Negative: ERSPAN session ID must NOT appear in output struct
 // ---------------------------------------------------------------------------
