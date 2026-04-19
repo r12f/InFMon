@@ -154,7 +154,7 @@ fn decode_snapshot(
     let interval_ns = if tick_id == 1 || prev_mono == 0 {
         0
     } else {
-        mono - prev_mono
+        mono.saturating_sub(prev_mono)
     };
 
     let flow_rules = raw
@@ -289,7 +289,7 @@ fn run_loop(
         }
 
         // Sleep until next tick, accounting for time spent in this tick.
-        let elapsed = Duration::from_nanos(monotonic_ns() - tick_start);
+        let elapsed = Duration::from_nanos(monotonic_ns().saturating_sub(tick_start));
         if let Some(remaining) = config.interval.checked_sub(elapsed) {
             sleep_interruptible(remaining, stop);
         }
