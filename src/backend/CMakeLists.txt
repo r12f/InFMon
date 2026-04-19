@@ -162,10 +162,6 @@ add_executable(test_integration
 target_link_libraries(test_integration PRIVATE
     infmon_api_handler
     infmon_graph_node
-    infmon_flow_rule
-    infmon_counter_table
-    infmon_snapshot
-    infmon_stats_segment
     GTest::gtest GTest::gtest_main
     Threads::Threads
 )
