@@ -7,7 +7,8 @@ pub use crud::{CrudError, FlowRuleSet, FLOW_RULE_SET_MAX};
 pub use model::{Config, EvictionPolicy, ExporterEntry, Field, FlowRule, FrontendConfig};
 pub use parse::{load_config, parse_yaml, parse_yaml_file, ConfigError, ParseError};
 pub use validate::{
-    validate_config, validate_rule, ValidationError, MAX_KEYS_BUDGET, MAX_KEY_WIDTH,
+    validate_config, validate_exporter, validate_frontend, validate_rule, ValidationError,
+    KNOWN_EXPORTER_TYPES, MAX_KEYS_BUDGET, MAX_KEY_WIDTH, VALID_OVERFLOW_POLICIES,
 };
 
 #[cfg(test)]
@@ -256,5 +257,286 @@ flow-rules:
             set.add(make_rule("overflow", vec![Field::SrcIp], 1)),
             Err(CrudError::SetFull { .. })
         ));
+    }
+}
+
+#[cfg(test)]
+mod frontend_config_tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn make_valid_config() -> Config {
+        Config {
+            frontend: Some(FrontendConfig::default()),
+            flow_rules: vec![FlowRule {
+                name: "test-rule".to_string(),
+                fields: vec![Field::SrcIp],
+                max_keys: 100,
+                eviction_policy: EvictionPolicy::LruDrop,
+            }],
+            exporters: Some(vec![ExporterEntry {
+                kind: "otlp".into(),
+                name: "primary".into(),
+                queue_depth: 2,
+                export_timeout: "800ms".into(),
+                on_overflow: "drop_newest".into(),
+                extra: HashMap::from([(
+                    "endpoint".to_string(),
+                    serde_yaml::Value::String("http://collector:4317".into()),
+                )]),
+            }]),
+        }
+    }
+
+    #[test]
+    fn valid_full_config() {
+        let config = make_valid_config();
+        validate_config(&config).unwrap();
+    }
+
+    #[test]
+    fn reject_zero_polling_interval() {
+        let mut config = make_valid_config();
+        config.frontend.as_mut().unwrap().polling_interval_ms = 0;
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::ZeroPollingInterval)
+        );
+    }
+
+    #[test]
+    fn reject_zero_shutdown_grace() {
+        let mut config = make_valid_config();
+        config.frontend.as_mut().unwrap().shutdown_grace_ms = 0;
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::ZeroShutdownGrace)
+        );
+    }
+
+    #[test]
+    fn reject_invalid_startup_timeout() {
+        let mut config = make_valid_config();
+        config.frontend.as_mut().unwrap().startup_timeout = "abc".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::InvalidStartupTimeout {
+                value: "abc".into()
+            })
+        );
+    }
+
+    #[test]
+    fn reject_unknown_exporter_type() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].kind = "prometheus".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::UnknownExporterType {
+                name: "primary".into(),
+                kind: "prometheus".into(),
+                known: "otlp".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn reject_empty_exporter_name() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].name = "".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::EmptyExporterName { index: 0 })
+        );
+    }
+
+    #[test]
+    fn reject_empty_exporter_type() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].kind = "".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::EmptyExporterType {
+                name: "primary".into()
+            })
+        );
+    }
+
+    #[test]
+    fn reject_duplicate_exporter_names() {
+        let mut config = make_valid_config();
+        let dup = config.exporters.as_ref().unwrap()[0].clone();
+        config.exporters.as_mut().unwrap().push(dup);
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::DuplicateExporterName("primary".into()))
+        );
+    }
+
+    #[test]
+    fn reject_zero_queue_depth() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].queue_depth = 0;
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::ZeroQueueDepth {
+                name: "primary".into()
+            })
+        );
+    }
+
+    #[test]
+    fn reject_queue_depth_too_large() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].queue_depth = 10_001;
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::QueueDepthTooLarge {
+                name: "primary".into(),
+                depth: 10_001,
+                max: 10_000,
+            })
+        );
+    }
+
+    #[test]
+    fn reject_invalid_export_timeout() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].export_timeout = "forever".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::InvalidExportTimeout {
+                name: "primary".into(),
+                value: "forever".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn reject_invalid_overflow_policy() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].on_overflow = "drop_oldest".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::InvalidOverflowPolicy {
+                name: "primary".into(),
+                policy: "drop_oldest".into(),
+                valid: "drop_newest".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn reject_zero_startup_timeout() {
+        let mut config = make_valid_config();
+        config.frontend.as_mut().unwrap().startup_timeout = "0s".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::ZeroStartupTimeout)
+        );
+    }
+
+    #[test]
+    fn reject_zero_export_timeout() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].export_timeout = "0ms".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::ZeroExportTimeout {
+                name: "primary".into()
+            })
+        );
+    }
+
+    #[test]
+    fn reject_invalid_exporter_name() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0].name = "A".into();
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::InvalidExporterName { name: "A".into() })
+        );
+    }
+
+    #[test]
+    fn reject_otlp_missing_endpoint() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0]
+            .extra
+            .remove("endpoint");
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::MissingOtlpEndpoint {
+                name: "primary".into()
+            })
+        );
+    }
+
+    #[test]
+    fn reject_otlp_empty_endpoint() {
+        let mut config = make_valid_config();
+        config.exporters.as_mut().unwrap()[0]
+            .extra
+            .insert("endpoint".to_string(), serde_yaml::Value::String("".into()));
+        assert_eq!(
+            validate_config(&config),
+            Err(ValidationError::MissingOtlpEndpoint {
+                name: "primary".into()
+            })
+        );
+    }
+
+    #[test]
+    fn accept_no_frontend_section() {
+        let mut config = make_valid_config();
+        config.frontend = None;
+        validate_config(&config).unwrap();
+    }
+
+    #[test]
+    fn accept_no_exporters_section() {
+        let mut config = make_valid_config();
+        config.exporters = None;
+        validate_config(&config).unwrap();
+    }
+
+    #[test]
+    fn parse_full_yaml_with_frontend_and_exporters() {
+        let yaml = r#"
+frontend:
+  polling_interval_ms: 500
+  backend_socket: "/run/infmon/backend.sock"
+  control_socket: "/run/infmon/frontend.sock"
+  vpp_stats_socket: "/run/vpp/stats.sock"
+  startup_timeout: "10s"
+  shutdown_grace_ms: 3000
+
+flow-rules:
+  - name: by-src
+    fields: [src_ip]
+    max_keys: 1000
+    eviction_policy: lru_drop
+
+exporters:
+  - type: "otlp"
+    name: "primary"
+    endpoint: "http://collector.local:4317"
+    export_timeout: "800ms"
+    queue_depth: 2
+    on_overflow: "drop_newest"
+"#;
+        let config = parse_yaml(yaml).unwrap();
+        validate_config(&config).unwrap();
+        assert!(config.frontend.is_some());
+        assert_eq!(config.frontend.unwrap().polling_interval_ms, 500);
+        assert_eq!(config.exporters.as_ref().unwrap().len(), 1);
+        assert_eq!(config.exporters.as_ref().unwrap()[0].kind, "otlp");
+        assert_eq!(
+            config.exporters.as_ref().unwrap()[0]
+                .extra
+                .get("endpoint")
+                .and_then(|v| v.as_str()),
+            Some("http://collector.local:4317")
+        );
     }
 }
