@@ -91,6 +91,30 @@ target_link_libraries(test_stats_segment PRIVATE infmon_stats_segment infmon_cou
 target_include_directories(test_stats_segment PRIVATE include)
 add_test(NAME stats_segment COMMAND test_stats_segment)
 
+# --- API handler library (flow_rule_add / flow_rule_del orchestration) ---
+add_library(infmon_api_handler STATIC
+    src/api_handler.c
+)
+target_include_directories(infmon_api_handler PUBLIC include)
+target_link_libraries(infmon_api_handler PUBLIC
+    infmon_flow_rule
+    infmon_counter_table
+    infmon_stats_segment
+)
+
+add_executable(test_api_handler
+    test/test_api_handler.cc
+)
+target_link_libraries(test_api_handler PRIVATE
+    infmon_api_handler
+    infmon_flow_rule
+    infmon_counter_table
+    infmon_stats_segment
+    GTest::gtest GTest::gtest_main
+)
+target_include_directories(test_api_handler PRIVATE include)
+add_test(NAME api_handler COMMAND test_api_handler)
+
 # --- VPP API schema (.api -> C header + JSON) ---
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 find_package(VppApiGen)
