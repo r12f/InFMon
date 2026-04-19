@@ -28,7 +28,7 @@ extern "C" {
 #define INFMON_MAX_RETIRED 16
 
 /** Default grace period in nanoseconds (5 seconds). */
-#define INFMON_RETIRE_GRACE_NS ((uint64_t)5000000000ULL)
+#define INFMON_RETIRE_GRACE_NS ((uint64_t) 5000000000ULL)
 
 /* ── Per-worker epoch counter ────────────────────────────────────── */
 
@@ -45,11 +45,11 @@ typedef struct {
 /* ── Retired table descriptor ────────────────────────────────────── */
 
 typedef struct {
-    infmon_counter_table_t *table;      /** The retired table. */
-    uint64_t swap_epoch;                /** Global epoch at time of swap. */
-    uint64_t swap_timestamp_ns;         /** Wall-clock timestamp of swap. */
-    uint32_t flow_rule_index;           /** Which flow_rule this belonged to. */
-    bool pending;                       /** true if still awaiting retirement. */
+    infmon_counter_table_t *table; /** The retired table. */
+    uint64_t swap_epoch;           /** Global epoch at time of swap. */
+    uint64_t swap_timestamp_ns;    /** Wall-clock timestamp of swap. */
+    uint32_t flow_rule_index;      /** Which flow_rule this belonged to. */
+    bool pending;                  /** true if still awaiting retirement. */
 } infmon_retired_table_t;
 
 /* ── Snapshot manager ────────────────────────────────────────────── */
@@ -69,12 +69,12 @@ typedef struct {
     infmon_worker_epoch_t worker_epochs[INFMON_MAX_WORKERS];
     uint32_t num_workers;
 
-    uint64_t global_epoch;              /** Bumped on each swap. */
+    uint64_t global_epoch; /** Bumped on each swap. */
 
     infmon_retired_table_t retired[INFMON_MAX_RETIRED];
-    uint32_t retired_count;             /** Number of pending entries. */
+    uint32_t retired_count; /** Number of pending entries. */
 
-    uint64_t grace_ns;                  /** Configurable grace window. */
+    uint64_t grace_ns; /** Configurable grace window. */
 
     /* Callback for getting wall-clock nanoseconds (injectable for testing). */
     uint64_t (*clock_ns)(void);
@@ -84,16 +84,16 @@ typedef struct {
 
 typedef enum {
     INFMON_SNAP_OK = 0,
-    INFMON_SNAP_ALLOC_FAILED,           /** Could not allocate replacement table. */
-    INFMON_SNAP_TOO_MANY_RETIRED,       /** Retired ring is full. */
-    INFMON_SNAP_INVALID_INDEX,          /** flow_rule_index out of range. */
-    INFMON_SNAP_NULL_TABLE,             /** No table installed at that index. */
+    INFMON_SNAP_ALLOC_FAILED,     /** Could not allocate replacement table. */
+    INFMON_SNAP_TOO_MANY_RETIRED, /** Retired ring is full. */
+    INFMON_SNAP_INVALID_INDEX,    /** flow_rule_index out of range. */
+    INFMON_SNAP_NULL_TABLE,       /** No table installed at that index. */
 } infmon_snap_result_t;
 
 typedef struct {
     infmon_snap_result_t result;
-    infmon_counter_table_t *retired_table;   /** The old table (generation G). */
-    uint64_t retired_generation;             /** Generation of the retired table. */
+    infmon_counter_table_t *retired_table; /** The old table (generation G). */
+    uint64_t retired_generation;           /** Generation of the retired table. */
 } infmon_snap_reply_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
@@ -106,8 +106,8 @@ typedef struct {
  * @param grace_ns     Grace period in nanoseconds (0 = use default).
  * @param clock_ns     Wall-clock function (NULL = use clock_gettime).
  */
-void infmon_snapshot_mgr_init(infmon_snapshot_mgr_t *mgr, uint32_t num_workers,
-                              uint64_t grace_ns, uint64_t (*clock_ns)(void));
+void infmon_snapshot_mgr_init(infmon_snapshot_mgr_t *mgr, uint32_t num_workers, uint64_t grace_ns,
+                              uint64_t (*clock_ns)(void));
 
 /**
  * Destroy the snapshot manager.  Frees any retired tables still pending.
@@ -129,7 +129,7 @@ static inline void infmon_worker_epoch_bump(infmon_snapshot_mgr_t *mgr, uint32_t
  * Read a worker's published epoch (for control thread use).
  */
 static inline uint64_t infmon_worker_epoch_read(const infmon_snapshot_mgr_t *mgr,
-                                                 uint32_t worker_id)
+                                                uint32_t worker_id)
 {
     return __atomic_load_n(&mgr->worker_epochs[worker_id].epoch, __ATOMIC_ACQUIRE);
 }
@@ -151,12 +151,9 @@ static inline uint64_t infmon_worker_epoch_read(const infmon_snapshot_mgr_t *mgr
  * @param max_key_width    Key width for the new table (same as old).
  * @param reply            Output: result + retired table info.
  */
-void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr,
-                               infmon_counter_table_t **tables,
-                               uint32_t flow_rule_index,
-                               uint32_t max_flow_rules,
-                               uint32_t max_key_width,
-                               infmon_snap_reply_t *reply);
+void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_t **tables,
+                               uint32_t flow_rule_index, uint32_t max_flow_rules,
+                               uint32_t max_key_width, infmon_snap_reply_t *reply);
 
 /**
  * Poll for retired tables whose grace period has expired.

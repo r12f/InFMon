@@ -5,15 +5,15 @@
  * Tests for snapshot_and_clear — see specs/004-backend-architecture.md §7.2
  */
 
+#include <atomic>
+#include <cstring>
 #include <gtest/gtest.h>
 #include <thread>
-#include <atomic>
 #include <vector>
-#include <cstring>
 
 extern "C" {
-#include "infmon/snapshot.h"
 #include "infmon/counter_table.h"
+#include "infmon/snapshot.h"
 }
 
 /* ── Test helpers ────────────────────────────────────────────────── */
@@ -34,8 +34,9 @@ static void advance_clock_ns(uint64_t delta)
 #define MAX_FLOW_RULES 64
 #define MAX_KEY_WIDTH 32
 
-class SnapshotTest : public ::testing::Test {
-protected:
+class SnapshotTest : public ::testing::Test
+{
+  protected:
     infmon_snapshot_mgr_t mgr{};
     infmon_counter_table_t *tables[MAX_FLOW_RULES]{};
 
@@ -120,7 +121,7 @@ TEST_F(SnapshotTest, SequentialSwaps)
         ASSERT_EQ(tables[0]->generation, gen + 1);
 
         /* Advance workers past the swap epoch (need epoch > swap_epoch) */
-        for (int bump = 0; bump <= (int)gen + 1; bump++)
+        for (int bump = 0; bump <= (int) gen + 1; bump++)
             for (uint32_t w = 0; w < mgr.num_workers; w++)
                 infmon_worker_epoch_bump(&mgr, w);
 

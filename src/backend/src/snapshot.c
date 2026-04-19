@@ -17,13 +17,13 @@ static uint64_t default_clock_ns(void)
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 }
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
 
-void infmon_snapshot_mgr_init(infmon_snapshot_mgr_t *mgr, uint32_t num_workers,
-                              uint64_t grace_ns, uint64_t (*clock_ns)(void))
+void infmon_snapshot_mgr_init(infmon_snapshot_mgr_t *mgr, uint32_t num_workers, uint64_t grace_ns,
+                              uint64_t (*clock_ns)(void))
 {
     memset(mgr, 0, sizeof(*mgr));
 
@@ -66,12 +66,9 @@ bool infmon_all_workers_past(const infmon_snapshot_mgr_t *mgr, uint64_t epoch)
 
 /* ── Snapshot and clear ──────────────────────────────────────────── */
 
-void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr,
-                               infmon_counter_table_t **tables,
-                               uint32_t flow_rule_index,
-                               uint32_t max_flow_rules,
-                               uint32_t max_key_width,
-                               infmon_snap_reply_t *reply)
+void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_t **tables,
+                               uint32_t flow_rule_index, uint32_t max_flow_rules,
+                               uint32_t max_key_width, infmon_snap_reply_t *reply)
 {
     memset(reply, 0, sizeof(*reply));
 
@@ -82,8 +79,7 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr,
     }
 
     /* Get the current table */
-    infmon_counter_table_t *old_table =
-        __atomic_load_n(&tables[flow_rule_index], __ATOMIC_ACQUIRE);
+    infmon_counter_table_t *old_table = __atomic_load_n(&tables[flow_rule_index], __ATOMIC_ACQUIRE);
 
     if (!old_table) {
         reply->result = INFMON_SNAP_NULL_TABLE;
