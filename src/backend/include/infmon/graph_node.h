@@ -89,6 +89,20 @@ typedef struct {
     INFMON_COUNTER_U64 counter_table_full; /**< Table reached max_keys_per_flow_rule. */
 } infmon_worker_counters_t;
 
+/*
+ * Cross-language size guard: _Atomic qualifiers must not change the struct
+ * layout between C and C++ translation units (see review discussion on
+ * potential ABI mismatch with exotic targets).
+ */
+#define INFMON_WORKER_COUNTERS_EXPECTED_SIZE 64 /* 4 + 4 + 7*8 = 64 */
+#ifdef __cplusplus
+static_assert(sizeof(infmon_worker_counters_t) == INFMON_WORKER_COUNTERS_EXPECTED_SIZE,
+              "infmon_worker_counters_t size mismatch between C and C++ — check _Atomic padding");
+#else
+_Static_assert(sizeof(infmon_worker_counters_t) == INFMON_WORKER_COUNTERS_EXPECTED_SIZE,
+               "infmon_worker_counters_t size mismatch — check _Atomic padding");
+#endif
+
 /**
  * Initialise a worker-counters struct (zero all fields, set worker_id).
  */

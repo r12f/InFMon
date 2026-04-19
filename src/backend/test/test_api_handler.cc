@@ -542,6 +542,19 @@ TEST_F(ApiHandlerTest, WorkerCountersInitSetsWorkerIdOnly)
     EXPECT_EQ(wc.counter_table_full, 0u);
 }
 
+TEST_F(ApiHandlerTest, StatusExceedsMaxWorkersReturnsError)
+{
+    /* worker_count > INFMON_MAX_WORKERS should be rejected. */
+    infmon_worker_counters_t wc;
+    infmon_worker_counters_init(&wc, 0);
+    ctx_.worker_counters = &wc;
+    ctx_.worker_count = INFMON_MAX_WORKERS + 1;
+
+    infmon_api_status_reply_t reply;
+    EXPECT_EQ(infmon_api_status(&ctx_, &reply), INFMON_API_ERR_INTERNAL);
+    EXPECT_EQ(reply.result, INFMON_API_ERR_INTERNAL);
+}
+
 TEST_F(ApiHandlerTest, WorkerCountersInitNullNoOp)
 {
     /* Should not crash. */
