@@ -42,6 +42,7 @@ typedef enum {
     INFMON_FLOW_RULE_ERR_NOT_FOUND,
     INFMON_FLOW_RULE_ERR_INVALID_SPEC,
     INFMON_FLOW_RULE_ERR_BUDGET_EXCEEDED,
+    INFMON_FLOW_RULE_ERR_SET_FULL,
     INFMON_FLOW_RULE_ERR_INTERNAL,
 } infmon_flow_rule_result_t;
 
@@ -61,11 +62,12 @@ typedef struct {
     uint32_t field_count;
     uint32_t max_keys;
     infmon_eviction_policy_t eviction_policy;
-    uint32_t key_width; /* computed, cached */
+    uint32_t key_width; /* computed by add(); only valid after infmon_flow_rule_add() */
 } infmon_flow_rule_t;
 
 /* ── Per-flow-rule metrics ───────────────────────────────────────── */
 
+/* Scaffolding for the metrics subsystem (next PR); not yet referenced by any API. */
 typedef struct {
     uint64_t flows;           /* gauge: current key count */
     uint64_t evictions_total; /* counter */
@@ -105,6 +107,12 @@ const infmon_flow_rule_t *infmon_flow_rule_get(const infmon_flow_rule_set_t *set
 
 /* ── Validation (single rule, no set constraints) ────────────────── */
 
+/**
+ * Validate a flow rule in isolation.
+ *
+ * Name constraints: 2-31 chars, pattern ^[a-z0-9][a-z0-9_-]+$.
+ * max_keys must be in [1, INFMON_FLOW_RULE_MAX_KEYS_BUDGET].
+ */
 infmon_flow_rule_result_t infmon_flow_rule_validate(const infmon_flow_rule_t *rule);
 
 /* ── Key encoding ────────────────────────────────────────────────── */

@@ -138,6 +138,8 @@ infmon_flow_rule_result_t infmon_flow_rule_validate(const infmon_flow_rule_t *ru
 
     if (rule->max_keys == 0)
         return INFMON_FLOW_RULE_ERR_INVALID_SPEC;
+    if (rule->max_keys > INFMON_FLOW_RULE_MAX_KEYS_BUDGET)
+        return INFMON_FLOW_RULE_ERR_INVALID_SPEC;
 
     if ((unsigned) rule->eviction_policy >= INFMON_EVICTION__COUNT)
         return INFMON_FLOW_RULE_ERR_INVALID_SPEC;
@@ -154,6 +156,9 @@ infmon_flow_rule_result_t infmon_flow_rule_validate(const infmon_flow_rule_t *ru
 void infmon_flow_rule_encode_key(const infmon_flow_rule_t *rule, const infmon_flow_fields_t *fields,
                                  uint8_t *key_buf)
 {
+    if (!rule || !fields || !key_buf)
+        return;
+
     uint32_t off = 0;
     for (uint32_t i = 0; i < rule->field_count; i++) {
         switch (rule->fields[i]) {
@@ -238,12 +243,12 @@ infmon_flow_rule_result_t infmon_flow_rule_add(infmon_flow_rule_set_t *set,
         return rc;
 
     if (set->count >= INFMON_FLOW_RULE_SET_MAX)
-        return INFMON_FLOW_RULE_ERR_INTERNAL;
+        return INFMON_FLOW_RULE_ERR_SET_FULL;
 
     if (infmon_flow_rule_find(set, rule->name))
         return INFMON_FLOW_RULE_ERR_NAME_EXISTS;
 
-    if (set->used_keys + rule->max_keys > set->max_keys_budget)
+    if ((uint64_t)set->used_keys + rule->max_keys > set->max_keys_budget)
         return INFMON_FLOW_RULE_ERR_BUDGET_EXCEEDED;
 
     infmon_flow_rule_t *dst = &set->rules[set->count];

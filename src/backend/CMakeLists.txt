@@ -50,7 +50,6 @@ target_link_libraries(test_flow_rule PRIVATE infmon_flow_rule GTest::gtest GTest
 target_include_directories(test_flow_rule PRIVATE include)
 add_test(NAME flow_rule COMMAND test_flow_rule)
 
-# --- Fuzz target (clang only, requires -fsanitize=fuzzer) ---
 if(ENABLE_FUZZER)
     add_executable(fuzz_erspan_parser
         test/fuzz_erspan_parser.cc
