@@ -279,6 +279,13 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
         return INFMON_API_ERR_NOT_FOUND;
     }
 
+    /* stats_reg is required — without a valid base the offsets are meaningless.
+     * Check before the swap so we never retire a table we can't describe. */
+    if (!ctx->stats_reg) {
+        reply->result = INFMON_API_ERR_INTERNAL;
+        return INFMON_API_ERR_INTERNAL;
+    }
+
     /* Delegate to the snapshot manager. */
     infmon_snap_reply_t snap_reply;
     const infmon_flow_rule_t *rule = infmon_flow_rule_get(ctx->rule_set, idx);
@@ -303,12 +310,7 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
     desc->generation = snap_reply.retired_generation;
     desc->epoch_ns = retired->epoch_ns;
 
-    /* Compute byte offsets relative to stats segment base.
-     * stats_reg is required — without a valid base the offsets are meaningless. */
-    if (!ctx->stats_reg) {
-        reply->result = INFMON_API_ERR_INTERNAL;
-        return INFMON_API_ERR_INTERNAL;
-    }
+    /* Compute byte offsets relative to stats segment base. */
     uintptr_t seg_base = ctx->stats_reg->segment_base;
     desc->slots_offset = infmon_stats_offset_of(seg_base, retired->slots);
     desc->slots_len = retired->num_slots;
