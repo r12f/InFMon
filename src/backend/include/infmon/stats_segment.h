@@ -15,10 +15,10 @@
 #ifndef INFMON_STATS_SEGMENT_H
 #define INFMON_STATS_SEGMENT_H
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <assert.h>
 
 #include "infmon/counter_table.h"
 
@@ -85,8 +85,13 @@ typedef struct {
     uint8_t _pad2[7];                   /* 89: pad to 96 B total */
 } infmon_stats_descriptor_t;
 
+#ifdef __cplusplus
+static_assert(sizeof(infmon_stats_descriptor_t) == 96,
+              "descriptor must be exactly 96 bytes for shared-memory layout stability");
+#else
 _Static_assert(sizeof(infmon_stats_descriptor_t) == 96,
                "descriptor must be exactly 96 bytes for shared-memory layout stability");
+#endif
 
 /* ── Stats-segment registry ──────────────────────────────────────── */
 
