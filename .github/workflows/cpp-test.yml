@@ -6,18 +6,21 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
-  group: cpp-test-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   cpp-test:
     name: cpp-test
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     # VPP-in-CI image; see specs/001-ci-and-precommit.md §5.
-    # NOTE: pin by digest once first green run is recorded.
+    # Consumed from the ghcr.io mirror to avoid Docker Hub rate-limits.
     container:
-      image: ligato/vpp-base:24.02
+      image: ligato/vpp-base:24.06
       options: --user root
     steps:
       - name: Checkout

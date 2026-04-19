@@ -6,25 +6,23 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
-  group: lint-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   lint:
     name: lint
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           # commitlint needs commit history to lint PR commits.
           fetch-depth: 0
-
-      - name: Set up Python (for pre-commit)
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
 
       - name: Set up Node (for commitlint / markdownlint)
         uses: actions/setup-node@v4
