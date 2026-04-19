@@ -424,3 +424,139 @@ TEST_F(ApiHandlerSnapTest, SnapshotAndClearReturnType)
     EXPECT_EQ(rc, INFMON_API_OK);
     EXPECT_EQ(rc, reply.result);
 }
+
+/* ── W10e: infmon_status tests ──────────────────────────────────── */
+
+TEST_F(ApiHandlerTest, StatusBasic)
+{
+    /* Set up 2 workers with known counter values. */
+    infmon_worker_counters_t workers[2];
+    infmon_worker_counters_init(&workers[0], 0);
+    infmon_worker_counters_init(&workers[1], 1);
+
+    workers[0].packets_seen = 100;
+    workers[0].erspan_unknown_proto = 1;
+    workers[0].erspan_truncated = 2;
+    workers[0].inner_parse_failed = 3;
+    workers[0].flow_rule_no_match = 10;
+    workers[0].counter_insert_retry_exhausted = 0;
+    workers[0].counter_table_full = 0;
+
+    workers[1].packets_seen = 200;
+    workers[1].erspan_unknown_proto = 0;
+    workers[1].erspan_truncated = 0;
+    workers[1].inner_parse_failed = 0;
+    workers[1].flow_rule_no_match = 5;
+    workers[1].counter_insert_retry_exhausted = 1;
+    workers[1].counter_table_full = 2;
+
+    ctx_.worker_counters = workers;
+    ctx_.worker_count = 2;
+
+    infmon_api_status_reply_t reply;
+    infmon_api_result_t rc = infmon_api_status(&ctx_, &reply);
+    EXPECT_EQ(rc, INFMON_API_OK);
+    EXPECT_EQ(reply.result, INFMON_API_OK);
+    ASSERT_EQ(reply.worker_count, 2u);
+    ASSERT_NE(reply.workers, nullptr);
+
+    EXPECT_EQ(reply.workers[0].worker_id, 0u);
+    EXPECT_EQ(reply.workers[0].packets_seen, 100u);
+    EXPECT_EQ(reply.workers[0].erspan_unknown_proto, 1u);
+    EXPECT_EQ(reply.workers[0].flow_rule_no_match, 10u);
+
+    EXPECT_EQ(reply.workers[1].worker_id, 1u);
+    EXPECT_EQ(reply.workers[1].packets_seen, 200u);
+    EXPECT_EQ(reply.workers[1].counter_insert_retry_exhausted, 1u);
+    EXPECT_EQ(reply.workers[1].counter_table_full, 2u);
+}
+
+TEST_F(ApiHandlerTest, StatusNullCtxReturnsError)
+{
+    infmon_api_status_reply_t reply;
+    EXPECT_EQ(infmon_api_status(nullptr, &reply), INFMON_API_ERR_INTERNAL);
+    EXPECT_EQ(reply.result, INFMON_API_ERR_INTERNAL);
+}
+
+TEST_F(ApiHandlerTest, StatusNullReplyReturnsError)
+{
+    EXPECT_EQ(infmon_api_status(&ctx_, nullptr), INFMON_API_ERR_INTERNAL);
+}
+
+TEST_F(ApiHandlerTest, StatusNoWorkersReturnsError)
+{
+    /* ctx_ has worker_counters = NULL, worker_count = 0 by default. */
+    infmon_api_status_reply_t reply;
+    EXPECT_EQ(infmon_api_status(&ctx_, &reply), INFMON_API_ERR_INTERNAL);
+    EXPECT_EQ(reply.result, INFMON_API_ERR_INTERNAL);
+}
+
+TEST_F(ApiHandlerTest, StatusValidPointerZeroCountReturnsError)
+{
+    /* worker_counters is valid but worker_count is 0 — distinct failure mode. */
+    infmon_worker_counters_t wc;
+    infmon_worker_counters_init(&wc, 0);
+    ctx_.worker_counters = &wc;
+    ctx_.worker_count = 0;
+
+    infmon_api_status_reply_t reply;
+    EXPECT_EQ(infmon_api_status(&ctx_, &reply), INFMON_API_ERR_INTERNAL);
+    EXPECT_EQ(reply.result, INFMON_API_ERR_INTERNAL);
+}
+
+TEST_F(ApiHandlerTest, StatusSingleWorkerZeroCounters)
+{
+    infmon_worker_counters_t wc;
+    infmon_worker_counters_init(&wc, 42);
+
+    ctx_.worker_counters = &wc;
+    ctx_.worker_count = 1;
+
+    infmon_api_status_reply_t reply;
+    EXPECT_EQ(infmon_api_status(&ctx_, &reply), INFMON_API_OK);
+    ASSERT_EQ(reply.worker_count, 1u);
+    EXPECT_EQ(reply.workers[0].worker_id, 42u);
+    EXPECT_EQ(reply.workers[0].packets_seen, 0u);
+    EXPECT_EQ(reply.workers[0].erspan_unknown_proto, 0u);
+    EXPECT_EQ(reply.workers[0].erspan_truncated, 0u);
+    EXPECT_EQ(reply.workers[0].inner_parse_failed, 0u);
+    EXPECT_EQ(reply.workers[0].flow_rule_no_match, 0u);
+    EXPECT_EQ(reply.workers[0].counter_insert_retry_exhausted, 0u);
+    EXPECT_EQ(reply.workers[0].counter_table_full, 0u);
+}
+
+TEST_F(ApiHandlerTest, WorkerCountersInitSetsWorkerIdOnly)
+{
+    infmon_worker_counters_t wc;
+    /* Fill with garbage first. */
+    memset(&wc, 0xFF, sizeof(wc));
+    infmon_worker_counters_init(&wc, 7);
+
+    EXPECT_EQ(wc.worker_id, 7u);
+    EXPECT_EQ(wc.packets_seen, 0u);
+    EXPECT_EQ(wc.erspan_unknown_proto, 0u);
+    EXPECT_EQ(wc.erspan_truncated, 0u);
+    EXPECT_EQ(wc.inner_parse_failed, 0u);
+    EXPECT_EQ(wc.flow_rule_no_match, 0u);
+    EXPECT_EQ(wc.counter_insert_retry_exhausted, 0u);
+    EXPECT_EQ(wc.counter_table_full, 0u);
+}
+
+TEST_F(ApiHandlerTest, StatusExceedsMaxWorkersReturnsError)
+{
+    /* worker_count > INFMON_MAX_WORKERS should be rejected. */
+    infmon_worker_counters_t wc;
+    infmon_worker_counters_init(&wc, 0);
+    ctx_.worker_counters = &wc;
+    ctx_.worker_count = INFMON_MAX_WORKERS + 1;
+
+    infmon_api_status_reply_t reply;
+    EXPECT_EQ(infmon_api_status(&ctx_, &reply), INFMON_API_ERR_INTERNAL);
+    EXPECT_EQ(reply.result, INFMON_API_ERR_INTERNAL);
+}
+
+TEST_F(ApiHandlerTest, WorkerCountersInitNullNoOp)
+{
+    /* Should not crash. */
+    infmon_worker_counters_init(nullptr, 0);
+}

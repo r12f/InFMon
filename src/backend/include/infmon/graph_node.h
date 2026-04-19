@@ -16,6 +16,11 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+
+#ifndef __cplusplus
+#include <stdatomic.h>
+#endif
 
 #include "infmon/counter_table.h"
 #include "infmon/erspan_parser.h"
@@ -48,6 +53,75 @@ typedef enum {
 extern const char *infmon_node_error_names[];
 extern const char *infmon_node_error_strings[];
 
+/* ── Per-worker status counters (§11, exposed via infmon_status) ─── */
+
+/*
+ * Counter fields are written by VPP worker threads and read by the API
+ * thread, so they must be atomic to avoid data races (UB under C11/C++11).
+ * In C we use _Atomic; in C++ test builds we keep plain uint64_t because
+ * the tests are single-threaded (no real race).
+ */
+#ifdef __cplusplus
+#define INFMON_COUNTER_U64 uint64_t
+#else
+#define INFMON_COUNTER_U64 _Atomic uint64_t
+#endif
+
+/**
+ * Per-worker health/error counters.  One instance per VPP worker thread.
+ * In production these live in VPP's thread-local storage; for unit tests
+ * they are allocated as a flat array indexed by worker_id.
+ *
+ * All counters are monotonically increasing (never reset except on
+ * plugin teardown).  The infmon_status API message reads them and
+ * returns a snapshot.
+ */
+typedef struct {
+    uint32_t worker_id;
+    uint32_t _pad;                           /**< Explicit padding for 8-byte alignment. */
+    INFMON_COUNTER_U64 packets_seen;         /**< Total packets entering infmon-erspan-decap. */
+    INFMON_COUNTER_U64 erspan_unknown_proto; /**< Outer header parsed, ERSPAN type unrecognised. */
+    INFMON_COUNTER_U64 erspan_truncated;     /**< Buffer too short for declared ERSPAN header. */
+    INFMON_COUNTER_U64 inner_parse_failed;   /**< Inner L2/L3/L4 parse error after decap. */
+    INFMON_COUNTER_U64 flow_rule_no_match;   /**< Packet matched zero flow rules. */
+    INFMON_COUNTER_U64
+    counter_insert_retry_exhausted;        /**< CAS retries exceeded INFMON_INSERT_RETRY. */
+    INFMON_COUNTER_U64 counter_table_full; /**< Table reached max_keys_per_flow_rule. */
+} infmon_worker_counters_t;
+
+/*
+ * Cross-language size guard: _Atomic qualifiers must not change the struct
+ * layout between C and C++ translation units (see review discussion on
+ * potential ABI mismatch with exotic targets).
+ */
+#define INFMON_WORKER_COUNTERS_EXPECTED_SIZE 64 /* 4 + 4 + 7*8 = 64 */
+#ifdef __cplusplus
+static_assert(sizeof(infmon_worker_counters_t) == INFMON_WORKER_COUNTERS_EXPECTED_SIZE,
+              "infmon_worker_counters_t size mismatch between C and C++ — check _Atomic padding");
+#else
+_Static_assert(sizeof(infmon_worker_counters_t) == INFMON_WORKER_COUNTERS_EXPECTED_SIZE,
+               "infmon_worker_counters_t size mismatch — check _Atomic padding");
+#endif
+
+/**
+ * Initialise a worker-counters struct (zero all fields, set worker_id).
+ */
+static inline void infmon_worker_counters_init(infmon_worker_counters_t *wc, uint32_t worker_id)
+{
+    if (!wc)
+        return;
+    /*
+     * memset on _Atomic uint64_t is technically UB per C11 §7.17.2.1
+     * (atomic objects should be initialised via atomic_init()).  We rely on
+     * the pragmatic assumption that _Atomic uint64_t has the same
+     * representation as uint64_t (true on GCC/Clang x86-64/aarch64) and
+     * that init is always single-threaded (no concurrent access during
+     * worker bring-up).
+     */
+    memset(wc, 0, sizeof(*wc));
+    wc->worker_id = worker_id;
+}
+
 /* ── Next-index enum for each node ───────────────────────────────── */
 
 typedef enum {
@@ -79,8 +153,13 @@ typedef struct {
 } infmon_buffer_opaque_t;
 
 /* Compile-time check: must fit in vlib_buffer opaque2 (64 bytes) */
+#ifdef __cplusplus
+static_assert(sizeof(infmon_buffer_opaque_t) <= 64,
+              "infmon_buffer_opaque_t exceeds VLIB_BUFFER_OPAQUE2_SIZE (64 bytes)");
+#else
 _Static_assert(sizeof(infmon_buffer_opaque_t) <= 64,
                "infmon_buffer_opaque_t exceeds VLIB_BUFFER_OPAQUE2_SIZE (64 bytes)");
+#endif
 
 /* -- Atomic flow-rule reference (TOCTOU-safe) */
 
