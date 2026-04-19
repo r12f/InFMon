@@ -47,8 +47,7 @@ pub struct PollerHandle {
 impl PollerHandle {
     /// Signal the poller to stop and wait for it to finish.
     pub fn stop(mut self) {
-        self.stop
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
         if let Some(h) = self.join.take() {
             let _ = h.join();
         }
@@ -57,8 +56,7 @@ impl PollerHandle {
 
 impl Drop for PollerHandle {
     fn drop(&mut self) {
-        self.stop
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
         if let Some(h) = self.join.take() {
             let _ = h.join();
         }
@@ -251,7 +249,7 @@ fn run_loop(
 
                 // Fan out to exporters.
                 for (i, tx) in senders.iter().enumerate() {
-                    if let Err(_) = tx.try_send(snap.clone()) {
+                    if tx.try_send(snap.clone()).is_err() {
                         log::warn!(
                             "exporter {} channel full, dropping snapshot (tick {})",
                             i,
