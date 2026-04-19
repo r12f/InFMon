@@ -170,6 +170,7 @@ impl SnapshotSender {
     /// Try to send a snapshot. If the channel is full, the snapshot is
     /// dropped (drop_newest policy) and `Err(())` is returned so the
     /// caller can bump a metric.
+    #[allow(clippy::result_unit_err)]
     pub fn try_send(&self, snap: Arc<FlowStatsSnapshot>) -> Result<(), ()> {
         match self.inner.try_send(snap) {
             Ok(()) => Ok(()),
@@ -239,11 +240,7 @@ pub fn spawn_exporter_thread(
 
             rt.block_on(async {
                 while let Some(snap) = rx.recv() {
-                    let result = tokio::time::timeout(
-                        export_timeout,
-                        exporter.export(snap),
-                    )
-                    .await;
+                    let result = tokio::time::timeout(export_timeout, exporter.export(snap)).await;
 
                     match result {
                         Ok(Ok(())) => {}
@@ -255,11 +252,7 @@ pub fn spawn_exporter_thread(
                             );
                         }
                         Ok(Err(ExporterError::Transient(e))) => {
-                            log::warn!(
-                                "exporter '{}' transient error: {}",
-                                exporter.name(),
-                                e,
-                            );
+                            log::warn!("exporter '{}' transient error: {}", exporter.name(), e,);
                         }
                         Ok(Err(ExporterError::Permanent(e))) => {
                             log::error!(
@@ -309,7 +302,10 @@ mod tests {
         fn name(&self) -> &str {
             &self.instance_name
         }
-        fn export(&self, _snap: Arc<FlowStatsSnapshot>) -> BoxFuture<'_, Result<(), ExporterError>> {
+        fn export(
+            &self,
+            _snap: Arc<FlowStatsSnapshot>,
+        ) -> BoxFuture<'_, Result<(), ExporterError>> {
             self.count.fetch_add(1, Ordering::Relaxed);
             Box::pin(async { Ok(()) })
         }
