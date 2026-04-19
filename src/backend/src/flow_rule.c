@@ -250,7 +250,7 @@ infmon_flow_rule_result_t infmon_flow_rule_add(infmon_flow_rule_set_t *set,
     if (infmon_flow_rule_find(set, rule->name))
         return INFMON_FLOW_RULE_ERR_NAME_EXISTS;
 
-    if ((uint64_t)set->used_keys + rule->max_keys > set->max_keys_budget)
+    if ((uint64_t) set->used_keys + rule->max_keys > set->max_keys_budget)
         return INFMON_FLOW_RULE_ERR_BUDGET_EXCEEDED;
 
     infmon_flow_rule_t *dst = &set->rules[set->count];
