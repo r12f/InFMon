@@ -16,6 +16,6 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         return 0;
 
     infmon_parsed_packet_t out;
-    infmon_parse_erspan(data, (uint32_t)size, &out);
+    infmon_parse_erspan(data, (uint32_t) size, &out);
     return 0;
 }

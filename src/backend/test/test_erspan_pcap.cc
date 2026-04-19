@@ -2,12 +2,12 @@
 // Golden PCAP test vectors for the ERSPAN III parser.
 // See specs/003-erspan-and-packet-parsing.md §8.1
 
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <gtest/gtest.h>
 #include <string>
 #include <vector>
-#include <gtest/gtest.h>
 
 extern "C" {
 #include "infmon/erspan_parser.h"
@@ -21,7 +21,7 @@ struct pcap_file_hdr {
     uint32_t magic;
     uint16_t version_major;
     uint16_t version_minor;
-    int32_t  thiszone;
+    int32_t thiszone;
     uint32_t sigfigs;
     uint32_t snaplen;
     uint32_t linktype;
@@ -38,23 +38,40 @@ struct pcap_pkt_hdr {
 static bool read_first_packet(const std::string &path, std::vector<uint8_t> &out)
 {
     FILE *f = fopen(path.c_str(), "rb");
-    if (!f) return false;
+    if (!f)
+        return false;
 
     pcap_file_hdr fh;
-    if (fread(&fh, sizeof(fh), 1, f) != 1) { fclose(f); return false; }
+    if (fread(&fh, sizeof(fh), 1, f) != 1) {
+        fclose(f);
+        return false;
+    }
 
     bool swap = false;
-    if (fh.magic == 0xD4C3B2A1u) swap = true;
-    else if (fh.magic != 0xA1B2C3D4u) { fclose(f); return false; }
+    if (fh.magic == 0xD4C3B2A1u)
+        swap = true;
+    else if (fh.magic != 0xA1B2C3D4u) {
+        fclose(f);
+        return false;
+    }
 
     pcap_pkt_hdr ph;
-    if (fread(&ph, sizeof(ph), 1, f) != 1) { fclose(f); return false; }
+    if (fread(&ph, sizeof(ph), 1, f) != 1) {
+        fclose(f);
+        return false;
+    }
 
     uint32_t len = swap ? __builtin_bswap32(ph.incl_len) : ph.incl_len;
-    if (len > 65535) { fclose(f); return false; }
+    if (len > 65535) {
+        fclose(f);
+        return false;
+    }
 
     out.resize(len);
-    if (fread(out.data(), 1, len, f) != len) { fclose(f); return false; }
+    if (fread(out.data(), 1, len, f) != len) {
+        fclose(f);
+        return false;
+    }
     fclose(f);
     return true;
 }
@@ -62,14 +79,19 @@ static bool read_first_packet(const std::string &path, std::vector<uint8_t> &out
 // ---------------------------------------------------------------------------
 // Test fixture
 // ---------------------------------------------------------------------------
-class PcapTest : public ::testing::Test {
-protected:
+class PcapTest : public ::testing::Test
+{
+  protected:
     infmon_parsed_packet_t out;
     std::vector<uint8_t> pkt;
 
-    void SetUp() override { memset(&out, 0, sizeof(out)); }
+    void SetUp() override
+    {
+        memset(&out, 0, sizeof(out));
+    }
 
-    bool loadPcap(const std::string &name) {
+    bool loadPcap(const std::string &name)
+    {
         // Try relative to build dir then to repo root
         std::string paths[] = {
             std::string("../tests/pcaps/erspan/") + name,
@@ -77,7 +99,8 @@ protected:
             std::string(PCAP_DIR "/") + name,
         };
         for (auto &p : paths) {
-            if (read_first_packet(p, pkt)) return true;
+            if (read_first_packet(p, pkt))
+                return true;
         }
         return false;
     }
@@ -197,7 +220,7 @@ TEST_F(PcapTest, SessionIdNotExposed)
     // The struct only exposes: inner_ptr, inner_len, inner_truncated,
     // mirror_src_ip, valid_fields, ports, tcp fields, flow_key_partial,
     // inner_ip_proto, inner_af.
-    (void)out.inner_ptr;
-    (void)out.mirror_src_ip;
-    (void)out.valid_fields;
+    (void) out.inner_ptr;
+    (void) out.mirror_src_ip;
+    (void) out.valid_fields;
 }
