@@ -35,11 +35,15 @@ static std::string read_file(const char *path)
     return ss.str();
 }
 
-class ApiSchemaTest : public ::testing::Test {
+class ApiSchemaTest : public ::testing::Test
+{
   protected:
     std::string api;
 
-    void SetUp() override { api = read_file(API_FILE); }
+    void SetUp() override
+    {
+        api = read_file(API_FILE);
+    }
 
     /* Check that a pattern appears in the .api text. */
     void expect_contains(const std::string &pattern, const std::string &msg)
@@ -52,8 +56,7 @@ class ApiSchemaTest : public ::testing::Test {
     void expect_matches(const std::string &regex_str, const std::string &msg)
     {
         std::regex re(regex_str);
-        EXPECT_TRUE(std::regex_search(api, re))
-            << msg << "\n  Missing regex: " << regex_str;
+        EXPECT_TRUE(std::regex_search(api, re)) << msg << "\n  Missing regex: " << regex_str;
     }
 };
 
@@ -227,7 +230,7 @@ TEST_F(ApiSchemaTest, RepliesHaveRetval)
 TEST_F(ApiSchemaTest, AllSixMessagesPresent)
 {
     const std::vector<std::string> required_messages = {
-        "infmon_flow_rule_add",      "infmon_flow_rule_del",  "infmon_flow_rule_list",
+        "infmon_flow_rule_add", "infmon_flow_rule_del",      "infmon_flow_rule_list",
         "infmon_flow_rule_get", "infmon_snapshot_and_clear", "infmon_status",
     };
 
