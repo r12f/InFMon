@@ -531,7 +531,10 @@ mod tests {
     fn snapshot_sender_disconnected_when_receiver_dropped() {
         let (tx, rx) = snapshot_channel(2);
         drop(rx);
-        assert!(matches!(tx.try_send(test_snap(1)), Err(TrySendError::Disconnected)));
+        assert!(matches!(
+            tx.try_send(test_snap(1)),
+            Err(TrySendError::Disconnected)
+        ));
     }
 
     #[test]
