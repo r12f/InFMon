@@ -63,6 +63,20 @@ target_link_libraries(test_counter_table PRIVATE infmon_counter_table GTest::gte
 target_include_directories(test_counter_table PRIVATE include)
 add_test(NAME counter_table COMMAND test_counter_table)
 
+# --- Graph node library ---
+add_library(infmon_graph_node STATIC
+    src/graph_node.c
+)
+target_include_directories(infmon_graph_node PUBLIC include)
+target_link_libraries(infmon_graph_node PUBLIC infmon_parser infmon_flow_rule infmon_counter_table)
+
+add_executable(test_graph_node
+    test/test_graph_node.cc
+)
+target_link_libraries(test_graph_node PRIVATE infmon_graph_node GTest::gtest GTest::gtest_main)
+target_include_directories(test_graph_node PRIVATE include)
+add_test(NAME graph_node COMMAND test_graph_node)
+
 if(ENABLE_FUZZER)
     add_executable(fuzz_erspan_parser
         test/fuzz_erspan_parser.cc
