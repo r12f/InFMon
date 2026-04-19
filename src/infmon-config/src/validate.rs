@@ -1,12 +1,18 @@
 use std::collections::HashSet;
 
-use crate::model::{Config, Field, FlowRule};
+use crate::model::{Config, ExporterEntry, Field, FlowRule, FrontendConfig};
 use thiserror::Error;
 
 pub const MAX_KEY_WIDTH: u32 = 64;
 pub const MAX_KEYS_BUDGET: u32 = 16 * 1024 * 1024;
 pub const NAME_MAX_LEN: usize = 31;
 pub const NAME_MIN_LEN: usize = 2;
+
+/// Known exporter type keys. Unknown types are a config error per spec §5.
+pub const KNOWN_EXPORTER_TYPES: &[&str] = &["otlp"];
+
+/// Valid overflow policies. v1 only supports `drop_newest`.
+pub const VALID_OVERFLOW_POLICIES: &[&str] = &["drop_newest"];
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ValidationError {
@@ -28,6 +34,34 @@ pub enum ValidationError {
     TooManyRules { count: usize, max: usize },
     #[error("flow-rule name '{name}' is invalid: must match ^[a-z0-9][a-z0-9_-]{{1,30}}$")]
     InvalidName { name: String },
+    #[error("frontend: polling_interval_ms must be > 0")]
+    ZeroPollingInterval,
+    #[error("frontend: shutdown_grace_ms must be > 0")]
+    ZeroShutdownGrace,
+    #[error("frontend: invalid startup_timeout format: {value:?}")]
+    InvalidStartupTimeout { value: String },
+    #[error("exporter '{name}': type is empty")]
+    EmptyExporterType { name: String },
+    #[error("exporter '{name}': unknown type '{kind}' (known: {known})")]
+    UnknownExporterType {
+        name: String,
+        kind: String,
+        known: String,
+    },
+    #[error("exporter at index {index}: name is empty")]
+    EmptyExporterName { index: usize },
+    #[error("duplicate exporter name: {0}")]
+    DuplicateExporterName(String),
+    #[error("exporter '{name}': queue_depth must be >= 1")]
+    ZeroQueueDepth { name: String },
+    #[error("exporter '{name}': invalid export_timeout format: {value:?}")]
+    InvalidExportTimeout { name: String, value: String },
+    #[error("exporter '{name}': unknown on_overflow policy '{policy}' (valid: {valid})")]
+    InvalidOverflowPolicy {
+        name: String,
+        policy: String,
+        valid: String,
+    },
 }
 
 /// Validate a flow-rule name.
@@ -51,6 +85,27 @@ fn is_valid_name(name: &str) -> bool {
     bytes[1..]
         .iter()
         .all(|&b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
+
+/// Parse a duration string like `"800ms"`, `"5s"`, `"2m"`, `"1h"`.
+///
+/// Supported suffixes: `ms`, `s`, `m`, `h`. Bare integers are treated as
+/// milliseconds. Returns `None` for unrecognised formats.
+fn parse_duration_str(s: &str) -> Option<u64> {
+    let s = s.trim();
+    if let Some(ms) = s.strip_suffix("ms") {
+        ms.trim().parse::<u64>().ok()
+    } else if let Some(h) = s.strip_suffix('h') {
+        h.trim().parse::<u64>().ok().map(|v| v * 3_600_000)
+    } else if let Some(m) = s.strip_suffix('m') {
+        m.trim().parse::<u64>().ok().map(|v| v * 60_000)
+    } else if let Some(secs) = s.strip_suffix('s') {
+        secs.trim().parse::<u64>().ok().map(|v| v * 1000)
+    } else if s.chars().all(|c| c.is_ascii_digit()) && !s.is_empty() {
+        s.parse::<u64>().ok()
+    } else {
+        None
+    }
 }
 
 /// Validate a single flow-rule in isolation
@@ -95,8 +150,71 @@ pub fn validate_rule(rule: &FlowRule) -> Result<(), ValidationError> {
     Ok(())
 }
 
-/// Validate the entire config (all rules, cross-rule constraints)
+/// Validate the frontend configuration block.
+pub fn validate_frontend(cfg: &FrontendConfig) -> Result<(), ValidationError> {
+    if cfg.polling_interval_ms == 0 {
+        return Err(ValidationError::ZeroPollingInterval);
+    }
+    if cfg.shutdown_grace_ms == 0 {
+        return Err(ValidationError::ZeroShutdownGrace);
+    }
+    if parse_duration_str(&cfg.startup_timeout).is_none() {
+        return Err(ValidationError::InvalidStartupTimeout {
+            value: cfg.startup_timeout.clone(),
+        });
+    }
+    Ok(())
+}
+
+/// Validate a single exporter entry.
+///
+/// `index` is used for error messages when the name is empty.
+pub fn validate_exporter(entry: &ExporterEntry, index: usize) -> Result<(), ValidationError> {
+    if entry.name.is_empty() {
+        return Err(ValidationError::EmptyExporterName { index });
+    }
+    if entry.kind.is_empty() {
+        return Err(ValidationError::EmptyExporterType {
+            name: entry.name.clone(),
+        });
+    }
+    if !KNOWN_EXPORTER_TYPES.contains(&entry.kind.as_str()) {
+        return Err(ValidationError::UnknownExporterType {
+            name: entry.name.clone(),
+            kind: entry.kind.clone(),
+            known: KNOWN_EXPORTER_TYPES.join(", "),
+        });
+    }
+    if entry.queue_depth == 0 {
+        return Err(ValidationError::ZeroQueueDepth {
+            name: entry.name.clone(),
+        });
+    }
+    if parse_duration_str(&entry.export_timeout).is_none() {
+        return Err(ValidationError::InvalidExportTimeout {
+            name: entry.name.clone(),
+            value: entry.export_timeout.clone(),
+        });
+    }
+    if !VALID_OVERFLOW_POLICIES.contains(&entry.on_overflow.as_str()) {
+        return Err(ValidationError::InvalidOverflowPolicy {
+            name: entry.name.clone(),
+            policy: entry.on_overflow.clone(),
+            valid: VALID_OVERFLOW_POLICIES.join(", "),
+        });
+    }
+    Ok(())
+}
+
+/// Validate the entire config (all rules, cross-rule constraints,
+/// frontend config, and exporter entries).
 pub fn validate_config(config: &Config) -> Result<(), ValidationError> {
+    // Validate frontend section if present
+    if let Some(ref frontend) = config.frontend {
+        validate_frontend(frontend)?;
+    }
+
+    // Validate flow rules
     let mut names = HashSet::new();
     for rule in &config.flow_rules {
         if !names.insert(&rule.name) {
@@ -114,5 +232,17 @@ pub fn validate_config(config: &Config) -> Result<(), ValidationError> {
     if total > MAX_KEYS_BUDGET as u64 {
         return Err(ValidationError::BudgetExceeded { total });
     }
+
+    // Validate exporters section if present
+    if let Some(ref exporters) = config.exporters {
+        let mut exporter_names = HashSet::new();
+        for (i, entry) in exporters.iter().enumerate() {
+            validate_exporter(entry, i)?;
+            if !exporter_names.insert(&entry.name) {
+                return Err(ValidationError::DuplicateExporterName(entry.name.clone()));
+            }
+        }
+    }
+
     Ok(())
 }
