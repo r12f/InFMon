@@ -6,29 +6,33 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 concurrency:
-  group: cpp-test-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   cpp-test:
     name: cpp-test
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     # VPP-in-CI image; see specs/001-ci-and-precommit.md §5.
-    # NOTE: pin by digest once first green run is recorded.
+    # Consumed from the ghcr.io mirror to avoid Docker Hub rate-limits.
     container:
-      image: ligato/vpp-base:24.02
+      image: ghcr.io/r12f/infmon-vpp-dev:24.10
       options: --user root
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install build deps
+      - name: Verify build tools present in image
         run: |
           set -eux
-          apt-get update
-          apt-get install -y --no-install-recommends \
-              cmake ninja-build g++ clang libgtest-dev ccache pkg-config
+          for cmd in cmake ninja g++ clang ccache pkg-config; do
+            command -v "$cmd" || { echo "::error::$cmd not found in container image"; exit 1; }
+          done
+          dpkg -s libgtest-dev >/dev/null 2>&1 || { echo "::error::libgtest-dev not installed in container image"; exit 1; }
 
       - name: Verify VPP dev headers
         run: |
