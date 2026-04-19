@@ -78,14 +78,15 @@ extern const char *infmon_node_error_strings[];
  */
 typedef struct {
     uint32_t worker_id;
-    uint32_t _pad;                                     /**< Explicit padding for 8-byte alignment. */
-    INFMON_COUNTER_U64 packets_seen;                   /**< Total packets entering infmon-erspan-decap. */
-    INFMON_COUNTER_U64 erspan_unknown_proto;           /**< Outer header parsed, ERSPAN type unrecognised. */
-    INFMON_COUNTER_U64 erspan_truncated;               /**< Buffer too short for declared ERSPAN header. */
-    INFMON_COUNTER_U64 inner_parse_failed;             /**< Inner L2/L3/L4 parse error after decap. */
-    INFMON_COUNTER_U64 flow_rule_no_match;             /**< Packet matched zero flow rules. */
-    INFMON_COUNTER_U64 counter_insert_retry_exhausted; /**< CAS retries exceeded INFMON_INSERT_RETRY. */
-    INFMON_COUNTER_U64 counter_table_full;             /**< Table reached max_keys_per_flow_rule. */
+    uint32_t _pad;                           /**< Explicit padding for 8-byte alignment. */
+    INFMON_COUNTER_U64 packets_seen;         /**< Total packets entering infmon-erspan-decap. */
+    INFMON_COUNTER_U64 erspan_unknown_proto; /**< Outer header parsed, ERSPAN type unrecognised. */
+    INFMON_COUNTER_U64 erspan_truncated;     /**< Buffer too short for declared ERSPAN header. */
+    INFMON_COUNTER_U64 inner_parse_failed;   /**< Inner L2/L3/L4 parse error after decap. */
+    INFMON_COUNTER_U64 flow_rule_no_match;   /**< Packet matched zero flow rules. */
+    INFMON_COUNTER_U64
+        counter_insert_retry_exhausted;    /**< CAS retries exceeded INFMON_INSERT_RETRY. */
+    INFMON_COUNTER_U64 counter_table_full; /**< Table reached max_keys_per_flow_rule. */
 } infmon_worker_counters_t;
 
 /**
