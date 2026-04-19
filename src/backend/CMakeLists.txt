@@ -77,6 +77,20 @@ target_link_libraries(test_snapshot PRIVATE infmon_snapshot infmon_counter_table
 target_include_directories(test_snapshot PRIVATE include)
 add_test(NAME snapshot COMMAND test_snapshot)
 
+# --- Stats-segment exposure library ---
+add_library(infmon_stats_segment STATIC
+    src/stats_segment.c
+)
+target_include_directories(infmon_stats_segment PUBLIC include)
+target_link_libraries(infmon_stats_segment PUBLIC infmon_counter_table)
+
+add_executable(test_stats_segment
+    test/test_stats_segment.cc
+)
+target_link_libraries(test_stats_segment PRIVATE infmon_stats_segment infmon_counter_table GTest::gtest GTest::gtest_main)
+target_include_directories(test_stats_segment PRIVATE include)
+add_test(NAME stats_segment COMMAND test_stats_segment)
+
 if(ENABLE_FUZZER)
     add_executable(fuzz_erspan_parser
         test/fuzz_erspan_parser.cc
