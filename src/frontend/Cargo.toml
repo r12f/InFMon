@@ -5,11 +5,19 @@ edition = "2021"
 description = "InFMon frontend — poller and exporter dispatch daemon"
 license = "Apache-2.0"
 
+[[bin]]
+name = "infmon-frontend"
+path = "src/main.rs"
+
 [dependencies]
+env_logger = "0.11"
+infmon-config = { path = "../infmon-config" }
 infmon-ipc = { path = "../infmon-ipc", default-features = false }
 inventory = "0.3"
 libc = "0.2"
 log = "0.4"
+serde_yaml = "0.9"
+signal-hook = "0.3"
 tokio = { version = "1", features = ["rt", "time"] }
 
 [dev-dependencies]

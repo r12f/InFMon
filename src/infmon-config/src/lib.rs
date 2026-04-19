@@ -4,7 +4,7 @@ pub mod parse;
 pub mod validate;
 
 pub use crud::{CrudError, FlowRuleSet, FLOW_RULE_SET_MAX};
-pub use model::{Config, EvictionPolicy, Field, FlowRule};
+pub use model::{Config, EvictionPolicy, ExporterEntry, Field, FlowRule, FrontendConfig};
 pub use parse::{load_config, parse_yaml, parse_yaml_file, ConfigError, ParseError};
 pub use validate::{
     validate_config, validate_rule, ValidationError, MAX_KEYS_BUDGET, MAX_KEY_WIDTH,
@@ -60,10 +60,12 @@ flow-rules:
     #[test]
     fn reject_duplicate_names() {
         let config = Config {
+            frontend: None,
             flow_rules: vec![
                 make_rule("ab", vec![Field::SrcIp], 10),
                 make_rule("ab", vec![Field::DstIp], 10),
             ],
+            exporters: None,
         };
         assert_eq!(
             validate_config(&config),
@@ -122,10 +124,12 @@ flow-rules:
     #[test]
     fn reject_total_budget_exceeded() {
         let config = Config {
+            frontend: None,
             flow_rules: vec![
                 make_rule("rule-a", vec![Field::SrcIp], MAX_KEYS_BUDGET),
                 make_rule("rule-b", vec![Field::DstIp], 1),
             ],
+            exporters: None,
         };
         assert_eq!(
             validate_config(&config),
