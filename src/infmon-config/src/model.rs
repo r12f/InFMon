@@ -25,12 +25,24 @@ pub struct FrontendConfig {
     pub shutdown_grace_ms: u64,
 }
 
-fn default_polling_interval_ms() -> u64 { 1000 }
-fn default_backend_socket() -> String { "/run/infmon/backend.sock".into() }
-fn default_control_socket() -> String { "/run/infmon/frontend.sock".into() }
-fn default_vpp_stats_socket() -> String { "/run/vpp/stats.sock".into() }
-fn default_startup_timeout() -> String { "5s".into() }
-fn default_shutdown_grace_ms() -> u64 { 2000 }
+fn default_polling_interval_ms() -> u64 {
+    1000
+}
+fn default_backend_socket() -> String {
+    "/run/infmon/backend.sock".into()
+}
+fn default_control_socket() -> String {
+    "/run/infmon/frontend.sock".into()
+}
+fn default_vpp_stats_socket() -> String {
+    "/run/vpp/stats.sock".into()
+}
+fn default_startup_timeout() -> String {
+    "5s".into()
+}
+fn default_shutdown_grace_ms() -> u64 {
+    2000
+}
 
 impl Default for FrontendConfig {
     fn default() -> Self {
@@ -62,9 +74,15 @@ pub struct ExporterEntry {
     pub extra: HashMap<String, String>,
 }
 
-fn default_queue_depth() -> usize { 2 }
-fn default_export_timeout() -> String { "800ms".into() }
-fn default_on_overflow() -> String { "drop_newest".into() }
+fn default_queue_depth() -> usize {
+    2
+}
+fn default_export_timeout() -> String {
+    "800ms".into()
+}
+fn default_on_overflow() -> String {
+    "drop_newest".into()
+}
 
 /// Flow field identifiers (v1 field set)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

@@ -8,8 +8,8 @@ use std::time::Duration;
 use infmon_ipc::stats_client::InFMonStatsClient;
 
 use crate::exporter::{
-    self, ExporterConfig, ExporterHandle, SnapshotSender, snapshot_channel,
-    find_factory, validate_registrations,
+    self, find_factory, snapshot_channel, validate_registrations, ExporterConfig, ExporterHandle,
+    SnapshotSender,
 };
 use crate::poller::{self, PollerConfig, PollerHandle};
 
@@ -65,8 +65,9 @@ impl Frontend {
         validate_registrations();
 
         // Parse config
-        let config_text = std::fs::read_to_string(config_path)
-            .map_err(|e| LifecycleError::ConfigError(format!("cannot read {}: {e}", config_path.display())))?;
+        let config_text = std::fs::read_to_string(config_path).map_err(|e| {
+            LifecycleError::ConfigError(format!("cannot read {}: {e}", config_path.display()))
+        })?;
         let config: infmon_config::model::Config = serde_yaml::from_str(&config_text)
             .map_err(|e| LifecycleError::ConfigError(format!("YAML parse error: {e}")))?;
 
@@ -79,7 +80,8 @@ impl Frontend {
 
         // Fail-fast: check backend reachability via stats socket
         let stats_socket = PathBuf::from(&frontend_cfg.vpp_stats_socket);
-        let startup_timeout = parse_duration(&frontend_cfg.startup_timeout).unwrap_or(Duration::from_secs(5));
+        let startup_timeout =
+            parse_duration(&frontend_cfg.startup_timeout).unwrap_or(Duration::from_secs(5));
 
         // Try to connect to stats socket within startup_timeout
         let start_time = std::time::Instant::now();
@@ -87,7 +89,10 @@ impl Frontend {
         while start_time.elapsed() < startup_timeout {
             match InFMonStatsClient::open(&stats_socket) {
                 Ok(_client) => {
-                    log::info!("backend stats segment reachable at {}", stats_socket.display());
+                    log::info!(
+                        "backend stats segment reachable at {}",
+                        stats_socket.display()
+                    );
                     connected = true;
                     break;
                 }
@@ -98,9 +103,11 @@ impl Frontend {
             }
         }
         if !connected {
-            return Err(LifecycleError::BackendUnreachable(
-                format!("stats segment at {} not reachable within {:?}", stats_socket.display(), startup_timeout),
-            ));
+            return Err(LifecycleError::BackendUnreachable(format!(
+                "stats segment at {} not reachable within {:?}",
+                stats_socket.display(),
+                startup_timeout
+            )));
         }
 
         // Build exporters
@@ -116,10 +123,15 @@ impl Frontend {
                 .map_err(|e| LifecycleError::ExporterInit(format!("{}: {e}", entry.name)))?;
 
             let (tx, rx) = snapshot_channel(entry.queue_depth);
-            let export_timeout = parse_duration(&entry.export_timeout).unwrap_or(Duration::from_millis(800));
+            let export_timeout =
+                parse_duration(&entry.export_timeout).unwrap_or(Duration::from_millis(800));
 
-            let handle = exporter::spawn_exporter_thread(Arc::from(exporter_instance), rx, export_timeout)
-                .map_err(|e| LifecycleError::ExporterInit(format!("spawn {}: {e}", entry.name)))?;
+            let handle = exporter::spawn_exporter_thread(
+                Arc::from(exporter_instance),
+                rx,
+                export_timeout,
+            )
+            .map_err(|e| LifecycleError::ExporterInit(format!("spawn {}: {e}", entry.name)))?;
 
             exporter_handles.push(handle);
             exporter_senders.push(tx);
@@ -131,7 +143,10 @@ impl Frontend {
             interval: Duration::from_millis(frontend_cfg.polling_interval_ms),
         };
 
-        let raw_senders: Vec<_> = exporter_senders.iter().map(|s| s.as_raw_sender().clone()).collect();
+        let raw_senders: Vec<_> = exporter_senders
+            .iter()
+            .map(|s| s.as_raw_sender().clone())
+            .collect();
         let poller_handle = poller::spawn(poller_config, raw_senders);
 
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -148,7 +163,10 @@ impl Frontend {
     /// Reload configuration (triggered by SIGHUP).
     /// All-or-nothing with rollback on failure.
     pub fn reload(&mut self) -> Result<(), LifecycleError> {
-        log::info!("reloading configuration from {}", self.config_path.display());
+        log::info!(
+            "reloading configuration from {}",
+            self.config_path.display()
+        );
 
         // Re-read and parse config
         let config_text = std::fs::read_to_string(&self.config_path)
