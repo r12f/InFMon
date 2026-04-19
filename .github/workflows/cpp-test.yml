@@ -17,28 +17,33 @@ jobs:
   cpp-test:
     name: cpp-test
     runs-on: ubuntu-24.04
-    # VPP-in-CI image; see specs/001-ci-and-precommit.md §5.
-    # Consumed from the ghcr.io mirror to avoid Docker Hub rate-limits.
-    container:
-      image: ligato/vpp-base:24.06
-      options: --user root
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Add fd.io apt repo
+        run: |
+          set -eux
+          curl -fsSL https://packagecloud.io/fdio/release/gpgkey \
+            | sudo gpg --dearmor -o /usr/share/keyrings/fdio-archive-keyring.gpg
+          expected="59A8E0DB0B611CA471C9FBDE9E9FE7A46C37F7CD"
+          actual=$(gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/fdio-archive-keyring.gpg \
+            --list-keys --with-colons 2>/dev/null \
+            | awk -F: '/^fpr/{print $10; exit}')
+          [[ "$actual" == "$expected" ]] || { echo "GPG key mismatch: got $actual"; exit 1; }
+          echo "deb [signed-by=/usr/share/keyrings/fdio-archive-keyring.gpg] \
+            https://packagecloud.io/fdio/release/ubuntu \
+            $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+            | sudo tee /etc/apt/sources.list.d/fdio.list
+
       - name: Install build deps
         run: |
           set -eux
-          apt-get update
-          apt-get install -y --no-install-recommends \
-              cmake ninja-build g++ clang libgtest-dev ccache pkg-config
-
-      - name: Verify VPP dev headers
-        run: |
-          if [ ! -d /usr/include/vpp ]; then
-            echo "::error::VPP dev headers missing under /usr/include/vpp."
-            exit 1
-          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+              cmake ninja-build g++ clang libgtest-dev ccache pkg-config \
+              cppcheck vpp-dev=24.10* libvppinfra-dev=24.10*
 
       - name: ccache cache
         uses: actions/cache@v4
@@ -72,8 +77,6 @@ jobs:
 
       - name: cppcheck (full tree)
         if: steps.detect.outputs.have_backend == 'true'
-        # Let cppcheck auto-detect C vs C++ per file extension; pinning
-        # --std=c11 misparses any .cpp/.cc sources (gtest harnesses).
         run: |
           cppcheck \
               --enable=warning,performance,portability \

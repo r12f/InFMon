@@ -49,12 +49,33 @@ jobs:
   cpp-build:
     name: build-cpp
     runs-on: ubuntu-24.04
-    container:
-      image: ligato/vpp-base:24.06
-      options: --user root
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Add fd.io apt repo
+        run: |
+          set -eux
+          curl -fsSL https://packagecloud.io/fdio/release/gpgkey \
+            | sudo gpg --dearmor -o /usr/share/keyrings/fdio-archive-keyring.gpg
+          expected="59A8E0DB0B611CA471C9FBDE9E9FE7A46C37F7CD"
+          actual=$(gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/fdio-archive-keyring.gpg \
+            --list-keys --with-colons 2>/dev/null \
+            | awk -F: '/^fpr/{print $10; exit}')
+          [[ "$actual" == "$expected" ]] || { echo "GPG key mismatch: got $actual"; exit 1; }
+          echo "deb [signed-by=/usr/share/keyrings/fdio-archive-keyring.gpg] \
+            https://packagecloud.io/fdio/release/ubuntu \
+            $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+            | sudo tee /etc/apt/sources.list.d/fdio.list
+
+      - name: Install build deps
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+              cmake ninja-build g++ ccache pkg-config \
+              vpp-dev=24.10* libvppinfra-dev=24.10*
 
       - name: Detect backend source
         id: detect_cpp
@@ -69,10 +90,8 @@ jobs:
       - name: Configure + build
         if: steps.detect_cpp.outputs.have_backend == 'true'
         run: |
-          cmake_launchers=""
-          if command -v ccache >/dev/null 2>&1; then
-            cmake_launchers="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
-          fi
           cmake -S src/backend -B build -G Ninja \
-              -DCMAKE_BUILD_TYPE=Release $cmake_launchers
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           cmake --build build
