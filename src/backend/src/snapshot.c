@@ -161,7 +161,7 @@ uint32_t infmon_retire_poll(infmon_snapshot_mgr_t *mgr)
         if (!infmon_all_workers_past(mgr, rt->swap_epoch))
             continue;
 
-        if (now - rt->swap_timestamp_ns < mgr->grace_ns)
+        if (now <= rt->swap_timestamp_ns || (now - rt->swap_timestamp_ns) < mgr->grace_ns)
             continue;
 
         /* Safe to free */

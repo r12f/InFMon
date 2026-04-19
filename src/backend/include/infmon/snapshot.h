@@ -46,11 +46,11 @@ typedef struct {
 /* ── Retired table descriptor ────────────────────────────────────── */
 
 typedef struct {
-    infmon_counter_table_t *table; /** The retired table. */
-    uint64_t swap_epoch;           /** Global epoch at time of swap. */
-    uint64_t swap_timestamp_ns;    /** Wall-clock timestamp of swap. */
-    uint32_t flow_rule_index;      /** Which flow_rule this belonged to. */
-    bool pending;                  /** true if still awaiting retirement. */
+    infmon_counter_table_t *table; /**< The retired table. */
+    uint64_t swap_epoch;           /**< Global epoch at time of swap. */
+    uint64_t swap_timestamp_ns;    /**< Wall-clock timestamp of swap. */
+    uint32_t flow_rule_index;      /**< Which flow_rule this belonged to. */
+    bool pending;                  /**< true if still awaiting retirement. */
 } infmon_retired_table_t;
 
 /* ── Snapshot manager ────────────────────────────────────────────── */
@@ -65,17 +65,20 @@ typedef struct {
  *   - Workers call infmon_worker_epoch_bump() from the data path (no lock).
  *   - The control thread calls infmon_snapshot_and_clear() and
  *     infmon_retire_poll() (serialised — only one control thread).
+ *
+ * @note This struct is >3KB due to cache-line-padded worker epochs.
+ *       Do not stack-allocate; use heap allocation or static/BSS placement.
  */
 typedef struct {
     infmon_worker_epoch_t worker_epochs[INFMON_MAX_WORKERS];
     uint32_t num_workers;
 
-    uint64_t global_epoch; /** Bumped on each swap. */
+    uint64_t global_epoch; /**< Bumped on each swap. */
 
     infmon_retired_table_t retired[INFMON_MAX_RETIRED];
-    uint32_t retired_count; /** Number of pending entries. */
+    uint32_t retired_count; /**< Number of pending entries. */
 
-    uint64_t grace_ns; /** Configurable grace window. */
+    uint64_t grace_ns; /**< Configurable grace window. */
 
     /* Callback for getting wall-clock nanoseconds (injectable for testing). */
     uint64_t (*clock_ns)(void);
@@ -85,16 +88,16 @@ typedef struct {
 
 typedef enum {
     INFMON_SNAP_OK = 0,
-    INFMON_SNAP_ALLOC_FAILED,     /** Could not allocate replacement table. */
-    INFMON_SNAP_TOO_MANY_RETIRED, /** Retired ring is full. */
-    INFMON_SNAP_INVALID_INDEX,    /** flow_rule_index out of range. */
-    INFMON_SNAP_NULL_TABLE,       /** No table installed at that index. */
+    INFMON_SNAP_ALLOC_FAILED,     /**< Could not allocate replacement table. */
+    INFMON_SNAP_TOO_MANY_RETIRED, /**< Retired ring is full. */
+    INFMON_SNAP_INVALID_INDEX,    /**< flow_rule_index out of range. */
+    INFMON_SNAP_NULL_TABLE,       /**< No table installed at that index. */
 } infmon_snap_result_t;
 
 typedef struct {
     infmon_snap_result_t result;
-    infmon_counter_table_t *retired_table; /** The old table (generation G). */
-    uint64_t retired_generation;           /** Generation of the retired table. */
+    infmon_counter_table_t *retired_table; /**< The old table (generation G). */
+    uint64_t retired_generation;           /**< Generation of the retired table. */
 } infmon_snap_reply_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
