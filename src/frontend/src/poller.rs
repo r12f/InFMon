@@ -430,6 +430,8 @@ mod tests {
 
     #[test]
     fn poller_handle_drop_stops_thread() {
+        // spawn() defers the actual socket connection to the poller loop,
+        // so a nonexistent path won't panic here — it just retries internally.
         let config = PollerConfig {
             stats_socket: PathBuf::from("/tmp/nonexistent-infmon-poller-drop-test.sock"),
             interval: Duration::from_millis(100),
@@ -442,7 +444,7 @@ mod tests {
 
     #[test]
     fn poller_with_no_senders() {
-        // Poller should work even with empty sender list
+        // spawn() defers connection — nonexistent path retries internally without panic.
         let config = PollerConfig {
             stats_socket: PathBuf::from("/tmp/nonexistent-infmon-no-senders-test.sock"),
             interval: Duration::from_millis(100),
@@ -454,6 +456,7 @@ mod tests {
 
     #[test]
     fn poller_with_multiple_senders() {
+        // spawn() defers connection — nonexistent path retries internally without panic.
         let config = PollerConfig {
             stats_socket: PathBuf::from("/tmp/nonexistent-infmon-multi-sender-test.sock"),
             interval: Duration::from_millis(100),
@@ -480,6 +483,7 @@ mod tests {
                 table_full: 0,
             }],
         };
+        // decode_snapshot(raw, tick_id, interval_ns, monotonic_ns, wall_clock_ns)
         let snap = decode_snapshot(raw, 3, 1000, 3000, 2000);
         assert_eq!(snap.tick_id, 3);
         assert_eq!(snap.interval_ns, 1000); // 3000 - 2000
@@ -544,15 +548,14 @@ mod tests {
 
     #[test]
     fn sleep_interruptible_stops_early() {
-        let stop = std::sync::atomic::AtomicBool::new(false);
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let start = std::time::Instant::now();
 
         // Set stop after 50ms from another thread
-        let stop_ref = &stop as *const _ as usize;
+        let stop2 = Arc::clone(&stop);
         let t = thread::spawn(move || {
             thread::sleep(Duration::from_millis(50));
-            let stop = unsafe { &*(stop_ref as *const std::sync::atomic::AtomicBool) };
-            stop.store(true, std::sync::atomic::Ordering::Release);
+            stop2.store(true, std::sync::atomic::Ordering::Release);
         });
 
         sleep_interruptible(Duration::from_secs(10), &stop);

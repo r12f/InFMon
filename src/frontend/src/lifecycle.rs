@@ -503,12 +503,8 @@ flow-rules: []
     }
 
     #[test]
-    fn reload_fails_on_missing_config_file() {
-        // We can't easily construct a Frontend without a real backend,
-        // but we can test that reload validates the config path.
-        // Create a temporary config, start will fail on backend, but
-        // we test parse_duration independently instead.
-        // This test verifies the error variant format.
+    fn reload_failed_error_contains_reason() {
+        // Verifies that ReloadFailed's Display output includes the underlying message.
         let err = LifecycleError::ReloadFailed("cannot read config: No such file".into());
         assert!(format!("{err}").contains("cannot read config"));
     }
