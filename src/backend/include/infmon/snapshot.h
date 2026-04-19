@@ -9,10 +9,10 @@
 #ifndef INFMON_SNAPSHOT_H
 #define INFMON_SNAPSHOT_H
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <assert.h>
 
 #include "infmon/counter_table.h"
 

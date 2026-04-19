@@ -6,6 +6,7 @@
  */
 
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <gtest/gtest.h>
 #include <thread>
@@ -311,6 +312,7 @@ TEST_F(SnapshotTest, ConcurrentEpochBumps)
         for (attempt = 0; attempt < 100; attempt++) {
             if (infmon_retire_poll(&mgr) > 0)
                 break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         ASSERT_LT(attempt, 100) << "retire_poll never freed the table";
     }
