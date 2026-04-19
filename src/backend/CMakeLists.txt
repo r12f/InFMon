@@ -16,6 +16,7 @@ target_include_directories(infmon_parser PUBLIC include)
 
 # --- Tests ---
 find_package(GTest REQUIRED)
+find_package(Threads REQUIRED)
 enable_testing()
 
 add_executable(test_erspan_parser
@@ -73,7 +74,7 @@ target_link_libraries(infmon_snapshot PUBLIC infmon_counter_table)
 add_executable(test_snapshot
     test/test_snapshot.cc
 )
-target_link_libraries(test_snapshot PRIVATE infmon_snapshot infmon_counter_table GTest::gtest GTest::gtest_main pthread)
+target_link_libraries(test_snapshot PRIVATE infmon_snapshot infmon_counter_table GTest::gtest GTest::gtest_main Threads::Threads)
 target_include_directories(test_snapshot PRIVATE include)
 add_test(NAME snapshot COMMAND test_snapshot)
 
@@ -155,7 +156,6 @@ target_compile_definitions(test_api_schema PRIVATE
     API_FILE=\"${CMAKE_CURRENT_SOURCE_DIR}/api/infmon.api\")
 add_test(NAME api_schema COMMAND test_api_schema)
 
-# --- Integration / round-trip tests ---
 add_executable(test_integration
     test/test_integration.cc
 )
@@ -167,7 +167,7 @@ target_link_libraries(test_integration PRIVATE
     infmon_snapshot
     infmon_stats_segment
     GTest::gtest GTest::gtest_main
-    pthread
+    Threads::Threads
 )
 target_include_directories(test_integration PRIVATE include)
 add_test(NAME integration COMMAND test_integration)
