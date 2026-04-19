@@ -6,11 +6,10 @@
 import os
 import struct
 from scapy.all import (
-    Ether, IP, IPv6, GRE, Raw, TCP, wrpcap,
-    Dot1Q,
+    Ether, IP, IPv6, Raw, TCP, wrpcap,
 )
 
-OUTDIR = os.path.join(os.path.dirname(__file__), "..", "tests", "pcaps", "erspan")
+OUTDIR = os.path.join(os.path.dirname(__file__), "..", "pcaps", "erspan")
 os.makedirs(OUTDIR, exist_ok=True)
 
 # ERSPAN III header builder (scapy's ERSPAN support is limited)

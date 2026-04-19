@@ -7,6 +7,7 @@
 #include <cstring>
 #include <gtest/gtest.h>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 extern "C" {
@@ -51,6 +52,13 @@ static bool read_first_packet(const std::string &path, std::vector<uint8_t> &out
     if (fh.magic == 0xD4C3B2A1u)
         swap = true;
     else if (fh.magic != 0xA1B2C3D4u) {
+        fclose(f);
+        return false;
+    }
+
+    // Validate linktype: only DLT_EN10MB (Ethernet) is supported
+    uint32_t lt = swap ? __builtin_bswap32(fh.linktype) : fh.linktype;
+    if (lt != 1) {  // DLT_EN10MB
         fclose(f);
         return false;
     }
@@ -207,19 +215,23 @@ TEST_F(PcapTest, ErspanGREKeyed)
 // ---------------------------------------------------------------------------
 // Negative: ERSPAN session ID must NOT appear in output struct
 // ---------------------------------------------------------------------------
+
+// SFINAE helper: detects if T has a `session_id` member.
+template <typename T, typename = void>
+struct has_session_id : std::false_type {};
+template <typename T>
+struct has_session_id<T, std::void_t<decltype(T::session_id)>> : std::true_type {};
+
 TEST_F(PcapTest, SessionIdNotExposed)
 {
-    // The infmon_parsed_packet_t struct must not contain a session_id field.
-    // This is a compile-time guarantee: if someone adds session_id, this test
-    // will need updating (and should fail review per spec §4.4).
-    // Runtime check: parse a packet and verify no session_id is accessible.
+    // Compile-time guarantee: session_id must not exist in the struct.
+    static_assert(!has_session_id<infmon_parsed_packet_t>::value,
+                  "infmon_parsed_packet_t must NOT expose session_id (spec §4.4)");
+
+    // Runtime sanity: parse still succeeds.
     ASSERT_TRUE(loadPcap("erspan3_full.pcap"));
     auto rc = infmon_parse_erspan(pkt.data(), pkt.size(), &out);
     EXPECT_EQ(rc, INFMON_PARSE_OK);
-    // If this compiles, session_id is not in the struct. QED.
-    // The struct only exposes: inner_ptr, inner_len, inner_truncated,
-    // mirror_src_ip, valid_fields, ports, tcp fields, flow_key_partial,
-    // inner_ip_proto, inner_af.
     (void) out.inner_ptr;
     (void) out.mirror_src_ip;
     (void) out.valid_fields;
