@@ -78,6 +78,10 @@ typedef struct {
     infmon_mirror_src_ip_t mirror_src_ip;
 } infmon_buffer_opaque_t;
 
+/* Compile-time check: must fit in vlib_buffer opaque2 (64 bytes) */
+_Static_assert(sizeof(infmon_buffer_opaque_t) <= 64,
+               "infmon_buffer_opaque_t exceeds VLIB_BUFFER_OPAQUE2_SIZE (64 bytes)");
+
 /* -- Atomic flow-rule reference (TOCTOU-safe) */
 
 /**

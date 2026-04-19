@@ -96,7 +96,7 @@ bool infmon_extract_flow_fields(const infmon_parsed_packet_t *parsed, const uint
     uint32_t inner_l3_off = 14;
 
     /* Handle inner VLAN */
-    if (inner_len >= 16) {
+    if (inner_len >= 14) {
         uint16_t inner_et = read_u16(inner + 12);
         if (inner_et == 0x8100) {
             inner_l3_off = 18;
@@ -177,6 +177,9 @@ uint32_t infmon_flow_match(const infmon_flow_rule_t *rules, uint32_t rule_count,
         if (kw == 0)
             kw = infmon_flow_rule_key_width(rule->fields, rule->field_count);
 
+        if (kw == 0 || kw > INFMON_KEY_BUF_MAX)
+            continue;
+
         uint64_t hash = fnv1a_64(key_buf, kw);
 
         /* Append to scratch */
@@ -208,6 +211,10 @@ void infmon_counter_update(const infmon_scratch_t *scratch, infmon_counter_table
 
     for (uint32_t i = 0; i < scratch->count; i++) {
         const infmon_scratch_entry_t *e = &scratch->entries[i];
+
+        if (e->flow_rule_index >= INFMON_MAX_ACTIVE_FLOW_RULES)
+            continue;
+
         infmon_counter_table_t *table = tables[e->flow_rule_index];
 
         if (!table)

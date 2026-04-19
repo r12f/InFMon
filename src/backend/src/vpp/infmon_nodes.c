@@ -84,8 +84,7 @@ static uword infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *n
                 /* Advance buffer to inner frame */
                 vlib_buffer_advance(b, (i32) dr.inner_offset);
                 b->current_length = dr.inner_len;
-
-                /* Stash mirror_src_ip in buffer opaque for flow-match node */
+                b->flags &= ~VLIB_BUFFER_NEXT_PRESENT;
                 infmon_buffer_opaque_t *op = (infmon_buffer_opaque_t *) vlib_buffer_get_opaque2(b);
                 op->mirror_src_ip = dr.parsed.mirror_src_ip;
 
@@ -136,6 +135,7 @@ static uword infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *n
         if (rc == INFMON_PARSE_OK || rc == INFMON_PARSE_INNER_TRUNCATED_OK) {
             vlib_buffer_advance(b, (i32) dr.inner_offset);
             b->current_length = dr.inner_len;
+            b->flags &= ~VLIB_BUFFER_NEXT_PRESENT;
 
             /* Stash mirror_src_ip in buffer opaque for flow-match node */
             infmon_buffer_opaque_t *op = (infmon_buffer_opaque_t *) vlib_buffer_get_opaque2(b);
