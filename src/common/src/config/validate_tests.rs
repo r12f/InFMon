@@ -367,8 +367,8 @@ fn accept_no_exporters_section() {
 fn accept_valid_logging_syslog() {
     let mut config = make_valid_config();
     config.logging = Some(LoggingConfig {
-        level: "info".into(),
-        destination: LogDestination::Syslog,
+        level: LogLevel::Info,
+        destination: LogType::Syslog,
         file: None,
     });
     validate_config(&config).unwrap();
@@ -378,39 +378,22 @@ fn accept_valid_logging_syslog() {
 fn accept_valid_logging_file() {
     let mut config = make_valid_config();
     config.logging = Some(LoggingConfig {
-        level: "debug".into(),
-        destination: LogDestination::File,
+        level: LogLevel::Debug,
+        destination: LogType::File,
         file: Some(LogFileConfig {
             path: "/var/log/infmon.log".into(),
-            rotation: "daily".into(),
+            rotation: Rotation::Daily,
         }),
     });
     validate_config(&config).unwrap();
 }
 
 #[test]
-fn reject_invalid_log_level() {
-    let mut config = make_valid_config();
-    config.logging = Some(LoggingConfig {
-        level: "verbose".into(),
-        destination: LogDestination::Syslog,
-        file: None,
-    });
-    assert_eq!(
-        validate_config(&config),
-        Err(ValidationError::InvalidLogLevel {
-            level: "verbose".into(),
-            valid: "trace, debug, info, warn, error".into(),
-        })
-    );
-}
-
-#[test]
 fn reject_file_destination_without_file_config() {
     let mut config = make_valid_config();
     config.logging = Some(LoggingConfig {
-        level: "info".into(),
-        destination: LogDestination::File,
+        level: LogLevel::Info,
+        destination: LogType::File,
         file: None,
     });
     assert_eq!(
@@ -423,11 +406,11 @@ fn reject_file_destination_without_file_config() {
 fn reject_file_destination_empty_path() {
     let mut config = make_valid_config();
     config.logging = Some(LoggingConfig {
-        level: "info".into(),
-        destination: LogDestination::File,
+        level: LogLevel::Info,
+        destination: LogType::File,
         file: Some(LogFileConfig {
             path: "".into(),
-            rotation: "daily".into(),
+            rotation: Rotation::Daily,
         }),
     });
     assert_eq!(
@@ -437,22 +420,19 @@ fn reject_file_destination_empty_path() {
 }
 
 #[test]
-fn reject_invalid_rotation() {
+fn reject_syslog_with_file_config() {
     let mut config = make_valid_config();
     config.logging = Some(LoggingConfig {
-        level: "info".into(),
-        destination: LogDestination::File,
+        level: LogLevel::Info,
+        destination: LogType::Syslog,
         file: Some(LogFileConfig {
             path: "/var/log/infmon.log".into(),
-            rotation: "weekly".into(),
+            rotation: Rotation::Daily,
         }),
     });
     assert_eq!(
         validate_config(&config),
-        Err(ValidationError::InvalidLogRotation {
-            rotation: "weekly".into(),
-            valid: "daily, hourly, never".into(),
-        })
+        Err(ValidationError::SyslogWithFileConfig)
     );
 }
 

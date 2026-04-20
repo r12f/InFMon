@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::config::model::{Config, ExporterEntry, Field, FlowRule, FrontendConfig, LogDestination, LoggingConfig};
+use crate::config::model::{Config, ExporterEntry, Field, FlowRule, FrontendConfig, LogType, LoggingConfig};
 use thiserror::Error;
 
 pub const MAX_KEY_WIDTH: u32 = 64;
@@ -16,9 +16,6 @@ pub const VALID_OVERFLOW_POLICIES: &[&str] = &["drop_newest"];
 
 /// Maximum allowed queue_depth per exporter.
 pub const MAX_QUEUE_DEPTH: usize = 10_000;
-
-pub const VALID_LOG_LEVELS: &[&str] = &["trace", "debug", "info", "warn", "error"];
-pub const VALID_ROTATIONS: &[&str] = &["daily", "hourly", "never"];
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ValidationError {
@@ -82,14 +79,12 @@ pub enum ValidationError {
     InvalidExporterName { name: String },
     #[error("exporter '{name}': OTLP exporter must have a non-empty 'endpoint'")]
     MissingOtlpEndpoint { name: String },
-    #[error("logging: invalid level '{level}' (valid: {valid})")]
-    InvalidLogLevel { level: String, valid: String },
     #[error("logging: destination is 'file' but no file config provided")]
     MissingLogFileConfig,
     #[error("logging: file path must not be empty")]
     EmptyLogFilePath,
-    #[error("logging: invalid rotation '{rotation}' (valid: {valid})")]
-    InvalidLogRotation { rotation: String, valid: String },
+    #[error("logging: destination is 'syslog' but file config was provided (ambiguous)")]
+    SyslogWithFileConfig,
 }
 
 /// Validate a flow-rule name.
@@ -274,28 +269,22 @@ pub fn validate_exporter(entry: &ExporterEntry, index: usize) -> Result<(), Vali
 }
 
 /// Validate the logging configuration block.
+///
+/// Level and rotation are validated at parse time by serde (they are enums),
+/// so this function only checks structural constraints.
 pub fn validate_logging(cfg: &LoggingConfig) -> Result<(), ValidationError> {
-    if !VALID_LOG_LEVELS.contains(&cfg.level.as_str()) {
-        return Err(ValidationError::InvalidLogLevel {
-            level: cfg.level.clone(),
-            valid: VALID_LOG_LEVELS.join(", "),
-        });
-    }
-    if cfg.destination == LogDestination::File {
+    if cfg.destination == LogType::File {
         match &cfg.file {
             None => return Err(ValidationError::MissingLogFileConfig),
             Some(file_cfg) => {
                 if file_cfg.path.is_empty() {
                     return Err(ValidationError::EmptyLogFilePath);
                 }
-                if !VALID_ROTATIONS.contains(&file_cfg.rotation.as_str()) {
-                    return Err(ValidationError::InvalidLogRotation {
-                        rotation: file_cfg.rotation.clone(),
-                        valid: VALID_ROTATIONS.join(", "),
-                    });
-                }
             }
         }
+    }
+    if cfg.destination == LogType::Syslog && cfg.file.is_some() {
+        return Err(ValidationError::SyslogWithFileConfig);
     }
     Ok(())
 }

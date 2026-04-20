@@ -130,24 +130,44 @@ pub struct FlowRule {
     pub eviction_policy: EvictionPolicy,
 }
 
-/// Log destination
+/// Log type (destination)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum LogDestination {
+pub enum LogType {
     Syslog,
     File,
 }
 
-fn default_log_level() -> String {
-    "info".into()
+/// Log level
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
 }
 
-fn default_log_destination() -> LogDestination {
-    LogDestination::Syslog
+/// Log file rotation policy
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Rotation {
+    Daily,
+    Hourly,
+    Never,
 }
 
-fn default_rotation() -> String {
-    "daily".into()
+fn default_log_level() -> LogLevel {
+    LogLevel::Info
+}
+
+fn default_log_type() -> LogType {
+    LogType::Syslog
+}
+
+fn default_rotation() -> Rotation {
+    Rotation::Daily
 }
 
 /// File logging configuration
@@ -155,16 +175,16 @@ fn default_rotation() -> String {
 pub struct LogFileConfig {
     pub path: String,
     #[serde(default = "default_rotation")]
-    pub rotation: String, // daily | hourly | never
+    pub rotation: Rotation,
 }
 
 /// Logging configuration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LoggingConfig {
     #[serde(default = "default_log_level")]
-    pub level: String, // trace, debug, info, warn, error
-    #[serde(default = "default_log_destination")]
-    pub destination: LogDestination, // syslog | file
+    pub level: LogLevel,
+    #[serde(default = "default_log_type")]
+    pub destination: LogType,
     pub file: Option<LogFileConfig>,
 }
 
@@ -172,7 +192,7 @@ impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
             level: default_log_level(),
-            destination: default_log_destination(),
+            destination: default_log_type(),
             file: None,
         }
     }
