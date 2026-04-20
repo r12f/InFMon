@@ -13,6 +13,7 @@ Module usage:
 
 import argparse
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -31,10 +32,9 @@ def rewrite_dst_ip(packets, dst_ip: str):
         pkt = pkt.copy()
         if pkt.haslayer(IP):
             pkt[IP].dst = dst_ip
-            # Recalculate checksums
             del pkt[IP].chksum
-            if hasattr(pkt[IP], "payload") and hasattr(pkt[IP].payload, "chksum"):
-                del pkt[IP].payload.chksum
+            # Force full checksum recalculation for all layers
+            pkt = pkt.__class__(bytes(pkt))
         elif pkt.haslayer(IPv6):
             pkt[IPv6].dst = dst_ip
         rewritten.append(pkt)
@@ -57,31 +57,34 @@ def replay(
         count: Number of times to replay (default: 1).
         remote_host: If set, replay on this host via SSH.
     """
-    packets = rdpcap(pcap_path)
-    rewritten = rewrite_dst_ip(packets, dst_ip)
-
     with tempfile.NamedTemporaryFile(suffix=".pcap", delete=False) as tmp:
         tmp_path = tmp.name
-        wrpcap(tmp_path, rewritten)
 
     try:
+        packets = rdpcap(pcap_path)
+        rewritten = rewrite_dst_ip(packets, dst_ip)
+        wrpcap(tmp_path, rewritten)
+
         loop_arg = f"--loop={count}" if count > 1 else ""
         if remote_host:
             # Copy rewritten pcap to remote and replay there
             remote_tmp = f"/tmp/replay_{os.getpid()}.pcap"
             subprocess.run(
-                f"scp {tmp_path} {remote_host}:{remote_tmp}",
+                f"scp {shlex.quote(tmp_path)} {shlex.quote(remote_host)}:{shlex.quote(remote_tmp)}",
                 shell=True, check=True, capture_output=True,
             )
             subprocess.run(
-                f"ssh {remote_host} 'tcpreplay {loop_arg} -i {iface} {remote_tmp}; rm -f {remote_tmp}'",
+                f"ssh {shlex.quote(remote_host)}"
+                f" 'tcpreplay {loop_arg} -i {shlex.quote(iface)} {shlex.quote(remote_tmp)};"
+                f" rm -f {shlex.quote(remote_tmp)}'",
                 shell=True, check=True, capture_output=True,
             )
         else:
-            cmd = f"tcpreplay {loop_arg} -i {iface} {tmp_path}"
+            cmd = f"tcpreplay {loop_arg} -i {shlex.quote(iface)} {shlex.quote(tmp_path)}"
             subprocess.run(cmd, shell=True, check=True, capture_output=True)
     finally:
-        os.unlink(tmp_path)
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 def main():

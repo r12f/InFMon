@@ -4,8 +4,11 @@ Wraps infmonctl commands for flow rule management and stats retrieval.
 """
 
 import json
+import logging
 import subprocess
 import time
+
+logger = logging.getLogger(__name__)
 from typing import Any, Dict, List, Optional
 
 
@@ -65,7 +68,10 @@ def clear_all_flow_rules() -> None:
     for rule in rules:
         name = rule.get("name", "")
         if name:
-            flow_rule_rm(name)
+            try:
+                flow_rule_rm(name)
+            except subprocess.CalledProcessError:
+                logger.warning("Failed to remove flow rule %r, continuing", name)
 
 
 def wait_for_stats(rule_name: str, timeout: float = 30.0, poll_interval: float = 1.0) -> Dict[str, Any]:
@@ -85,7 +91,7 @@ def wait_for_stats(rule_name: str, timeout: float = 30.0, poll_interval: float =
     deadline = time.time() + timeout
     while time.time() < deadline:
         stats = get_flow_stats(rule_name)
-        if stats is not None:
+        if stats is not None and stats:
             return stats
         time.sleep(poll_interval)
     raise TimeoutError(f"No stats for rule '{rule_name}' after {timeout}s")

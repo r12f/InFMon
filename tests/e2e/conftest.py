@@ -5,6 +5,7 @@ connectivity, and optionally pushes replay assets to a remote host.
 """
 
 import os
+import shlex
 import shutil
 import subprocess
 import time
@@ -30,7 +31,12 @@ def _env(key: str) -> str:
     return os.environ.get(key, _DEFAULTS.get(key, ""))
 
 
-def _run(cmd: str, check: bool = True, capture: bool = True) -> subprocess.CompletedProcess:
+def _run(cmd: str, check: bool = True, capture: bool = True, **kwargs) -> subprocess.CompletedProcess:
+    """Run a shell command.
+
+    All caller-supplied values interpolated into *cmd* MUST be wrapped
+    with ``shlex.quote()`` to prevent shell injection.
+    """
     return subprocess.run(
         cmd, shell=True, check=check, capture_output=capture, text=True
     )
@@ -44,8 +50,8 @@ def _assign_rx_ip() -> None:
     """Assign IP to the VPP RX interface via vppctl."""
     iface = _env("INFMON_E2E_RX_VPP_IFACE")
     ip = _env("INFMON_E2E_RX_IP")
-    _run(f"vppctl set interface ip address {iface} {ip}", check=False)
-    _run(f"vppctl set interface state {iface} up", check=False)
+    _run(f"vppctl set interface ip address {shlex.quote(iface)} {shlex.quote(ip)}", check=False)
+    _run(f"vppctl set interface state {shlex.quote(iface)} up", check=False)
 
 
 def _assign_tx_ip_local() -> None:
@@ -53,9 +59,9 @@ def _assign_tx_ip_local() -> None:
     iface = _env("INFMON_E2E_TX_IFACE")
     ip = _env("INFMON_E2E_TX_IP")
     # Flush existing addresses first to avoid duplicates
-    _run(f"ip addr flush dev {iface}", check=False)
-    _run(f"ip addr add {ip} dev {iface}")
-    _run(f"ip link set {iface} up")
+    _run(f"ip addr flush dev {shlex.quote(iface)}", check=False)
+    _run(f"ip addr replace {shlex.quote(ip)} dev {shlex.quote(iface)}")
+    _run(f"ip link set {shlex.quote(iface)} up")
 
 
 def _assign_tx_ip_remote() -> None:
@@ -63,7 +69,11 @@ def _assign_tx_ip_remote() -> None:
     host = _env("INFMON_E2E_TX_HOST")
     iface = _env("INFMON_E2E_TX_HOST_IFACE")
     ip = _env("INFMON_E2E_TX_IP")
-    _run(f"ssh {host} 'ip addr flush dev {iface}; ip addr add {ip} dev {iface}; ip link set {iface} up'")
+    _run(
+        f"ssh {shlex.quote(host)} 'ip addr flush dev {shlex.quote(iface)};"
+        f" ip addr replace {shlex.quote(ip)} dev {shlex.quote(iface)};"
+        f" ip link set {shlex.quote(iface)} up'"
+    )
 
 
 def _push_replay_assets(remote_host: str) -> None:
@@ -71,9 +81,9 @@ def _push_replay_assets(remote_host: str) -> None:
     e2e_dir = os.path.dirname(__file__)
     replay_script = os.path.join(e2e_dir, "replay_traffic.py")
     scenarios_dir = os.path.join(e2e_dir, "scenarios")
-    _run(f"scp {replay_script} {remote_host}:/tmp/replay_traffic.py")
+    _run(f"scp {shlex.quote(replay_script)} {shlex.quote(remote_host)}:/tmp/replay_traffic.py")
     if os.path.isdir(scenarios_dir):
-        _run(f"scp -r {scenarios_dir} {remote_host}:/tmp/e2e_scenarios")
+        _run(f"scp -r {shlex.quote(scenarios_dir)} {shlex.quote(remote_host)}:/tmp/e2e_scenarios")
 
 
 def _verify_ping() -> None:
@@ -82,9 +92,9 @@ def _verify_ping() -> None:
     mode = _env("INFMON_E2E_TX_MODE")
     if mode == "remote":
         host = _env("INFMON_E2E_TX_HOST")
-        cmd = f"ssh {host} 'ping -c 3 -W 2 {rx_ip}'"
+        cmd = f"ssh {shlex.quote(host)} 'ping -c 3 -W 2 {shlex.quote(rx_ip)}'"
     else:
-        cmd = f"ping -c 3 -W 2 {rx_ip}"
+        cmd = f"ping -c 3 -W 2 {shlex.quote(rx_ip)}"
     result = _run(cmd, check=False)
     if result.returncode != 0:
         pytest.fail(
@@ -136,3 +146,19 @@ def infmon_env():
         "rx_ip": _env("INFMON_E2E_RX_IP"),
         "tx_ip": _env("INFMON_E2E_TX_IP"),
     }
+
+    # ---- Teardown ----
+    # Flush IPs assigned during setup to avoid stale addresses on next run.
+    tx_iface = _env("INFMON_E2E_TX_IFACE")
+    _run(f"ip addr flush dev {shlex.quote(tx_iface)}", check=False)
+
+    if mode == "remote":
+        remote_host = _env("INFMON_E2E_TX_HOST")
+        remote_iface = _env("INFMON_E2E_TX_HOST_IFACE")
+        _run(
+            f"ssh {shlex.quote(remote_host)} '"
+            f"ip addr flush dev {shlex.quote(remote_iface)};"
+            f" rm -f /tmp/replay_traffic.py;"
+            f" rm -rf /tmp/e2e_scenarios'",
+            check=False,
+        )
