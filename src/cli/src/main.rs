@@ -32,16 +32,20 @@ fn main() {
         // Create the signal streams eagerly so the OS-level handler is
         // registered before any subcommand runs — this avoids races where
         // the process receives a signal before the handler is polled.
+        #[cfg(unix)]
         let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
             .expect("failed to install SIGINT handler");
+        #[cfg(unix)]
         let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
             .expect("failed to install SIGTERM handler");
 
+        #[cfg(unix)]
         let sigint_task = tokio::spawn(async move {
             sigint.recv().await;
             process::exit(EXIT_SIGINT);
         });
 
+        #[cfg(unix)]
         let sigterm_task = tokio::spawn(async move {
             sigterm.recv().await;
             process::exit(EXIT_SIGTERM);
@@ -49,7 +53,9 @@ fn main() {
 
         let code = run(cli).await;
 
+        #[cfg(unix)]
         sigint_task.abort();
+        #[cfg(unix)]
         sigterm_task.abort();
 
         code
