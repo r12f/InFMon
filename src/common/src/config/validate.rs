@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
-use crate::config::model::{Config, ExporterEntry, Field, FlowRule, FrontendConfig};
+use crate::config::model::{
+    Config, ExporterEntry, Field, FlowRule, FrontendConfig, LogType, LoggingConfig,
+};
 use thiserror::Error;
 
 pub const MAX_KEY_WIDTH: u32 = 64;
@@ -79,6 +81,12 @@ pub enum ValidationError {
     InvalidExporterName { name: String },
     #[error("exporter '{name}': OTLP exporter must have a non-empty 'endpoint'")]
     MissingOtlpEndpoint { name: String },
+    #[error("logging: destination is 'file' but no file config provided")]
+    MissingLogFileConfig,
+    #[error("logging: file path must not be empty")]
+    EmptyLogFilePath,
+    #[error("logging: destination is 'syslog' but file config was provided (ambiguous)")]
+    SyslogWithFileConfig,
 }
 
 /// Validate a flow-rule name.
@@ -262,12 +270,38 @@ pub fn validate_exporter(entry: &ExporterEntry, index: usize) -> Result<(), Vali
     Ok(())
 }
 
+/// Validate the logging configuration block.
+///
+/// Level and rotation are validated at parse time by serde (they are enums),
+/// so this function only checks structural constraints.
+pub fn validate_logging(cfg: &LoggingConfig) -> Result<(), ValidationError> {
+    if cfg.destination == LogType::File {
+        match &cfg.file {
+            None => return Err(ValidationError::MissingLogFileConfig),
+            Some(file_cfg) => {
+                if file_cfg.path.is_empty() {
+                    return Err(ValidationError::EmptyLogFilePath);
+                }
+            }
+        }
+    }
+    if cfg.destination == LogType::Syslog && cfg.file.is_some() {
+        return Err(ValidationError::SyslogWithFileConfig);
+    }
+    Ok(())
+}
+
 /// Validate the entire config (all rules, cross-rule constraints,
 /// frontend config, and exporter entries).
 pub fn validate_config(config: &Config) -> Result<(), ValidationError> {
     // Validate frontend section if present
     if let Some(ref frontend) = config.frontend {
         validate_frontend(frontend)?;
+    }
+
+    // Validate logging section if present
+    if let Some(ref logging) = config.logging {
+        validate_logging(logging)?;
     }
 
     // Validate flow rules

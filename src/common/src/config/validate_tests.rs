@@ -5,6 +5,7 @@ use super::*;
 fn reject_duplicate_names() {
     let config = Config {
         frontend: None,
+        logging: None,
         flow_rules: vec![
             make_rule("ab", vec![Field::SrcIp], 10),
             make_rule("ab", vec![Field::DstIp], 10),
@@ -69,6 +70,7 @@ fn accept_within_key_width_limit() {
 fn reject_total_budget_exceeded() {
     let config = Config {
         frontend: None,
+        logging: None,
         flow_rules: vec![
             make_rule("rule-a", vec![Field::SrcIp], MAX_KEYS_BUDGET),
             make_rule("rule-b", vec![Field::DstIp], 1),
@@ -126,6 +128,7 @@ fn make_valid_config() -> Config {
     use std::collections::HashMap;
     Config {
         frontend: Some(FrontendConfig::default()),
+        logging: None,
         flow_rules: vec![FlowRule {
             name: "test-rule".to_string(),
             fields: vec![Field::SrcIp],
@@ -355,5 +358,87 @@ fn accept_no_frontend_section() {
 fn accept_no_exporters_section() {
     let mut config = make_valid_config();
     config.exporters = None;
+    validate_config(&config).unwrap();
+}
+
+// Logging config validation tests
+
+#[test]
+fn accept_valid_logging_syslog() {
+    let mut config = make_valid_config();
+    config.logging = Some(LoggingConfig {
+        level: LogLevel::Info,
+        destination: LogType::Syslog,
+        file: None,
+    });
+    validate_config(&config).unwrap();
+}
+
+#[test]
+fn accept_valid_logging_file() {
+    let mut config = make_valid_config();
+    config.logging = Some(LoggingConfig {
+        level: LogLevel::Debug,
+        destination: LogType::File,
+        file: Some(LogFileConfig {
+            path: "/var/log/infmon.log".into(),
+            rotation: Rotation::Daily,
+        }),
+    });
+    validate_config(&config).unwrap();
+}
+
+#[test]
+fn reject_file_destination_without_file_config() {
+    let mut config = make_valid_config();
+    config.logging = Some(LoggingConfig {
+        level: LogLevel::Info,
+        destination: LogType::File,
+        file: None,
+    });
+    assert_eq!(
+        validate_config(&config),
+        Err(ValidationError::MissingLogFileConfig)
+    );
+}
+
+#[test]
+fn reject_file_destination_empty_path() {
+    let mut config = make_valid_config();
+    config.logging = Some(LoggingConfig {
+        level: LogLevel::Info,
+        destination: LogType::File,
+        file: Some(LogFileConfig {
+            path: "".into(),
+            rotation: Rotation::Daily,
+        }),
+    });
+    assert_eq!(
+        validate_config(&config),
+        Err(ValidationError::EmptyLogFilePath)
+    );
+}
+
+#[test]
+fn reject_syslog_with_file_config() {
+    let mut config = make_valid_config();
+    config.logging = Some(LoggingConfig {
+        level: LogLevel::Info,
+        destination: LogType::Syslog,
+        file: Some(LogFileConfig {
+            path: "/var/log/infmon.log".into(),
+            rotation: Rotation::Daily,
+        }),
+    });
+    assert_eq!(
+        validate_config(&config),
+        Err(ValidationError::SyslogWithFileConfig)
+    );
+}
+
+#[test]
+fn accept_no_logging_section() {
+    let mut config = make_valid_config();
+    config.logging = None;
     validate_config(&config).unwrap();
 }
