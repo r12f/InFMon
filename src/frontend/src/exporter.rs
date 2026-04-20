@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use infmon_ipc::types::FlowStatsSnapshot;
+use infmon_common::ipc::types::FlowStatsSnapshot;
 
 // ── Self-observability metrics (spec §8.3) ──────────────────────────
 
