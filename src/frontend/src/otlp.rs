@@ -667,6 +667,15 @@ impl OtlpExporter {
             return vec![request];
         }
 
+        // NOTE: InFMon always produces a single ResourceMetrics with a single
+        // ScopeMetrics. If multiple resources/scopes are ever needed, this
+        // flattening must be updated to preserve per-resource/scope grouping.
+        debug_assert!(
+            request.resource_metrics.len() == 1
+                && request.resource_metrics[0].scope_metrics.len() == 1,
+            "slice_into_batches assumes single resource + single scope"
+        );
+
         // Flatten all metrics, then partition into batches
         let resource = request.resource_metrics[0].resource.clone();
         let scope = request.resource_metrics[0].scope_metrics[0].scope.clone();
@@ -911,6 +920,11 @@ impl Exporter for OtlpExporter {
                         self.metrics
                             .batches_failed_non_retryable
                             .fetch_add(1, Ordering::Relaxed);
+                        if points_emitted > 0 {
+                            self.metrics
+                                .points_emitted
+                                .fetch_add(points_emitted, Ordering::Relaxed);
+                        }
                         let elapsed = start.elapsed().as_secs_f64();
                         self.metrics.set_export_duration(elapsed);
                         return Err(ExporterError::Permanent(e));
