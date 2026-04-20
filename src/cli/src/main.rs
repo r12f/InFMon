@@ -47,13 +47,15 @@ fn main() {
     let cli = Cli::parse();
 
     // Initialize tracing subscriber when -v is passed (spec: issue #121).
-    // -v = DEBUG, -vv = TRACE.  Output goes to stderr so it never mixes
-    // with machine-readable stdout.  Existing eprintln! output is kept.
+    // -v = INFO, -vv = DEBUG, -vvv = TRACE.  Output goes to stderr so it
+    // never mixes with machine-readable stdout.  RUST_LOG overrides the
+    // default level when set.  Existing eprintln! output is kept.
     if cli.verbose > 0 {
         use tracing_subscriber::EnvFilter;
 
         let level = match cli.verbose {
-            1 => tracing::Level::DEBUG,
+            1 => tracing::Level::INFO,
+            2 => tracing::Level::DEBUG,
             _ => tracing::Level::TRACE,
         };
         tracing_subscriber::fmt()
@@ -113,7 +115,10 @@ fn main() {
 async fn run(cli: Cli) -> i32 {
     let _output_format = cli.effective_output();
 
-    tracing::debug!(command = ?cli.command, "dispatching subcommand");
+    tracing::debug!(
+        command = cli.command.variant_name(),
+        "dispatching subcommand"
+    );
 
     match cli.command {
         Commands::Install { force } => run_install(force).await,
