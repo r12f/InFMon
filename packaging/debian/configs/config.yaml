@@ -1,0 +1,45 @@
+# InFMon — default configuration.
+#
+# Shared config file read by both the VPP plugin (infmon.so) and the
+# frontend daemon (infmon-frontend). See spec 004/005 for the full
+# schema. This default is intended to be safe to install on a stock
+# VPP system — it enables nothing automatically.
+#
+# This file is installed at /etc/infmon/config.yaml with mode 0640
+# root:infmon. Operator edits are preserved across package upgrades
+# (standard dpkg conffile handling).
+
+plugin:
+  # Master enable/disable. The operator must flip this to true after
+  # configuring at least one input feature attachment.
+  enabled: false
+
+stats:
+  # How often to publish counters into the VPP stats segment.
+  # The frontend polls the segment, so this also bounds export latency.
+  publish_interval_ms: 1000
+
+vpp:
+  # Path to the VPP binary-API Unix socket. Standard on Debian/Ubuntu.
+  api_socket: "/run/vpp/api.sock"
+  # Path to the VPP stats segment.
+  stats_socket: "/run/vpp/stats.sock"
+  # Retry budget for attaching to VPP at startup. Per spec 008 §7.1, the
+  # frontend reports status=waiting_for_vpp until the plugin appears.
+  attach_retry_seconds: 5
+
+grpc:
+  # Frontend gRPC listener (spec 005). The CLI (infmonctl) connects here
+  # over localhost TCP by default.
+  bind: "127.0.0.1:9880"
+
+flow_rules:
+  # Directory of operator-supplied flow_rule YAML files (spec 002).
+  # Anything matching *.yaml here is loaded at startup.
+  dir: "/etc/infmon/flow_rules.d"
+
+log:
+  # Log level: error | warn | info | debug | trace
+  level: "info"
+  # Log file path. Also collected by journald via systemd.
+  file: "/var/log/infmon/infmon-frontend.log"

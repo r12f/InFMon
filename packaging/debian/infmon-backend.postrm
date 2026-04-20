@@ -8,7 +8,7 @@
 set -e
 
 case "$1" in
-    remove|purge)
+    remove)
         if [ -d /usr/lib/vpp_plugins ]; then
             cat <<'NOTICE' >&2
 NOTICE: infmon-backend removed.
@@ -18,6 +18,24 @@ The InFMon VPP plugin file has been removed from
 
 If VPP is currently running with the plugin loaded, restart it
 when convenient to unload it:
+
+    sudo systemctl restart vpp
+
+VPP itself has NOT been touched.
+NOTICE
+        fi
+        ;;
+    purge)
+        # config.yaml is listed as a conffile and dpkg removes it on purge.
+        # Clean up the shared directory if empty.
+        rmdir --ignore-fail-on-non-empty /etc/infmon 2>/dev/null || true
+
+        if [ -d /usr/lib/vpp_plugins ]; then
+            cat <<'NOTICE' >&2
+NOTICE: infmon-backend purged.
+
+The InFMon VPP plugin and configuration have been fully removed.
+Restart VPP when convenient to unload any in-memory copy of the plugin:
 
     sudo systemctl restart vpp
 

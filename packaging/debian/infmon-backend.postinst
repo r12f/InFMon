@@ -24,6 +24,14 @@ the plugin on a running system, restart VPP when convenient:
 InFMon does NOT restart VPP automatically — on a DPU this could
 drop production traffic for unrelated services.
 NOTICE
+
+        # config.yaml is installed 0640 root:root by dh_install. If the
+        # infmon group already exists (frontend installed first), fix
+        # group ownership so the daemon can read the file. If the group
+        # doesn't exist yet, frontend's postinst will handle it.
+        if [ -f /etc/infmon/config.yaml ] && getent group infmon >/dev/null 2>&1; then
+            chown root:infmon /etc/infmon/config.yaml || true
+        fi
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)
         ;;

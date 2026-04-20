@@ -41,6 +41,13 @@ case "$1" in
                 chmod 0750 "$d" || true
             fi
         done
+
+        # config.yaml is installed 0640 root:root by infmon-backend.
+        # Fix group ownership so the infmon user can read it (the group
+        # only exists after the addgroup above).
+        if [ -f /etc/infmon/config.yaml ]; then
+            chown root:"$INFMON_GROUP" /etc/infmon/config.yaml || true
+        fi
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)
         ;;
