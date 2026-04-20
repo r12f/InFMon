@@ -272,9 +272,8 @@ pub fn generate_completions(shell: &str) {
 pub fn generate_manpage() {
     let cmd = Cli::command();
     let man = clap_mangen::Man::new(cmd);
-    man.render(&mut std::io::stdout())
-        .unwrap_or_else(|e| {
-            eprintln!("infmonctl: failed to generate man page: {e}");
-            std::process::exit(exit_codes::EXIT_FAILURE);
-        });
+    man.render(&mut std::io::stdout()).unwrap_or_else(|e| {
+        eprintln!("infmonctl: failed to generate man page: {e}");
+        std::process::exit(exit_codes::EXIT_FAILURE);
+    });
 }
