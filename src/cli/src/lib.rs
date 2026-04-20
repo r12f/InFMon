@@ -122,6 +122,27 @@ pub enum Commands {
     Health,
 }
 
+impl Commands {
+    /// Return the variant name as a static string for safe logging
+    /// (avoids serializing fields that may contain sensitive data).
+    pub fn variant_name(&self) -> &'static str {
+        match self {
+            Self::Install { .. } => "install",
+            Self::Uninstall { .. } => "uninstall",
+            Self::Start => "start",
+            Self::Stop => "stop",
+            Self::Restart => "restart",
+            Self::Status => "status",
+            Self::Config { .. } => "config",
+            Self::FlowRule { .. } => "flow-rule",
+            Self::Flow { .. } => "flow",
+            Self::Stats { .. } => "stats",
+            Self::Log { .. } => "log",
+            Self::Health => "health",
+        }
+    }
+}
+
 #[derive(Subcommand, Debug)]
 pub enum ConfigCommands {
     /// Get a single config key value
