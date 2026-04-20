@@ -16,4 +16,6 @@ mod crud_tests;
 #[cfg(test)]
 mod parse_tests;
 #[cfg(test)]
+mod test_helpers;
+#[cfg(test)]
 mod validate_tests;

@@ -1,13 +1,5 @@
+use super::test_helpers::make_rule;
 use super::*;
-
-fn make_rule(name: &str, fields: Vec<Field>, max_keys: u32) -> FlowRule {
-    FlowRule {
-        name: name.to_string(),
-        fields,
-        max_keys,
-        eviction_policy: EvictionPolicy::LruDrop,
-    }
-}
 
 #[test]
 fn reject_duplicate_names() {
