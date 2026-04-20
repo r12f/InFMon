@@ -158,9 +158,7 @@ impl Frontend {
 
         // Spawn control server for CLI RPCs
         let control_socket = PathBuf::from(&frontend_cfg.control_socket);
-        let control_state = Arc::new(ControlState::new(
-            config.flow_rules.clone(),
-        ));
+        let control_state = Arc::new(ControlState::new(config.flow_rules.clone()));
         let control_handle = match control::spawn(&control_socket, control_state) {
             Ok(h) => {
                 tracing::info!("control server listening on {}", control_socket.display());

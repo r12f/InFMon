@@ -11,9 +11,7 @@ use infmon_cli::{
     StatsCommands,
 };
 use infmon_common::ipc::control_client::InFMonControlClient;
-use infmon_common::ipc::protocol::{
-    FlowRuleData, FlowRuleDetailData, StatsShowData,
-};
+use infmon_common::ipc::protocol::{FlowRuleData, FlowRuleDetailData, StatsShowData};
 
 fn main() {
     // Handle --generate-completions and --generate-manpage before clap
@@ -149,10 +147,7 @@ async fn run(cli: Cli) -> i32 {
 // ---------------------------------------------------------------------------
 
 fn make_client(cli: &Cli) -> InFMonControlClient {
-    InFMonControlClient::with_timeout(
-        Path::new(&cli.socket),
-        Duration::from_secs(cli.timeout),
-    )
+    InFMonControlClient::with_timeout(Path::new(&cli.socket), Duration::from_secs(cli.timeout))
 }
 
 // ---------------------------------------------------------------------------
@@ -253,11 +248,20 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
                         "fields" => {
                             for f in v.split(',') {
                                 match f.trim() {
-                                    "src_ip" => fields.push(infmon_common::config::model::Field::SrcIp),
-                                    "dst_ip" => fields.push(infmon_common::config::model::Field::DstIp),
-                                    "ip_proto" => fields.push(infmon_common::config::model::Field::IpProto),
-                                    "dscp" => fields.push(infmon_common::config::model::Field::Dscp),
-                                    "mirror_src_ip" => fields.push(infmon_common::config::model::Field::MirrorSrcIp),
+                                    "src_ip" => {
+                                        fields.push(infmon_common::config::model::Field::SrcIp)
+                                    }
+                                    "dst_ip" => {
+                                        fields.push(infmon_common::config::model::Field::DstIp)
+                                    }
+                                    "ip_proto" => {
+                                        fields.push(infmon_common::config::model::Field::IpProto)
+                                    }
+                                    "dscp" => {
+                                        fields.push(infmon_common::config::model::Field::Dscp)
+                                    }
+                                    "mirror_src_ip" => fields
+                                        .push(infmon_common::config::model::Field::MirrorSrcIp),
                                     other => {
                                         eprintln!("infmonctl: unknown field: {other}");
                                         return EXIT_USAGE;
@@ -346,24 +350,25 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
                 }
             }
         }
-        FlowRuleCommands::List => {
-            match client.flow_rule_list().await {
-                Ok(rules) => {
-                    let data: Vec<FlowRuleData> = rules.iter().map(|r| FlowRuleData {
+        FlowRuleCommands::List => match client.flow_rule_list().await {
+            Ok(rules) => {
+                let data: Vec<FlowRuleData> = rules
+                    .iter()
+                    .map(|r| FlowRuleData {
                         name: r.name.clone(),
                         fields: r.fields.clone(),
                         max_keys: r.max_keys,
                         eviction_policy: r.eviction_policy,
-                    }).collect();
-                    print_output(&FlowRuleListOutput(data), &output, cli.compact);
-                    EXIT_SUCCESS
-                }
-                Err(e) => {
-                    eprintln!("infmonctl: flow-rule list: {e}");
-                    ctl_error_to_exit_code(&e)
-                }
+                    })
+                    .collect();
+                print_output(&FlowRuleListOutput(data), &output, cli.compact);
+                EXIT_SUCCESS
             }
-        }
+            Err(e) => {
+                eprintln!("infmonctl: flow-rule list: {e}");
+                ctl_error_to_exit_code(&e)
+            }
+        },
         FlowRuleCommands::Show { ref target } => {
             match client.flow_rule_show(target).await {
                 Ok(stats) => {
@@ -379,15 +384,17 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
                             evictions: stats.counters.evictions,
                             drops: stats.counters.drops,
                         },
-                        flows: stats.flows.iter().map(|f| {
-                            infmon_common::ipc::protocol::FlowEntryData {
+                        flows: stats
+                            .flows
+                            .iter()
+                            .map(|f| infmon_common::ipc::protocol::FlowEntryData {
                                 key: f.key.iter().map(|v| format!("{:?}", v)).collect(),
                                 packets: f.counters.packets,
                                 bytes: f.counters.bytes,
                                 first_seen_ns: f.counters.first_seen_ns,
                                 last_seen_ns: f.counters.last_seen_ns,
-                            }
-                        }).collect(),
+                            })
+                            .collect(),
                     };
                     print_output(&FlowRuleShowOutput(detail), &output, cli.compact);
                     EXIT_SUCCESS
@@ -494,7 +501,11 @@ impl TableDisplay for FlowRuleListOutput {
         }
         println!("{:<20} {:<30} {:>10}", "NAME", "FIELDS", "MAX_KEYS");
         for r in &self.0 {
-            let fields: Vec<String> = r.fields.iter().map(|f| format!("{:?}", f).to_lowercase()).collect();
+            let fields: Vec<String> = r
+                .fields
+                .iter()
+                .map(|f| format!("{:?}", f).to_lowercase())
+                .collect();
             println!("{:<20} {:<30} {:>10}", r.name, fields.join(","), r.max_keys);
         }
     }
@@ -507,7 +518,11 @@ impl TableDisplay for FlowRuleShowOutput {
     fn print_table(&self) {
         let d = &self.0;
         println!("Name:       {}", d.name);
-        let fields: Vec<String> = d.fields.iter().map(|f| format!("{:?}", f).to_lowercase()).collect();
+        let fields: Vec<String> = d
+            .fields
+            .iter()
+            .map(|f| format!("{:?}", f).to_lowercase())
+            .collect();
         println!("Fields:     {}", fields.join(", "));
         println!("Max keys:   {}", d.max_keys);
         println!("Counters:");
@@ -518,7 +533,12 @@ impl TableDisplay for FlowRuleShowOutput {
         if !d.flows.is_empty() {
             println!("Flows ({}):", d.flows.len());
             for f in &d.flows {
-                println!("  Key: {}  Pkts: {}  Bytes: {}", f.key.join(","), f.packets, f.bytes);
+                println!(
+                    "  Key: {}  Pkts: {}  Bytes: {}",
+                    f.key.join(","),
+                    f.packets,
+                    f.bytes
+                );
             }
         }
     }
@@ -565,18 +585,18 @@ fn ctl_error_to_exit_code(e: &infmon_common::ipc::CtlError) -> i32 {
     use infmon_common::ipc::CtlError;
     match e {
         CtlError::Connect(_) => EXIT_FRONTEND_UNREACHABLE,
-        CtlError::Backend { code, .. } => {
-            match *code {
-                3 => EXIT_NOT_FOUND,
-                6 => EXIT_CONFLICT,
-                _ => EXIT_FAILURE,
-            }
-        }
+        CtlError::Backend { code, .. } => match *code {
+            3 => EXIT_NOT_FOUND,
+            6 => EXIT_CONFLICT,
+            _ => EXIT_FAILURE,
+        },
         _ => EXIT_FAILURE,
     }
 }
 
-fn field_id_to_field(id: &infmon_common::ipc::types::FieldId) -> Option<infmon_common::config::model::Field> {
+fn field_id_to_field(
+    id: &infmon_common::ipc::types::FieldId,
+) -> Option<infmon_common::config::model::Field> {
     use infmon_common::config::model::Field;
     use infmon_common::ipc::types::FieldId;
     match id {

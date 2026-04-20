@@ -188,11 +188,7 @@ impl InFMonControlClient {
         match resp.data {
             Some(ResponseData::FlowRuleDetail(detail)) => Ok(FlowRuleStats {
                 name: detail.name,
-                fields: detail
-                    .fields
-                    .iter()
-                    .filter_map(field_to_field_id)
-                    .collect(),
+                fields: detail.fields.iter().filter_map(field_to_field_id).collect(),
                 flows: detail
                     .flows
                     .into_iter()
@@ -218,10 +214,7 @@ impl InFMonControlClient {
     }
 
     /// Show aggregate stats (optionally filtered by name).
-    pub async fn stats_show(
-        &self,
-        name: Option<&str>,
-    ) -> Result<StatsShowData, CtlError> {
+    pub async fn stats_show(&self, name: Option<&str>) -> Result<StatsShowData, CtlError> {
         let request = Request::StatsShow(StatsShowParams {
             name: name.map(|s| s.to_string()),
         });

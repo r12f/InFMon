@@ -41,8 +41,7 @@ impl ControlHandle {
     }
 
     fn shutdown(&mut self) {
-        self.stop
-            .store(true, std::sync::atomic::Ordering::Release);
+        self.stop.store(true, std::sync::atomic::Ordering::Release);
         // Connect to self to unblock accept()
         let _ = std::os::unix::net::UnixStream::connect(&self.socket_path);
         if let Some(h) = self.join.take() {
@@ -58,10 +57,7 @@ impl Drop for ControlHandle {
 }
 
 /// Spawn the control server thread.
-pub fn spawn(
-    socket_path: &Path,
-    state: Arc<ControlState>,
-) -> std::io::Result<ControlHandle> {
+pub fn spawn(socket_path: &Path, state: Arc<ControlState>) -> std::io::Result<ControlHandle> {
     use std::os::unix::net::UnixListener;
 
     // Remove stale socket file
@@ -189,11 +185,7 @@ fn handle_flow_rule_add(params: &FlowRuleAddParams, state: &ControlState) -> Res
     rules.push(rule);
 
     // Generate a synthetic ID
-    let id = format!(
-        "{:016x}-{:016x}",
-        rules.len() as u64,
-        0u64
-    );
+    let id = format!("{:016x}-{:016x}", rules.len() as u64, 0u64);
     Response::ok(ResponseData::FlowRuleId(FlowRuleIdData { id }))
 }
 
@@ -288,22 +280,22 @@ fn handle_stats_show(params: &StatsShowParams, state: &ControlState) -> Response
             }
         }
 
-        let (packets, bytes, evictions, drops, active_flows) =
-            if let Some(snap) = snapshot.as_ref() {
-                if let Some(frs) = snap.flow_rules.iter().find(|fr| fr.name == rule.name) {
-                    (
-                        frs.counters.packets,
-                        frs.counters.bytes,
-                        frs.counters.evictions,
-                        frs.counters.drops,
-                        frs.flows.len() as u64,
-                    )
-                } else {
-                    (0, 0, 0, 0, 0)
-                }
+        let (packets, bytes, evictions, drops, active_flows) = if let Some(snap) = snapshot.as_ref()
+        {
+            if let Some(frs) = snap.flow_rules.iter().find(|fr| fr.name == rule.name) {
+                (
+                    frs.counters.packets,
+                    frs.counters.bytes,
+                    frs.counters.evictions,
+                    frs.counters.drops,
+                    frs.flows.len() as u64,
+                )
             } else {
                 (0, 0, 0, 0, 0)
-            };
+            }
+        } else {
+            (0, 0, 0, 0, 0)
+        };
 
         flow_rule_stats.push(FlowRuleStatsData {
             name: rule.name.clone(),
