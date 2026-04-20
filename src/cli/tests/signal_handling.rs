@@ -6,20 +6,24 @@
 
 #[cfg(unix)]
 mod unix {
-    use std::io::Read;
+    use std::io::{BufRead, BufReader};
     use std::process::{Command, Stdio};
-    use std::time::Duration;
 
     fn infmonctl_bin() -> std::path::PathBuf {
         assert_cmd::cargo::cargo_bin("infmonctl")
     }
 
-    /// SIGPIPE: spawn `infmonctl --help` piped through a process that
-    /// immediately closes its stdin.  The CLI should exit 0.
+    /// SIGPIPE: spawn `infmonctl --help` piped to a reader that closes
+    /// immediately. With SIG_IGN for SIGPIPE, writes return EPIPE instead
+    /// of killing the process. Either way (output completes or hits EPIPE),
+    /// the CLI must exit 0 per spec 007.
+    ///
+    /// NOTE: `--help` output is small enough to complete in a single write,
+    /// so this mostly validates the exit-code contract. Once `log tail -f`
+    /// produces real streaming output, a stronger SIGPIPE test should
+    /// replace this one.
     #[test]
     fn sigpipe_exits_zero() {
-        // `--help` writes enough output to trigger SIGPIPE when the
-        // read end closes.
         let mut child = Command::new(infmonctl_bin())
             .arg("--help")
             .stdout(Stdio::piped())
@@ -27,73 +31,57 @@ mod unix {
             .spawn()
             .expect("spawn infmonctl");
 
-        // Read a few bytes then drop stdout (close the pipe).
+        // Read a few bytes then close the pipe.
         let mut stdout = child.stdout.take().unwrap();
         let mut buf = [0u8; 4];
-        let _ = stdout.read(&mut buf);
+        let _ = std::io::Read::read(&mut stdout, &mut buf);
         drop(stdout);
 
         let status = child.wait().expect("wait for infmonctl");
-        // --help is short enough that it completes before pipe close most of the time,
-        // so we accept exit 0 (either completed normally or got SIGPIPE→0).
         assert!(status.success(), "expected exit 0, got {:?}", status.code());
+    }
+
+    /// Helper: spawn `log tail --follow`, wait for readiness, send signal,
+    /// and return the exit code.
+    fn spawn_and_signal(sig: libc::c_int) -> i32 {
+        let mut child = Command::new(infmonctl_bin())
+            .args(["log", "tail", "--follow"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn infmonctl");
+
+        // Wait for the process to be ready (prints to stderr).
+        let stderr = child.stderr.take().unwrap();
+        let mut reader = BufReader::new(stderr);
+        let mut line = String::new();
+        reader.read_line(&mut line).expect("read stderr");
+        assert!(
+            line.contains("waiting for logs"),
+            "expected readiness line, got: {line}"
+        );
+        drop(reader);
+
+        // Send signal.
+        unsafe {
+            libc::kill(child.id() as i32, sig);
+        }
+
+        let status = child.wait().expect("wait for infmonctl");
+        status.code().unwrap_or(-1)
     }
 
     /// SIGINT → exit 130.
     #[test]
     fn sigint_exits_130() {
-        // Use `log tail -f` which would block forever waiting for journalctl.
-        // We just need the process to stay alive long enough to receive the signal.
-        // Instead, use a command that stubs (blocks on the runtime).
-        // `status` is a stub that exits 1, so we use a trick: spawn with
-        // a long --timeout to keep it alive, then send SIGINT.
-        let mut child = Command::new(infmonctl_bin())
-            .args(["--timeout", "60", "status"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn infmonctl");
-
-        // Give it a moment to start
-        std::thread::sleep(Duration::from_millis(100));
-
-        // Send SIGINT
-        unsafe {
-            libc::kill(child.id() as i32, libc::SIGINT);
-        }
-
-        let status = child.wait().expect("wait for infmonctl");
-
-        // The stub currently exits 1 immediately (before signal arrives),
-        // so we accept either 130 (signal caught) or 1 (stub exited first).
-        let code = status.code().unwrap_or(-1);
-        assert!(
-            code == 130 || code == 1,
-            "expected exit 130 (SIGINT) or 1 (stub), got {code}"
-        );
+        let code = spawn_and_signal(libc::SIGINT);
+        assert_eq!(code, 130, "expected exit 130 (SIGINT), got {code}");
     }
 
     /// SIGTERM → exit 143.
     #[test]
     fn sigterm_exits_143() {
-        let mut child = Command::new(infmonctl_bin())
-            .args(["--timeout", "60", "status"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn infmonctl");
-
-        std::thread::sleep(Duration::from_millis(100));
-
-        unsafe {
-            libc::kill(child.id() as i32, libc::SIGTERM);
-        }
-
-        let status = child.wait().expect("wait for infmonctl");
-        let code = status.code().unwrap_or(-1);
-        assert!(
-            code == 143 || code == 1,
-            "expected exit 143 (SIGTERM) or 1 (stub), got {code}"
-        );
+        let code = spawn_and_signal(libc::SIGTERM);
+        assert_eq!(code, 143, "expected exit 143 (SIGTERM), got {code}");
     }
 }
