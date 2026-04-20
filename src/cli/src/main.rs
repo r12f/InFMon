@@ -8,10 +8,13 @@ use infmon_cli::{
 };
 
 fn main() {
-    // Install SIGPIPE handler: exit 0 silently (spec requirement)
+    // Install SIGPIPE handler: exit 0 silently (spec 007 requirement).
+    // We use SIG_IGN so writes to a closed pipe return EPIPE instead of
+    // killing the process.  The write-error paths already cause the CLI
+    // to exit; we just need to make sure the exit code is 0, not 141.
     #[cfg(unix)]
     unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        libc::signal(libc::SIGPIPE, libc::SIG_IGN);
     }
 
     let cli = Cli::parse();
@@ -24,7 +27,31 @@ fn main() {
             process::exit(EXIT_FAILURE);
         });
 
-    let code = rt.block_on(async { run(cli).await });
+    let code = rt.block_on(async {
+        // Install SIGINT and SIGTERM handlers (spec 007: exit 130 / 143)
+        let sigint_task = tokio::spawn(async {
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                .expect("failed to install SIGINT handler")
+                .recv()
+                .await;
+            process::exit(EXIT_SIGINT);
+        });
+
+        let sigterm_task = tokio::spawn(async {
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("failed to install SIGTERM handler")
+                .recv()
+                .await;
+            process::exit(EXIT_SIGTERM);
+        });
+
+        let code = run(cli).await;
+
+        sigint_task.abort();
+        sigterm_task.abort();
+
+        code
+    });
     process::exit(code);
 }
 
