@@ -8,10 +8,13 @@ use infmon_cli::{
 };
 
 fn main() {
-    // Install SIGPIPE handler: exit 0 silently (spec requirement)
+    // Install SIGPIPE handler: exit 0 silently (spec 007 requirement).
+    // We use SIG_IGN so writes to a closed pipe return EPIPE instead of
+    // killing the process.  The write-error paths already cause the CLI
+    // to exit; we just need to make sure the exit code is 0, not 141.
     #[cfg(unix)]
     unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        libc::signal(libc::SIGPIPE, libc::SIG_IGN);
     }
 
     let cli = Cli::parse();
@@ -24,7 +27,39 @@ fn main() {
             process::exit(EXIT_FAILURE);
         });
 
-    let code = rt.block_on(async { run(cli).await });
+    let code = rt.block_on(async {
+        // Install SIGINT and SIGTERM handlers (spec 007: exit 130 / 143).
+        // Create the signal streams eagerly so the OS-level handler is
+        // registered before any subcommand runs — this avoids races where
+        // the process receives a signal before the handler is polled.
+        #[cfg(unix)]
+        let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+            .expect("failed to install SIGINT handler");
+        #[cfg(unix)]
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler");
+
+        #[cfg(unix)]
+        let sigint_task = tokio::spawn(async move {
+            sigint.recv().await;
+            process::exit(EXIT_SIGINT);
+        });
+
+        #[cfg(unix)]
+        let sigterm_task = tokio::spawn(async move {
+            sigterm.recv().await;
+            process::exit(EXIT_SIGTERM);
+        });
+
+        let code = run(cli).await;
+
+        #[cfg(unix)]
+        sigint_task.abort();
+        #[cfg(unix)]
+        sigterm_task.abort();
+
+        code
+    });
     process::exit(code);
 }
 
@@ -201,7 +236,15 @@ async fn run_log(cmd: &LogCommands) -> i32 {
             ref since,
             n,
         } => {
-            let _ = (follow, since, n);
+            let _ = (since, n);
+            if *follow {
+                eprintln!("infmonctl: log tail: waiting for logs (stub)");
+                // Block indefinitely — sleep long enough for signal handlers
+                // to fire. Uses tokio::time so the I/O driver (which polls
+                // for signals) is properly driven.
+                tokio::time::sleep(std::time::Duration::from_secs(86400)).await;
+                return EXIT_FAILURE;
+            }
             eprintln!("infmonctl: log tail: not yet implemented (stub)");
             EXIT_FAILURE
         }
