@@ -124,18 +124,32 @@ pub struct LoggingConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
 pub struct LogFileConfig {
     pub path: PathBuf,
+    #[serde(default = "default_rotation")]
     pub rotation: Rotation,    // default: Daily
+    #[serde(default = "default_max_files")]
     pub max_files: Option<usize>,  // default: Some(7); None = unlimited
 }
+
+fn default_rotation() -> Rotation { Rotation::Daily }
+fn default_max_files() -> Option<usize> { Some(7) }
 ```
+
+> **Note:** `#[serde(default)]` is **not** applied at the struct level on
+> `LogFileConfig` because `path: PathBuf` has no meaningful default —
+> an empty path is invalid. Instead, `#[serde(default = "…")]` is used
+> on individual fields (`rotation`, `max_files`) that have documented
+> defaults. This ensures that omitting `path` from YAML produces a
+> deserialization error, while `rotation` and `max_files` fall back to
+> their defaults.
 
 **Config validation:** When `destination` is `File`, the `file` section
 is required. This is enforced during config deserialization/validation
 (not deferred to `init_logging`), producing a clear error message like
-`"logging.file is required when destination is 'file'"`. A missing
+`"logging.file is required when destination is 'file'"`. Additionally,
+`path` must be non-empty; a `file` section with an empty or missing
+`path` produces `"logging.file.path must not be empty"`. A missing
 `file` section with `destination: syslog` is fine (`file` is ignored).
 
 **Path resolution:** `LogFileConfig.path` is a `PathBuf`. Relative
@@ -285,6 +299,7 @@ pub fn init_logging(config: &LoggingConfig, handle: &ReloadHandle) -> Result<Log
 > layer stack. The exact generic parameters are an implementation detail
 > determined at build time; the spec uses `ReloadHandle` as a shorthand.
 > The implementation should define:
+>
 > ```rust
 > type ReloadHandle = reload::Handle<Box<dyn Layer<Registry> + Send + Sync>, Registry>;
 > ```
