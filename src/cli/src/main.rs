@@ -1,10 +1,18 @@
+use std::path::Path;
 use std::process;
+use std::time::Duration;
 
 use clap::Parser;
 
 use infmon_cli::exit_codes::*;
+use infmon_cli::output::{print_output, TableDisplay};
 use infmon_cli::{
-    Cli, Commands, ConfigCommands, FlowCommands, FlowRuleCommands, LogCommands, StatsCommands,
+    Cli, Commands, ConfigCommands, FlowCommands, FlowRuleCommands, LogCommands, OutputFormat,
+    StatsCommands,
+};
+use infmon_common::ipc::control_client::InFMonControlClient;
+use infmon_common::ipc::protocol::{
+    FlowRuleData, FlowRuleDetailData, StatsShowData,
 };
 
 fn main() {
@@ -137,12 +145,22 @@ async fn run(cli: Cli) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand implementations (stubs — will await IPC client when wired)
+// Helper: create a control client from CLI args
+// ---------------------------------------------------------------------------
+
+fn make_client(cli: &Cli) -> InFMonControlClient {
+    InFMonControlClient::with_timeout(
+        Path::new(&cli.socket),
+        Duration::from_secs(cli.timeout),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand implementations
 // ---------------------------------------------------------------------------
 
 async fn run_install(force: bool) -> i32 {
     let _ = force;
-    // Check privilege
     if !is_root() {
         eprintln!("infmonctl: install requires root privileges");
         return EXIT_PERMISSION_DENIED;
@@ -213,34 +231,172 @@ async fn run_config(cmd: &ConfigCommands, cli: &Cli) -> i32 {
 }
 
 async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
+    let client = make_client(cli);
+    let output = cli.effective_output();
+
     match cmd {
         FlowRuleCommands::Add { ref spec } => {
             if !is_root() {
                 eprintln!("infmonctl: flow-rule add requires root privileges");
                 return EXIT_PERMISSION_DENIED;
             }
-            let _ = (spec, cli);
-            eprintln!("infmonctl: flow-rule add: not yet implemented (stub)");
-            EXIT_FAILURE
+
+            // Parse spec: name=<name> fields=<f1,f2,...> max_keys=<N>
+            let mut name = None;
+            let mut fields = Vec::new();
+            let mut max_keys = 1024u32;
+
+            for kv in spec {
+                if let Some((k, v)) = kv.split_once('=') {
+                    match k {
+                        "name" => name = Some(v.to_string()),
+                        "fields" => {
+                            for f in v.split(',') {
+                                match f.trim() {
+                                    "src_ip" => fields.push(infmon_common::config::model::Field::SrcIp),
+                                    "dst_ip" => fields.push(infmon_common::config::model::Field::DstIp),
+                                    "ip_proto" => fields.push(infmon_common::config::model::Field::IpProto),
+                                    "dscp" => fields.push(infmon_common::config::model::Field::Dscp),
+                                    "mirror_src_ip" => fields.push(infmon_common::config::model::Field::MirrorSrcIp),
+                                    other => {
+                                        eprintln!("infmonctl: unknown field: {other}");
+                                        return EXIT_USAGE;
+                                    }
+                                }
+                            }
+                        }
+                        "max_keys" => {
+                            max_keys = match v.parse() {
+                                Ok(n) => n,
+                                Err(_) => {
+                                    eprintln!("infmonctl: invalid max_keys: {v}");
+                                    return EXIT_USAGE;
+                                }
+                            };
+                        }
+                        _ => {
+                            eprintln!("infmonctl: unknown spec key: {k}");
+                            return EXIT_USAGE;
+                        }
+                    }
+                } else {
+                    eprintln!("infmonctl: invalid spec format, expected key=value: {kv}");
+                    return EXIT_USAGE;
+                }
+            }
+
+            let name = match name {
+                Some(n) => n,
+                None => {
+                    eprintln!("infmonctl: flow-rule add: name=<name> is required");
+                    return EXIT_USAGE;
+                }
+            };
+
+            if fields.is_empty() {
+                eprintln!("infmonctl: flow-rule add: fields=<field,...> is required");
+                return EXIT_USAGE;
+            }
+
+            let def = infmon_common::ipc::control_client::FlowRuleDef {
+                name: name.clone(),
+                fields,
+                max_keys,
+                eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
+            };
+
+            match client.flow_rule_add(def).await {
+                Ok(id) => {
+                    match output {
+                        OutputFormat::Json => {
+                            println!(
+                                "{}",
+                                serde_json::json!({"id": id.to_string(), "name": name})
+                            );
+                        }
+                        OutputFormat::Table => {
+                            println!("Added flow rule '{}' (id: {})", name, id);
+                        }
+                    }
+                    EXIT_SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("infmonctl: flow-rule add: {e}");
+                    ctl_error_to_exit_code(&e)
+                }
+            }
         }
         FlowRuleCommands::Rm { ref target, all } => {
             if !is_root() {
                 eprintln!("infmonctl: flow-rule rm requires root privileges");
                 return EXIT_PERMISSION_DENIED;
             }
-            let _ = (target, all, cli);
-            eprintln!("infmonctl: flow-rule rm: not yet implemented (stub)");
-            EXIT_FAILURE
+            let _ = all;
+
+            match client.flow_rule_rm(target).await {
+                Ok(()) => {
+                    if !cli.quiet {
+                        eprintln!("Removed flow rule '{target}'");
+                    }
+                    EXIT_SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("infmonctl: flow-rule rm: {e}");
+                    ctl_error_to_exit_code(&e)
+                }
+            }
         }
         FlowRuleCommands::List => {
-            let _ = cli;
-            eprintln!("infmonctl: flow-rule list: not yet implemented (stub)");
-            EXIT_FAILURE
+            match client.flow_rule_list().await {
+                Ok(rules) => {
+                    let data: Vec<FlowRuleData> = rules.iter().map(|r| FlowRuleData {
+                        name: r.name.clone(),
+                        fields: r.fields.clone(),
+                        max_keys: r.max_keys,
+                        eviction_policy: r.eviction_policy,
+                    }).collect();
+                    print_output(&FlowRuleListOutput(data), &output, cli.compact);
+                    EXIT_SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("infmonctl: flow-rule list: {e}");
+                    ctl_error_to_exit_code(&e)
+                }
+            }
         }
         FlowRuleCommands::Show { ref target } => {
-            let _ = (target, cli);
-            eprintln!("infmonctl: flow-rule show: not yet implemented (stub)");
-            EXIT_FAILURE
+            match client.flow_rule_show(target).await {
+                Ok(stats) => {
+                    // Use protocol types for JSON output
+                    let detail = FlowRuleDetailData {
+                        name: stats.name,
+                        fields: stats.fields.iter().filter_map(field_id_to_field).collect(),
+                        max_keys: 0, // not available from FlowRuleStats
+                        eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
+                        counters: infmon_common::ipc::protocol::FlowRuleCountersData {
+                            packets: stats.counters.packets,
+                            bytes: stats.counters.bytes,
+                            evictions: stats.counters.evictions,
+                            drops: stats.counters.drops,
+                        },
+                        flows: stats.flows.iter().map(|f| {
+                            infmon_common::ipc::protocol::FlowEntryData {
+                                key: f.key.iter().map(|v| format!("{:?}", v)).collect(),
+                                packets: f.counters.packets,
+                                bytes: f.counters.bytes,
+                                first_seen_ns: f.counters.first_seen_ns,
+                                last_seen_ns: f.counters.last_seen_ns,
+                            }
+                        }).collect(),
+                    };
+                    print_output(&FlowRuleShowOutput(detail), &output, cli.compact);
+                    EXIT_SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("infmonctl: flow-rule show: {e}");
+                    ctl_error_to_exit_code(&e)
+                }
+            }
         }
     }
 }
@@ -265,15 +421,27 @@ async fn run_flow(cmd: &FlowCommands, cli: &Cli) -> i32 {
 }
 
 async fn run_stats(cmd: &StatsCommands, cli: &Cli) -> i32 {
+    let client = make_client(cli);
+    let output = cli.effective_output();
+
     match cmd {
         StatsCommands::Show {
             ref name,
             top,
             ref watch,
         } => {
-            let _ = (name, top, watch, cli);
-            eprintln!("infmonctl: stats show: not yet implemented (stub)");
-            EXIT_FAILURE
+            let _ = (top, watch);
+
+            match client.stats_show(name.as_deref()).await {
+                Ok(data) => {
+                    print_output(&StatsShowOutput(data), &output, cli.compact);
+                    EXIT_SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("infmonctl: stats show: {e}");
+                    ctl_error_to_exit_code(&e)
+                }
+            }
         }
         StatsCommands::Export { ref format } => {
             let _ = (format, cli);
@@ -312,6 +480,73 @@ async fn run_health(cli: &Cli) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// Output types with TableDisplay + Serialize
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize)]
+struct FlowRuleListOutput(Vec<FlowRuleData>);
+
+impl TableDisplay for FlowRuleListOutput {
+    fn print_table(&self) {
+        if self.0.is_empty() {
+            println!("No flow rules configured.");
+            return;
+        }
+        println!("{:<20} {:<30} {:>10}", "NAME", "FIELDS", "MAX_KEYS");
+        for r in &self.0 {
+            let fields: Vec<String> = r.fields.iter().map(|f| format!("{:?}", f).to_lowercase()).collect();
+            println!("{:<20} {:<30} {:>10}", r.name, fields.join(","), r.max_keys);
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct FlowRuleShowOutput(FlowRuleDetailData);
+
+impl TableDisplay for FlowRuleShowOutput {
+    fn print_table(&self) {
+        let d = &self.0;
+        println!("Name:       {}", d.name);
+        let fields: Vec<String> = d.fields.iter().map(|f| format!("{:?}", f).to_lowercase()).collect();
+        println!("Fields:     {}", fields.join(", "));
+        println!("Max keys:   {}", d.max_keys);
+        println!("Counters:");
+        println!("  Packets:    {}", d.counters.packets);
+        println!("  Bytes:      {}", d.counters.bytes);
+        println!("  Evictions:  {}", d.counters.evictions);
+        println!("  Drops:      {}", d.counters.drops);
+        if !d.flows.is_empty() {
+            println!("Flows ({}):", d.flows.len());
+            for f in &d.flows {
+                println!("  Key: {}  Pkts: {}  Bytes: {}", f.key.join(","), f.packets, f.bytes);
+            }
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct StatsShowOutput(StatsShowData);
+
+impl TableDisplay for StatsShowOutput {
+    fn print_table(&self) {
+        if self.0.flow_rules.is_empty() {
+            println!("No flow rule stats available.");
+            return;
+        }
+        println!(
+            "{:<20} {:>12} {:>12} {:>10} {:>8} {:>8}",
+            "RULE", "PACKETS", "BYTES", "FLOWS", "EVICT", "DROPS"
+        );
+        for r in &self.0.flow_rules {
+            println!(
+                "{:<20} {:>12} {:>12} {:>10} {:>8} {:>8}",
+                r.name, r.packets, r.bytes, r.active_flows, r.evictions, r.drops
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -323,5 +558,32 @@ fn is_root() -> bool {
     #[cfg(not(unix))]
     {
         false
+    }
+}
+
+fn ctl_error_to_exit_code(e: &infmon_common::ipc::CtlError) -> i32 {
+    use infmon_common::ipc::CtlError;
+    match e {
+        CtlError::Connect(_) => EXIT_FRONTEND_UNREACHABLE,
+        CtlError::Backend { code, .. } => {
+            match *code {
+                3 => EXIT_NOT_FOUND,
+                6 => EXIT_CONFLICT,
+                _ => EXIT_FAILURE,
+            }
+        }
+        _ => EXIT_FAILURE,
+    }
+}
+
+fn field_id_to_field(id: &infmon_common::ipc::types::FieldId) -> Option<infmon_common::config::model::Field> {
+    use infmon_common::config::model::Field;
+    use infmon_common::ipc::types::FieldId;
+    match id {
+        FieldId::SrcIp => Some(Field::SrcIp),
+        FieldId::DstIp => Some(Field::DstIp),
+        FieldId::IpProto => Some(Field::IpProto),
+        FieldId::Dscp => Some(Field::Dscp),
+        FieldId::MirrorSrcIp => Some(Field::MirrorSrcIp),
     }
 }

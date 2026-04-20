@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use infmon_common::ipc::stats_client::InFMonStatsClient;
 
+use crate::control::{self, ControlHandle, ControlState};
 use crate::exporter::{
     self, find_factory, snapshot_channel, validate_registrations, ExporterConfig, ExporterHandle,
     SnapshotSender,
@@ -47,6 +48,7 @@ pub struct Frontend {
     poller_handle: Option<PollerHandle>,
     exporter_handles: Vec<ExporterHandle>,
     exporter_senders: Vec<SnapshotSender>,
+    control_handle: Option<ControlHandle>,
     config_path: PathBuf,
     shutdown: Arc<AtomicBool>,
 }
@@ -154,10 +156,27 @@ impl Frontend {
             .collect();
         let poller_handle = poller::spawn(poller_config, raw_senders);
 
+        // Spawn control server for CLI RPCs
+        let control_socket = PathBuf::from(&frontend_cfg.control_socket);
+        let control_state = Arc::new(ControlState::new(
+            config.flow_rules.clone(),
+        ));
+        let control_handle = match control::spawn(&control_socket, control_state) {
+            Ok(h) => {
+                tracing::info!("control server listening on {}", control_socket.display());
+                Some(h)
+            }
+            Err(e) => {
+                tracing::warn!("failed to start control server: {e}");
+                None
+            }
+        };
+
         Ok(Frontend {
             poller_handle: Some(poller_handle),
             exporter_handles,
             exporter_senders,
+            control_handle,
             config_path: config_path.to_path_buf(),
             shutdown,
         })
@@ -208,6 +227,12 @@ impl Frontend {
         let handles = std::mem::take(&mut self.exporter_handles);
         for handle in handles {
             handle.join();
+        }
+
+        // 4. Stop control server
+        if let Some(h) = self.control_handle.take() {
+            h.stop();
+            tracing::info!("control server stopped");
         }
 
         tracing::info!("infmon-frontend stopped");
