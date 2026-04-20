@@ -156,6 +156,7 @@ tracing_subscriber::fmt()
 ```
 
 Key diagnostic points that emit `tracing::debug!`:
+
 - Connecting to the IPC socket
 - Sending a command
 - Receiving a response
@@ -189,7 +190,7 @@ pub fn init_logging(config: &LoggingConfig) -> Result<LoggingGuard, Box<dyn Erro
 
 ### CLI flag
 
-```
+```text
 infmonctl [OPTIONS] <COMMAND>
 
 Options:
