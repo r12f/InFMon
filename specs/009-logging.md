@@ -7,6 +7,7 @@
 | 0.1     | 2026-04-20 | Riff (r12f)  | Initial draft. |
 | 0.2     | 2026-04-20 | Riff (r12f)  | Address review: add enum defs, PathBuf, error contract, format, directory creation, naming, validation, SIGHUP, max_log_files, RUST_LOG directives, bootstrap threading, backpressure note. |
 | 0.3     | 2026-04-20 | Riff (r12f)  | Address review: use reload::Layer for subscriber swap (set_global_default is once-only), add #[derive(Deserialize)] to config structs. |
+| 0.4     | 2026-04-20 | Riff (r12f)  | Address review: add #[serde(default)] to config structs, change max_files to Option<usize> (None=unlimited), add ReloadHandle type alias note. |
 
 - **Depends on:** [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md)
 - **Related:** [`008-packaging-install`](008-packaging-install.md)
@@ -77,7 +78,7 @@ logging:
   file:
     path: /var/log/infmon/infmon.log
     rotation: daily    # daily | hourly | never
-    max_files: 7       # max rotated files to retain (0 = unlimited)
+    max_files: 7       # max rotated files to retain (omit for unlimited)
 ```
 
 Rust types:
@@ -115,6 +116,7 @@ pub enum Rotation {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct LoggingConfig {
     pub level: LogLevel,       // default: Info
     pub destination: LogType,  // default: Syslog
@@ -122,10 +124,11 @@ pub struct LoggingConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct LogFileConfig {
     pub path: PathBuf,
     pub rotation: Rotation,    // default: Daily
-    pub max_files: usize,      // default: 7
+    pub max_files: Option<usize>,  // default: Some(7); None = unlimited
 }
 ```
 
@@ -198,8 +201,10 @@ level — this allows per-crate filtering for ad-hoc debugging.
 - Rotation options: `daily`, `hourly`, `never`.
 - **Max log files:** Uses `RollingFileAppender::builder().max_log_files(N)`
   to cap retained rotated files. Default: 7 (for daily rotation, one
-  week of history). Set `max_files: 0` to disable the cap (rely on
-  external `logrotate` instead).
+  week of history). Omit the `max_files` field (or set it to `null`) to
+  disable the cap and rely on external `logrotate` instead. Internally,
+  `max_files` is `Option<usize>` — when `None`, the builder is called
+  without `.max_log_files()`, leaving retention uncapped.
 - Wrapped in `tracing_appender::non_blocking` for async-safe writes.
 - The `WorkerGuard` from the non-blocking wrapper is stored in
   `LoggingGuard` to guarantee flush-on-drop.
@@ -259,7 +264,7 @@ logging:                      # optional, defaults applied if absent
   file:                       # required when destination=file
     path: <PathBuf>           # required
     rotation: <Rotation>      # optional, default: daily
-    max_files: <usize>        # optional, default: 7
+    max_files: <usize>        # optional, default: 7; omit for unlimited
 ```
 
 ### Public API (`infmon-frontend::logging`)
@@ -274,6 +279,15 @@ pub fn init_bootstrap() -> BootstrapGuard;
 /// On error, the bootstrap subscriber remains active.
 pub fn init_logging(config: &LoggingConfig, handle: &ReloadHandle) -> Result<LoggingGuard, Box<dyn Error>>;
 ```
+
+> **Note:** `ReloadHandle` is a type alias for the concrete
+> `tracing_subscriber::reload::Handle<…>` parameterized by the full
+> layer stack. The exact generic parameters are an implementation detail
+> determined at build time; the spec uses `ReloadHandle` as a shorthand.
+> The implementation should define:
+> ```rust
+> type ReloadHandle = reload::Handle<Box<dyn Layer<Registry> + Send + Sync>, Registry>;
+> ```
 
 ### CLI flag
 
