@@ -8,6 +8,33 @@ use infmon_cli::{
 };
 
 fn main() {
+    // Handle --generate-completions and --generate-manpage before clap
+    // parsing, since these flags are used without a subcommand.
+    // NOTE: We scan all args (not just args[1]) so that the flags work
+    // regardless of position.  This is intentional — these are hidden
+    // build-time helpers, not user-facing subcommands, so a positional
+    // collision (e.g. `infmonctl install --generate-completions bash`)
+    // is acceptable and extremely unlikely in practice.
+    let args: Vec<String> = std::env::args().collect();
+    for (i, arg) in args.iter().enumerate() {
+        if arg == "--generate-completions" {
+            let shell = args.get(i + 1).map(|s| s.as_str()).unwrap_or_else(|| {
+                eprintln!("infmonctl: --generate-completions requires a shell argument");
+                process::exit(EXIT_USAGE);
+            });
+            infmon_cli::generate_completions(shell);
+            process::exit(EXIT_SUCCESS);
+        }
+        if arg.starts_with("--generate-completions=") {
+            let shell = arg.trim_start_matches("--generate-completions=");
+            infmon_cli::generate_completions(shell);
+            process::exit(EXIT_SUCCESS);
+        }
+        if arg == "--generate-manpage" {
+            infmon_cli::generate_manpage();
+            process::exit(EXIT_SUCCESS);
+        }
+    }
     // Install SIGPIPE handler: exit 0 silently (spec 007 requirement).
     // We use SIG_IGN so writes to a closed pipe return EPIPE instead of
     // killing the process.  The write-error paths already cause the CLI

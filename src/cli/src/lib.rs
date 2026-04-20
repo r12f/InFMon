@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 
 pub mod exit_codes;
 pub mod output;
@@ -246,4 +246,41 @@ pub enum LogCommands {
         #[arg(short, default_value_t = 100)]
         n: u64,
     },
+}
+
+// -----------------------------------------------------------------------
+// Shell completion and man page generation helpers
+// -----------------------------------------------------------------------
+
+/// Generate shell completions for the given shell and write to stdout.
+pub fn generate_completions(shell: &str) {
+    use clap_complete::{generate, Shell};
+    use std::io::Write;
+    let shell: Shell = shell.parse().unwrap_or_else(|_| {
+        eprintln!("infmonctl: unsupported shell: {shell}");
+        std::process::exit(exit_codes::EXIT_USAGE);
+    });
+    let mut cmd = Cli::command();
+    let mut out = std::io::stdout().lock();
+    generate(shell, &mut cmd, "infmonctl", &mut out);
+    out.flush().unwrap_or_else(|e| {
+        eprintln!("infmonctl: failed to write completions: {e}");
+        std::process::exit(exit_codes::EXIT_FAILURE);
+    });
+}
+
+/// Generate a man page and write to stdout.
+pub fn generate_manpage() {
+    use std::io::Write;
+    let cmd = Cli::command();
+    let man = clap_mangen::Man::new(cmd);
+    let mut out = std::io::stdout().lock();
+    man.render(&mut out).unwrap_or_else(|e| {
+        eprintln!("infmonctl: failed to generate man page: {e}");
+        std::process::exit(exit_codes::EXIT_FAILURE);
+    });
+    out.flush().unwrap_or_else(|e| {
+        eprintln!("infmonctl: failed to flush man page output: {e}");
+        std::process::exit(exit_codes::EXIT_FAILURE);
+    });
 }
