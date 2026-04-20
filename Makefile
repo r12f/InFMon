@@ -12,7 +12,8 @@ help:
 	@echo "  make lint                  Run all pre-commit hooks across the tree"
 	@echo "  make cppcheck-full         Run cppcheck over the full C/C++ tree"
 	@echo "  make test                  Run unit tests (Rust + C/C++); E2E NOT included"
-	@echo "  make e2e                   Print the manual E2E procedure (run on r12f-bf3)"
+	@echo "  make e2e                   Run E2E tests (requires BF3 + loopback or remote TX)"
+	@echo "                             Pass PYTEST_ARGS to filter (e.g. PYTEST_ARGS='-k erspan3')"
 	@echo "  make build                 Build all targets (Rust + C/C++)"
 	@echo "  make clean                 Remove all build artefacts"
 	@echo "  make ci-branch-protection  Apply branch protection to main (admin only)"
@@ -65,10 +66,11 @@ test:
 	@echo "      'make e2e'. See specs/001-ci-and-precommit.md §6."
 
 e2e:
-	@echo "InFMon E2E tests run manually on r12f-bf3 (BlueField-3 bench machine)."
-	@echo "They require SR-IOV, hugepages, and a loaded VPP plugin — none of which"
-	@echo "are available in CI. See tests/README.md for the procedure."
-	@false
+	@echo "==> E2E tests (requires BF3 + physical loopback or remote TX)"
+	@[ "$$INFMON_E2E_ENABLED" = "1" ] || { echo "Set INFMON_E2E_ENABLED=1 to run E2E tests (requires BF3 hardware)"; exit 1; }
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found"; exit 1; }
+	@python3 -c 'import pytest' 2>/dev/null || { echo "pytest not installed — pip install pytest"; exit 1; }
+	@cd tests/e2e && python3 -m pytest -v --tb=short $(PYTEST_ARGS)
 
 build:
 	@echo "==> Rust workspace"
