@@ -203,7 +203,7 @@ fn decode_snapshot(
             FlowRuleStats {
                 name: desc.flow_rule_id.to_string(),
                 fields,
-                max_keys: 0, // TODO: wire from backend descriptor
+                max_keys: u32::MAX, // sentinel: not yet wired from backend descriptor
                 eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop, // TODO: wire from backend descriptor
                 flows,
                 counters: FlowRuleCounters {

@@ -79,6 +79,14 @@ pub fn spawn(socket_path: &Path, state: Arc<ControlState>) -> std::io::Result<Co
     let listener = UnixListener::bind(socket_path)?;
     listener.set_nonblocking(false)?;
 
+    // Restrict socket to owner-only (0o600) so unprivileged local users
+    // cannot connect and mutate flow rules.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))?;
+    }
+
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let stop2 = stop.clone();
     let path = socket_path.to_path_buf();
@@ -104,7 +112,7 @@ fn run_server(
     state: Arc<ControlState>,
     stop: &std::sync::atomic::AtomicBool,
 ) {
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
 
     // Set a timeout so we periodically check the stop flag
     listener
@@ -131,26 +139,30 @@ fn run_server(
         let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(10)));
         let _ = stream.set_write_timeout(Some(std::time::Duration::from_secs(10)));
 
-        let mut reader = BufReader::new(&stream);
+        // Cap read at 64 KiB during I/O (via Take adapter) to prevent OOM
+        // from malicious clients sending multi-GB lines without newlines.
+        const MAX_LINE: usize = 64 * 1024;
+        let limited = (&stream).take(MAX_LINE as u64);
+        let mut reader = BufReader::new(limited);
         let mut line = String::new();
 
-        // Cap read to 64 KiB to prevent OOM from malicious clients.
-        const MAX_LINE: usize = 64 * 1024;
         match reader.read_line(&mut line) {
             Ok(0) => continue,
-            Ok(_) if line.len() > MAX_LINE => {
-                let resp = Response::err(-1, "request too large");
-                let mut resp_line = serde_json::to_string(&resp).unwrap_or_default();
-                resp_line.push('\n');
-                let mut writer = &stream;
-                let _ = writer.write_all(resp_line.as_bytes());
-                continue;
-            }
             Ok(_) => {}
             Err(e) => {
                 tracing::warn!("control: read error: {e}");
                 continue;
             }
+        }
+
+        // If we hit the limit without a newline, the request is too large.
+        if line.len() >= MAX_LINE && !line.ends_with('\n') {
+            let resp = Response::err(-1, "request too large");
+            let mut resp_line = serde_json::to_string(&resp).unwrap_or_default();
+            resp_line.push('\n');
+            let mut writer = &stream;
+            let _ = writer.write_all(resp_line.as_bytes());
+            continue;
         }
 
         let response = match serde_json::from_str::<Request>(&line) {

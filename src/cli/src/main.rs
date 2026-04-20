@@ -240,6 +240,7 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
             let mut name = None;
             let mut fields = Vec::new();
             let mut max_keys = 1024u32;
+            let mut eviction_policy = infmon_common::config::model::EvictionPolicy::LruDrop;
 
             for kv in spec {
                 if let Some((k, v)) = kv.split_once('=') {
@@ -278,6 +279,15 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
                                 }
                             };
                         }
+                        "eviction_policy" => {
+                            eviction_policy = match v {
+                                "lru_drop" => infmon_common::config::model::EvictionPolicy::LruDrop,
+                                other => {
+                                    eprintln!("infmonctl: unknown eviction_policy: {other} (supported: lru_drop)");
+                                    return EXIT_USAGE;
+                                }
+                            };
+                        }
                         _ => {
                             eprintln!("infmonctl: unknown spec key: {k}");
                             return EXIT_USAGE;
@@ -306,7 +316,7 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
                 name: name.clone(),
                 fields,
                 max_keys,
-                eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
+                eviction_policy,
             };
 
             match client.flow_rule_add(def).await {

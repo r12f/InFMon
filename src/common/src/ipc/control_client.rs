@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use super::error::CtlError;
@@ -93,7 +93,10 @@ impl InFMonControlClient {
             })?
             .map_err(CtlError::Io)?;
 
-        let mut buf_reader = BufReader::new(reader);
+        // Cap response read at 64 KiB to prevent OOM from a buggy/compromised server.
+        const MAX_RESPONSE: u64 = 64 * 1024;
+        let limited_reader = reader.take(MAX_RESPONSE);
+        let mut buf_reader = BufReader::new(limited_reader);
         let mut response_line = String::new();
         tokio::time::timeout(self.timeout, buf_reader.read_line(&mut response_line))
             .await
