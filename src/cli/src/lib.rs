@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 
 pub mod exit_codes;
 pub mod output;
@@ -246,4 +246,35 @@ pub enum LogCommands {
         #[arg(short, default_value_t = 100)]
         n: u64,
     },
+}
+
+// -----------------------------------------------------------------------
+// Shell completion and man page generation helpers
+// -----------------------------------------------------------------------
+
+/// Generate shell completions for the given shell and write to stdout.
+pub fn generate_completions(shell: &str) {
+    use clap_complete::{generate, Shell};
+    let shell = match shell {
+        "bash" => Shell::Bash,
+        "zsh" => Shell::Zsh,
+        "fish" => Shell::Fish,
+        _ => {
+            eprintln!("infmonctl: unsupported shell: {shell} (expected bash, zsh, or fish)");
+            std::process::exit(exit_codes::EXIT_USAGE);
+        }
+    };
+    let mut cmd = Cli::command();
+    generate(shell, &mut cmd, "infmonctl", &mut std::io::stdout());
+}
+
+/// Generate a man page and write to stdout.
+pub fn generate_manpage() {
+    let cmd = Cli::command();
+    let man = clap_mangen::Man::new(cmd);
+    man.render(&mut std::io::stdout())
+        .unwrap_or_else(|e| {
+            eprintln!("infmonctl: failed to generate man page: {e}");
+            std::process::exit(exit_codes::EXIT_FAILURE);
+        });
 }
