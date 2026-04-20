@@ -134,6 +134,7 @@ def infmon_env():
     _verify_ping()
 
     # 3. Ensure InFMon is running
+    service_was_inactive = _run("systemctl is-active infmon", check=False).stdout.strip() != "active"
     _ensure_infmon_running()
 
     # 4. Yield config for tests
@@ -148,6 +149,10 @@ def infmon_env():
     }
 
     # ---- Teardown ----
+    # Stop InFMon if we started it during setup.
+    if service_was_inactive:
+        _run("systemctl stop infmon", check=False)
+
     # Flush IPs assigned during setup to avoid stale addresses on next run.
     tx_iface = _env("INFMON_E2E_TX_IFACE")
     _run(f"ip addr flush dev {shlex.quote(tx_iface)}", check=False)
