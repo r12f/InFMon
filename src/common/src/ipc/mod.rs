@@ -2,6 +2,7 @@
 pub mod control_client;
 pub mod decode;
 pub mod error;
+pub mod protocol;
 pub mod stats_client;
 pub mod types;
 

@@ -86,6 +86,8 @@ pub struct FlowRuleCounters {
 pub struct FlowRuleStats {
     pub name: String,
     pub fields: Vec<FieldId>,
+    pub max_keys: u32,
+    pub eviction_policy: crate::config::model::EvictionPolicy,
     pub flows: Vec<FlowStats>,
     pub counters: FlowRuleCounters,
 }

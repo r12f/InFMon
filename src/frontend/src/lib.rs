@@ -1,3 +1,4 @@
+pub mod control;
 pub mod exporter;
 pub mod lifecycle;
 pub mod logging;

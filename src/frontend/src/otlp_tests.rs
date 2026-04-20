@@ -104,6 +104,8 @@ fn build_request_with_flows() {
         flow_rules: vec![FlowRuleStats {
             name: "test-rule".into(),
             fields: vec![FieldId::SrcIp, FieldId::DstIp],
+            max_keys: 1024,
+            eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
             flows: vec![FlowStats {
                 key: vec![
                     FieldValue::Ip("10.0.0.1".parse().unwrap()),
@@ -177,6 +179,8 @@ fn build_request_cardinality_cap() {
         flow_rules: vec![FlowRuleStats {
             name: "big-rule".into(),
             fields: vec![FieldId::SrcIp],
+            max_keys: 1024,
+            eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
             flows,
             counters: FlowRuleCounters::default(),
         }],
@@ -262,6 +266,8 @@ fn flow_attributes_only_for_declared_fields() {
     let fr = FlowRuleStats {
         name: "dscp-only".into(),
         fields: vec![FieldId::Dscp],
+        max_keys: 1024,
+        eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
         flows: vec![],
         counters: FlowRuleCounters::default(),
     };
@@ -288,6 +294,8 @@ fn flow_attributes_sorted_by_key() {
             FieldId::IpProto,
             FieldId::Dscp,
         ],
+        max_keys: 1024,
+        eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
         flows: vec![],
         counters: FlowRuleCounters::default(),
     };
@@ -393,6 +401,8 @@ fn self_observability_points_emitted_tracks_correctly() {
         flow_rules: vec![FlowRuleStats {
             name: "test-rule".into(),
             fields: vec![FieldId::SrcIp],
+            max_keys: 1024,
+            eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
             flows: vec![FlowStats {
                 key: vec![FieldValue::Ip("10.0.0.1".parse().unwrap())],
                 counters: FlowCounters {
@@ -445,6 +455,8 @@ fn self_observability_points_dropped_on_cap() {
         flow_rules: vec![FlowRuleStats {
             name: "test-rule".into(),
             fields: vec![FieldId::SrcIp],
+            max_keys: 1024,
+            eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
             flows: vec![
                 FlowStats {
                     key: vec![FieldValue::Ip("10.0.0.1".parse().unwrap())],
