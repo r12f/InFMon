@@ -16,6 +16,10 @@ infmon-common = { path = "../common", default-features = false }
 inventory = "0.3"
 libc = "0.2"
 log = "0.4"
+syslog-tracing = "0.3"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 # NOTE: opentelemetry-proto 0.27 with gen-tonic-messages requires tonic 0.12.
 # Upgrading either crate independently may cause compile errors — always upgrade together.
 opentelemetry-proto = { version = "0.27", features = ["gen-tonic-messages", "metrics"] }
