@@ -5,11 +5,9 @@ name: package-deb
 # binary packages + the meta package and uploads them as workflow
 # artefacts.
 #
-# This workflow is intentionally permissive while the source trees
-# are still empty: debian/rules skips the cmake/cargo steps when
-# the corresponding inputs are missing, so this gate verifies the
-# packaging tree itself (control / changelog / scripts / unit file)
-# before the implementations land.
+# The backend VPP plugin build is skipped until vpp-dev is available
+# in CI (a stub .so is used). The frontend and CLI are built from
+# the Rust workspace with cargo.
 
 on:
   push:
@@ -19,6 +17,8 @@ on:
       - 'packaging/tools/sync-debian-changelog.py'
       - 'CHANGELOG.md'
       - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/package-deb.yml'
   pull_request:
     paths:
@@ -26,6 +26,8 @@ on:
       - 'packaging/tools/sync-debian-changelog.py'
       - 'CHANGELOG.md'
       - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/package-deb.yml'
   workflow_dispatch:
 
@@ -56,6 +58,19 @@ jobs:
       - name: Run sync script unit tests
         run: python3 -m unittest discover -s packaging/tools/tests -v
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: deb-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: deb-arm64-cargo-
+
       - name: Install build tooling
         run: |
           sudo apt-get update
@@ -65,7 +80,10 @@ jobs:
             debhelper \
             dpkg-dev \
             fakeroot \
-            lintian
+            lintian \
+            cmake \
+            pkg-config \
+            libgtest-dev
 
       - name: Validate debian/control parses
         run: dpkg-checkbuilddeps || true   # informational
@@ -93,6 +111,7 @@ jobs:
         env:
           DEB_BUILD_OPTIONS: "nocheck parallel=2"
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           dpkg-buildpackage -S -us -uc -d
           ls -la ../
 
@@ -100,13 +119,10 @@ jobs:
         env:
           DEB_BUILD_OPTIONS: "nocheck parallel=2"
         run: |
-          # -B = binary-only, -d = ignore build-dep check (we don't
-          # have vpp-dev installed and the rules file no-ops the
-          # build steps when the source trees are missing). When the
-          # backend/frontend impls land we will drop -d and install
-          # the real build-deps via mk-build-deps.
-          # TODO(DPU-XX): remove -d and add mk-build-deps step once
-          # VPP build-deps are available in CI.
+          export PATH="$HOME/.cargo/bin:$PATH"
+          # -B = binary-only, -d = ignore build-dep check (vpp-dev is
+          # not available in CI so the backend plugin build is stubbed).
+          # Frontend and CLI are built from the Rust workspace.
           dpkg-buildpackage -B -us -uc -d
           mkdir -p artifacts
           mv ../*.deb ../*.changes ../*.buildinfo artifacts/ 2>/dev/null || true

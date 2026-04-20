@@ -17,9 +17,17 @@
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export DH_VERBOSE = 1
 
+# Ensure cargo is on PATH even when dpkg-buildpackage sanitises the
+# environment (the dtolnay/rust-toolchain action sets GITHUB_PATH but
+# dpkg-buildpackage may not inherit it).
+export PATH := $(HOME)/.cargo/bin:$(PATH)
+
 # Cargo / cargo target dirs — keep build artefacts inside debian/ so
 # `dpkg-buildpackage -nc` and clean(1) behave predictably.
-export CARGO_HOME       ?= $(CURDIR)/debian/cargo-home
+# Force a build-local CARGO_HOME so that `dh_auto_clean → rm -rf
+# $(CARGO_HOME)` never accidentally deletes the system toolchain
+# installed by dtolnay/rust-toolchain (which lives in ~/.cargo).
+export CARGO_HOME       := $(CURDIR)/debian/cargo-home
 export CARGO_TARGET_DIR ?= $(CURDIR)/target
 
 # CMake build tree for the backend plugin.
@@ -59,9 +67,9 @@ override_dh_auto_configure:
 # ----------------------------------------------------------------------
 override_dh_auto_build:
 	# ---- backend (VPP plugin) ----
-	if [ -f src/infmon-backend/CMakeLists.txt ]; then \
+	if [ -f src/backend/CMakeLists.txt ]; then \
 	  echo ">>> building infmon-backend (cmake)"; \
-	  cmake -S src/infmon-backend -B $(BACKEND_BUILD_DIR) \
+	  cmake -S src/backend -B $(BACKEND_BUILD_DIR) \
 	        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
 	        -DCMAKE_INSTALL_PREFIX=/usr; \
 	  cmake --build $(BACKEND_BUILD_DIR) --parallel; \
@@ -73,8 +81,8 @@ override_dh_auto_build:
 	if [ -f Cargo.toml ]; then \
 	  echo ">>> building infmon-frontend + infmon-cli (cargo)"; \
 	  cargo build --release --locked \
-	      $$( [ -d src/infmon-frontend ] && echo -p infmon-frontend ) \
-	      $$( [ -d src/infmon-cli ]      && echo -p infmon-cli ); \
+	      $$( [ -d src/frontend ] && echo -p infmon-frontend ) \
+	      $$( [ -d src/cli ]      && echo -p infmon-cli ); \
 	else \
 	  echo ">>> skipping cargo build (no Cargo.toml yet)"; \
 	fi
