@@ -136,9 +136,9 @@ override_dh_auto_install:
 	    debian/tmp/usr/bin/infmonctl; \
 	fi
 
-	install -d debian/tmp/etc/infmon/flow_defs.d
-	install -m 0644 debian/configs/backend.conf  debian/tmp/etc/infmon/backend.conf
-	install -m 0644 debian/configs/frontend.conf debian/tmp/etc/infmon/frontend.conf
+	# Shared config → /etc/infmon/config.yaml (owned by infmon-backend)
+	install -d debian/tmp/etc/infmon/flow_rules.d
+	install -m 0640 debian/configs/config.yaml debian/tmp/etc/infmon/config.yaml
 
 	dh_auto_install
 
@@ -147,7 +147,7 @@ override_dh_auto_install:
 	for f in usr/lib/vpp_plugins/infmon.so \
 	         usr/share/vpp/api/plugins/infmon.api.json \
 	         usr/bin/infmon-frontend usr/bin/infmonctl \
-	         etc/infmon/backend.conf etc/infmon/frontend.conf \
+	         etc/infmon/config.yaml \
 	         completions/infmonctl completions/_infmonctl \
 	         man/infmonctl.1; do \
 	  if [ ! -e debian/tmp/$$f ]; then \
@@ -160,12 +160,10 @@ override_dh_auto_install:
 # ----------------------------------------------------------------------
 # systemd — installed via debian/infmon-frontend.service which
 # dh_installsystemd picks up automatically.
+# Disabled by default per spec 008 §6: --no-enable --no-start.
 # ----------------------------------------------------------------------
 override_dh_installsystemd:
-	dh_installsystemd --name=infmon-frontend --no-start
-	# We deliberately do not start at install time when running under
-	# dpkg-buildpackage; the postinst handles policy-aware start on the
-	# target system.
+	dh_installsystemd --name=infmon-frontend --no-enable --no-start
 
 # ----------------------------------------------------------------------
 # dh_missing — tolerate absent files while source trees are landing.

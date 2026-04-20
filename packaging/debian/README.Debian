@@ -27,6 +27,15 @@ installing infmon:
     sudo apt update
     sudo apt install infmon
 
+IMPORTANT: Verify the fd.io GPG key fingerprint out-of-band before
+trusting it. After downloading, inspect the key:
+
+    gpg --show-keys /usr/share/keyrings/fdio-archive-keyring.gpg
+
+Compare the fingerprint against the value published on the fd.io
+project website. A compromised signing key means a compromised VPP
+on a production DPU.
+
 InFMon does NOT add the fd.io repo for you. Silently editing
 /etc/apt/sources.list.d/ from a maintainer script would be hostile;
 see spec 008 §4.2.
@@ -39,22 +48,53 @@ was built from source rather than installed via apt. In that case the
 declared dependency on `vpp (>= 24.10)` may not be satisfied even
 though VPP is in fact present.
 
-Two options:
+The recommended approach is to build an `equivs` shim package that
+satisfies the `vpp` / `vpp-plugin-core` virtual dependencies:
 
-  1. Build a local `vpp` .deb whose Provides:/Version: satisfies the
-     dependency, install it once, then `apt install infmon`.
+    sudo apt install equivs
+    cat > vpp-local.cfg <<EOF
+    Section: misc
+    Priority: optional
+    Standards-Version: 4.6.2
+    Package: vpp
+    Version: 24.10.0-local1
+    Provides: vpp, vpp-plugin-core
+    Description: Local VPP shim (equivs) for InFMon dependency resolution.
+    EOF
+    equivs-build vpp-local.cfg
+    sudo dpkg -i vpp_24.10.0-local1_all.deb
+    sudo apt install infmon
 
-  2. Force install via:
+Alternatively, if you already build VPP as a .deb locally, ensure it
+declares `Provides: vpp, vpp-plugin-core` so apt resolves cleanly.
 
-         sudo apt install --no-install-recommends infmon-backend
-         # or, if apt refuses outright:
-         sudo dpkg --force-depends -i infmon-backend_*.deb
+We deliberately do NOT recommend `dpkg --force-depends` as a
+first-class workaround: it leaves the package in a half-configured
+state from apt's perspective, and a subsequent `apt --fix-broken
+install` may try to remove the force-installed component. See
+spec 008 §4.3 for details.
 
 Either way, ensure /usr/lib/vpp_plugins/ on the target system is the
 plugin directory your VPP build actually scans. If it is not, copy
 /usr/lib/vpp_plugins/infmon.so into the right place by hand.
 
-A `dpkg-divert`-based override is on the roadmap for v2 (spec 008 §10).
+systemd: disabled by default
+----------------------------
+
+The infmon-frontend.service unit is installed disabled. After install,
+enable and start it manually:
+
+    sudo systemctl enable --now infmon-frontend.service
+
+Operators who run the canonical vpp.service unit and want the frontend
+to auto-restart when VPP restarts can add a drop-in:
+
+    sudo mkdir -p /etc/systemd/system/infmon-frontend.service.d
+    cat <<EOF | sudo tee /etc/systemd/system/infmon-frontend.service.d/partof.conf
+    [Unit]
+    PartOf=vpp.service
+    EOF
+    sudo systemctl daemon-reload
 
 Restarting VPP
 --------------
@@ -83,8 +123,8 @@ Removal vs purge
 `apt purge`:
 
   - Everything from `remove`, plus
-  - Removes /etc/infmon, /var/log/infmon, /var/lib/infmon, and the
-    `infmon` system user/group.
+  - Removes /etc/infmon (if empty after all InFMon packages are purged),
+    /var/log/infmon, /var/lib/infmon, and the `infmon` system user/group.
   - Still leaves VPP itself alone.
 
 Hugepages

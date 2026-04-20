@@ -42,16 +42,15 @@ Depends:
  ${misc:Depends},
  adduser,
  lsb-base,
-Recommends:
- infmon-backend (= ${source:Version}),
+ infmon-backend (= ${binary:Version}),
 Description: InFMon flow telemetry — frontend daemon
  InFMon is a high-performance network flow monitoring system built around
  a VPP-based dataplane and a Rust control plane.
  .
- This package contains the infmon-frontend daemon, its default
- configuration, and the systemd unit. The daemon attaches to the VPP
- stats segment and binary API and exports flow telemetry per the
- frontend REST contract.
+ This package contains the infmon-frontend daemon, the systemd unit, and
+ the logrotate configuration. The daemon attaches to the VPP stats
+ segment and binary API and exports flow telemetry per the frontend
+ gRPC contract.
 
 Package: infmon-cli
 Architecture: linux-any
@@ -63,16 +62,16 @@ Description: InFMon flow telemetry — command-line client
  a VPP-based dataplane and a Rust control plane.
  .
  This package contains the infmonctl command-line client. It talks to
- the infmon-frontend over its REST API and does not require VPP to be
- installed locally.
+ the infmon-frontend over its gRPC interface and does not require VPP
+ to be installed locally.
 
 Package: infmon
-Architecture: linux-any
+Architecture: all
 Depends:
  ${misc:Depends},
- infmon-backend (= ${source:Version}),
- infmon-frontend (= ${source:Version}),
- infmon-cli (= ${source:Version}),
+ infmon-backend (= ${binary:Version}),
+ infmon-frontend (= ${binary:Version}),
+ infmon-cli (= ${binary:Version}),
 Description: InFMon flow telemetry — meta package
  This is a meta package that pulls in the full InFMon stack:
  infmon-backend (the VPP plugin), infmon-frontend (the daemon), and

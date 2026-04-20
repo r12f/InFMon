@@ -2,10 +2,10 @@
 # postrm — infmon-frontend
 #
 # Per spec 008 §7.3 / §7.4:
-#   - on `purge`, remove /etc/infmon, /var/log/infmon, /var/lib/infmon,
+#   - on `purge`, remove /var/log/infmon, /var/lib/infmon,
 #     and the infmon system user/group
 #   - on `remove`, leave operator state alone
-#   - never touch VPP
+#   - never touch VPP or files owned by infmon-backend
 
 set -e
 
@@ -14,15 +14,12 @@ INFMON_GROUP=infmon
 
 case "$1" in
     purge)
-        # Remove only config files shipped by this package; leave
-        # operator-created files (e.g., custom flow_def YAMLs) alone.
-        rm -f /etc/infmon/frontend.conf /etc/infmon/backend.conf
-        rmdir /etc/infmon/flow_defs.d 2>/dev/null || true
-        rmdir /etc/infmon 2>/dev/null || true
-        rm -f /var/log/infmon/*.log /var/log/infmon/*.log.* 2>/dev/null || true
-        rmdir /var/log/infmon 2>/dev/null || true
-        rm -f /var/lib/infmon/*.db /var/lib/infmon/*.state 2>/dev/null || true
-        rmdir /var/lib/infmon 2>/dev/null || true
+        # Remove directories owned exclusively by the frontend.
+        # Never remove config.yaml — it is owned by infmon-backend.
+        rmdir --ignore-fail-on-non-empty /etc/infmon/flow_rules.d 2>/dev/null || true
+        rmdir --ignore-fail-on-non-empty /etc/infmon 2>/dev/null || true
+        rm -rf /var/log/infmon
+        rm -rf /var/lib/infmon
 
         if getent passwd "$INFMON_USER" >/dev/null; then
             deluser --quiet --system "$INFMON_USER" >/dev/null || true
