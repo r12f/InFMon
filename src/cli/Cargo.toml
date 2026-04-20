@@ -13,8 +13,7 @@ path = "src/main.rs"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 clap_mangen = "0.2"
-infmon-config = { path = "../infmon-config" }
-infmon-ipc = { path = "../infmon-ipc" }
+infmon-common = { path = "../common" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"

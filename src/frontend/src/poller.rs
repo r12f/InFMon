@@ -14,8 +14,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use infmon_ipc::stats_client::InFMonStatsClient;
-use infmon_ipc::types::FlowStatsSnapshot;
+use infmon_common::ipc::stats_client::InFMonStatsClient;
+use infmon_common::ipc::types::FlowStatsSnapshot;
 
 /// Sender half that exporter threads receive snapshots through.
 pub type SnapshotSender = std::sync::mpsc::SyncSender<Arc<FlowStatsSnapshot>>;
@@ -142,14 +142,14 @@ fn try_connect(path: &Path) -> Option<InFMonStatsClient> {
 
 /// Decode a `RawSnapshot` into a `FlowStatsSnapshot`.
 fn decode_snapshot(
-    raw: infmon_ipc::stats_client::RawSnapshot,
+    raw: infmon_common::ipc::stats_client::RawSnapshot,
     tick_id: u64,
     wall: u64,
     mono: u64,
     prev_mono: u64,
 ) -> FlowStatsSnapshot {
-    use infmon_ipc::decode::decode_key;
-    use infmon_ipc::types::*;
+    use infmon_common::ipc::decode::decode_key;
+    use infmon_common::ipc::types::*;
 
     let interval_ns = if tick_id == 1 || prev_mono == 0 {
         0
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn decode_empty_raw_snapshot() {
-        let raw = infmon_ipc::stats_client::RawSnapshot {
+        let raw = infmon_common::ipc::stats_client::RawSnapshot {
             descriptors: Vec::new(),
         };
         let snap = decode_snapshot(raw, 1, 1000, 2000, 0);
@@ -331,7 +331,7 @@ mod tests {
 
     #[test]
     fn decode_second_tick_has_interval() {
-        let raw = infmon_ipc::stats_client::RawSnapshot {
+        let raw = infmon_common::ipc::stats_client::RawSnapshot {
             descriptors: Vec::new(),
         };
         let snap = decode_snapshot(raw, 2, 1000, 3_000_000_000, 2_000_000_000);
@@ -470,9 +470,9 @@ mod tests {
 
     #[test]
     fn decode_snapshot_with_descriptor_but_no_slots() {
-        use infmon_ipc::types::FlowRuleId;
-        let raw = infmon_ipc::stats_client::RawSnapshot {
-            descriptors: vec![infmon_ipc::stats_client::RawDescriptor {
+        use infmon_common::ipc::types::FlowRuleId;
+        let raw = infmon_common::ipc::stats_client::RawSnapshot {
+            descriptors: vec![infmon_common::ipc::stats_client::RawDescriptor {
                 flow_rule_id: FlowRuleId { hi: 1, lo: 2 },
                 flow_rule_index: 0,
                 generation: 1,
@@ -494,14 +494,14 @@ mod tests {
 
     #[test]
     fn decode_snapshot_skips_zero_key_len_slots() {
-        use infmon_ipc::types::FlowRuleId;
-        let raw = infmon_ipc::stats_client::RawSnapshot {
-            descriptors: vec![infmon_ipc::stats_client::RawDescriptor {
+        use infmon_common::ipc::types::FlowRuleId;
+        let raw = infmon_common::ipc::stats_client::RawSnapshot {
+            descriptors: vec![infmon_common::ipc::stats_client::RawDescriptor {
                 flow_rule_id: FlowRuleId { hi: 0, lo: 1 },
                 flow_rule_index: 0,
                 generation: 1,
                 epoch_ns: 0,
-                slots: vec![infmon_ipc::stats_client::RawSlot {
+                slots: vec![infmon_common::ipc::stats_client::RawSlot {
                     key_hash: 0,
                     packets: 100,
                     bytes: 5000,
@@ -521,14 +521,14 @@ mod tests {
 
     #[test]
     fn decode_snapshot_skips_out_of_bounds_key() {
-        use infmon_ipc::types::FlowRuleId;
-        let raw = infmon_ipc::stats_client::RawSnapshot {
-            descriptors: vec![infmon_ipc::stats_client::RawDescriptor {
+        use infmon_common::ipc::types::FlowRuleId;
+        let raw = infmon_common::ipc::stats_client::RawSnapshot {
+            descriptors: vec![infmon_common::ipc::stats_client::RawDescriptor {
                 flow_rule_id: FlowRuleId { hi: 0, lo: 1 },
                 flow_rule_index: 0,
                 generation: 1,
                 epoch_ns: 0,
-                slots: vec![infmon_ipc::stats_client::RawSlot {
+                slots: vec![infmon_common::ipc::stats_client::RawSlot {
                     key_hash: 123,
                     packets: 10,
                     bytes: 500,

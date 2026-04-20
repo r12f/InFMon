@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use infmon_ipc::stats_client::InFMonStatsClient;
+use infmon_common::ipc::stats_client::InFMonStatsClient;
 
 use crate::exporter::{
     self, find_factory, snapshot_channel, validate_registrations, ExporterConfig, ExporterHandle,
@@ -71,11 +71,11 @@ impl Frontend {
         let config_text = std::fs::read_to_string(config_path).map_err(|e| {
             LifecycleError::ConfigError(format!("cannot read {}: {e}", config_path.display()))
         })?;
-        let config: infmon_config::model::Config = serde_yaml::from_str(&config_text)
+        let config: infmon_common::config::model::Config = serde_yaml::from_str(&config_text)
             .map_err(|e| LifecycleError::ConfigError(format!("YAML parse error: {e}")))?;
 
         // Validate flow rules
-        infmon_config::validate_config(&config)
+        infmon_common::config::validate_config(&config)
             .map_err(|e| LifecycleError::ConfigError(format!("validation error: {e}")))?;
 
         let frontend_cfg = config.frontend.clone().unwrap_or_default();
@@ -178,10 +178,10 @@ impl Frontend {
         // Re-read and parse config
         let config_text = std::fs::read_to_string(&self.config_path)
             .map_err(|e| LifecycleError::ReloadFailed(format!("cannot read config: {e}")))?;
-        let config: infmon_config::model::Config = serde_yaml::from_str(&config_text)
+        let config: infmon_common::config::model::Config = serde_yaml::from_str(&config_text)
             .map_err(|e| LifecycleError::ReloadFailed(format!("YAML parse error: {e}")))?;
 
-        infmon_config::validate_config(&config)
+        infmon_common::config::validate_config(&config)
             .map_err(|e| LifecycleError::ReloadFailed(format!("validation error: {e}")))?;
 
         // TODO: diff flow rules, apply via control client
@@ -223,7 +223,7 @@ impl Frontend {
 ///
 /// `queue_depth` and `export_timeout` are read exclusively from the returned
 /// `ExporterConfig` by `start()`, avoiding a second source of truth.
-fn entry_to_exporter_config(entry: &infmon_config::model::ExporterEntry) -> ExporterConfig {
+fn entry_to_exporter_config(entry: &infmon_common::config::model::ExporterEntry) -> ExporterConfig {
     let mut extra = std::collections::HashMap::new();
     for (k, v) in &entry.extra {
         // Convert serde_yaml::Value to a string representation for the
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn entry_to_config_basic() {
-        let entry = infmon_config::model::ExporterEntry {
+        let entry = infmon_common::config::model::ExporterEntry {
             kind: "otlp".into(),
             name: "primary".into(),
             queue_depth: 2,
@@ -392,7 +392,7 @@ mod tests {
             serde_yaml::Value::Number(serde_yaml::Number::from(30)),
         );
 
-        let entry = infmon_config::model::ExporterEntry {
+        let entry = infmon_common::config::model::ExporterEntry {
             kind: "otlp".into(),
             name: "with-extras".into(),
             queue_depth: 4,
@@ -411,7 +411,7 @@ mod tests {
 
     #[test]
     fn entry_to_config_invalid_timeout_uses_default() {
-        let entry = infmon_config::model::ExporterEntry {
+        let entry = infmon_common::config::model::ExporterEntry {
             kind: "test".into(),
             name: "bad-timeout".into(),
             queue_depth: 2,

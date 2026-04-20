@@ -22,7 +22,7 @@ use rand::Rng;
 use tokio::sync::Mutex;
 use tonic::transport::{Channel, Endpoint};
 
-use infmon_ipc::types::{FieldId, FieldValue, FlowRuleStats, FlowStatsSnapshot};
+use infmon_common::ipc::types::{FieldId, FieldValue, FlowRuleStats, FlowStatsSnapshot};
 
 use crate::exporter::{
     BoxFuture, ConfigError, Exporter, ExporterConfig, ExporterError, ExporterMetrics,
@@ -1202,7 +1202,7 @@ fn render_ip(addr: &IpAddr) -> String {
 /// Build per-flow attributes from the flow-rule's field list and the flow's key.
 fn build_flow_attributes(
     fr: &FlowRuleStats,
-    flow: &infmon_ipc::types::FlowStats,
+    flow: &infmon_common::ipc::types::FlowStats,
     fields: &[FieldId],
     trunc_counter: Option<&AtomicU64>,
 ) -> Vec<KeyValue> {
@@ -1277,7 +1277,7 @@ fn load_or_create_instance_id(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use infmon_ipc::types::{FlowCounters, FlowRuleCounters, FlowStats};
+    use infmon_common::ipc::types::{FlowCounters, FlowRuleCounters, FlowStats};
 
     fn make_config() -> ExporterConfig {
         let mut extra = std::collections::HashMap::new();
