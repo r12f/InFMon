@@ -50,14 +50,20 @@ fn main() {
     // -v = DEBUG, -vv = TRACE.  Output goes to stderr so it never mixes
     // with machine-readable stdout.  Existing eprintln! output is kept.
     if cli.verbose > 0 {
+        use tracing_subscriber::EnvFilter;
+
         let level = match cli.verbose {
             1 => tracing::Level::DEBUG,
             _ => tracing::Level::TRACE,
         };
         tracing_subscriber::fmt()
             .with_writer(std::io::stderr)
-            .with_max_level(level)
-            .init();
+            .with_env_filter(
+                EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| EnvFilter::new(level.as_str())),
+            )
+            .try_init()
+            .ok();
     }
 
     let rt = tokio::runtime::Builder::new_current_thread()
