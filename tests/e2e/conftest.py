@@ -6,7 +6,6 @@ connectivity, and optionally pushes replay assets to a remote host.
 
 import os
 import shlex
-import shutil
 import subprocess
 import time
 
@@ -31,7 +30,7 @@ def _env(key: str) -> str:
     return os.environ.get(key, _DEFAULTS.get(key, ""))
 
 
-def _run(cmd: str, check: bool = True, capture: bool = True, **kwargs) -> subprocess.CompletedProcess:
+def _run(cmd: str, check: bool = True, capture: bool = True) -> subprocess.CompletedProcess:
     """Run a shell command.
 
     All caller-supplied values interpolated into *cmd* MUST be wrapped
@@ -69,11 +68,14 @@ def _assign_tx_ip_remote() -> None:
     host = _env("INFMON_E2E_TX_HOST")
     iface = _env("INFMON_E2E_TX_HOST_IFACE")
     ip = _env("INFMON_E2E_TX_IP")
-    _run(
-        f"ssh {shlex.quote(host)} 'ip addr flush dev {shlex.quote(iface)};"
-        f" ip addr replace {shlex.quote(ip)} dev {shlex.quote(iface)};"
-        f" ip link set {shlex.quote(iface)} up'"
+    # Build the remote command separately and quote the whole thing for the
+    # local shell, so shlex.quote() inside doesn't clash with outer quoting.
+    remote_cmd = (
+        f"ip addr flush dev {shlex.quote(iface)}; "
+        f"ip addr replace {shlex.quote(ip)} dev {shlex.quote(iface)}; "
+        f"ip link set {shlex.quote(iface)} up"
     )
+    _run(f"ssh {shlex.quote(host)} {shlex.quote(remote_cmd)}")
 
 
 def _push_replay_assets(remote_host: str) -> None:
@@ -92,7 +94,8 @@ def _verify_ping() -> None:
     mode = _env("INFMON_E2E_TX_MODE")
     if mode == "remote":
         host = _env("INFMON_E2E_TX_HOST")
-        cmd = f"ssh {shlex.quote(host)} 'ping -c 3 -W 2 {shlex.quote(rx_ip)}'"
+        remote_cmd = f"ping -c 3 -W 2 {shlex.quote(rx_ip)}"
+        cmd = f"ssh {shlex.quote(host)} {shlex.quote(remote_cmd)}"
     else:
         cmd = f"ping -c 3 -W 2 {shlex.quote(rx_ip)}"
     result = _run(cmd, check=False)
@@ -172,10 +175,12 @@ def infmon_env():
     if mode == "remote":
         remote_host = _env("INFMON_E2E_TX_HOST")
         remote_iface = _env("INFMON_E2E_TX_HOST_IFACE")
+        remote_cmd = (
+            f"ip addr flush dev {shlex.quote(remote_iface)}; "
+            f"rm -f /tmp/replay_traffic.py; "
+            f"rm -rf /tmp/e2e_scenarios"
+        )
         _run(
-            f"ssh {shlex.quote(remote_host)} '"
-            f"ip addr flush dev {shlex.quote(remote_iface)};"
-            f" rm -f /tmp/replay_traffic.py;"
-            f" rm -rf /tmp/e2e_scenarios'",
+            f"ssh {shlex.quote(remote_host)} {shlex.quote(remote_cmd)}",
             check=False,
         )
