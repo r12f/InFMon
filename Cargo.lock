@@ -673,17 +673,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "infmon-config"
-version = "0.1.0"
-dependencies = [
- "infmon-common",
- "serde",
- "serde_yaml",
- "tempfile",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "infmon-frontend"
 version = "0.1.0"
 dependencies = [
@@ -701,15 +690,6 @@ dependencies = [
  "tokio",
  "tonic",
  "uuid",
-]
-
-[[package]]
-name = "infmon-ipc"
-version = "0.1.0"
-dependencies = [
- "infmon-common",
- "tempfile",
- "tokio",
 ]
 
 [[package]]
