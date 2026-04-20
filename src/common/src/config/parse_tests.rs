@@ -12,15 +12,6 @@ flow-rules:
     eviction_policy: lru_drop
 "#;
 
-fn make_rule(name: &str, fields: Vec<Field>, max_keys: u32) -> FlowRule {
-    FlowRule {
-        name: name.to_string(),
-        fields,
-        max_keys,
-        eviction_policy: EvictionPolicy::LruDrop,
-    }
-}
-
 #[test]
 fn parse_valid_yaml_two_rules() {
     let config = parse_yaml(VALID_YAML).unwrap();
