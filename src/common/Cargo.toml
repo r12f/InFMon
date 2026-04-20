@@ -1,0 +1,21 @@
+[package]
+name = "infmon-common"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Shared configuration and IPC library for InFMon"
+
+[features]
+default = ["control"]
+control = ["dep:tokio"]
+
+[dependencies]
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+thiserror = "2"
+tokio = { version = "1", features = ["net", "rt", "sync"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["net", "rt", "sync", "macros"] }
