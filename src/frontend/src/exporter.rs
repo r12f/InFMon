@@ -266,8 +266,9 @@ impl SnapshotSender {
         &self.inner
     }
 
-    /// Try to send a snapshot. Returns a typed error distinguishing
-    /// backpressure (`Full`) from a dead exporter thread (`Disconnected`).
+    /// Try to send a snapshot. If the queue is full, returns
+    /// [`TrySendError::Full`] so the caller can track drops via
+    /// `ExporterMetrics::batches_dropped`.
     pub fn try_send(&self, snap: Arc<FlowStatsSnapshot>) -> Result<(), TrySendError> {
         match self.inner.try_send(snap) {
             Ok(()) => Ok(()),

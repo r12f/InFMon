@@ -18,6 +18,7 @@ use opentelemetry_proto::tonic::metrics::v1::{
     AggregationTemporality, Gauge, Metric, NumberDataPoint, ResourceMetrics, ScopeMetrics, Sum,
 };
 use opentelemetry_proto::tonic::resource::v1::Resource;
+use rand::Rng;
 use tokio::sync::Mutex;
 use tonic::transport::{Channel, Endpoint};
 
@@ -33,6 +34,9 @@ use crate::exporter::{
 /// Default per-tick point cap (spec §8.2).
 const DEFAULT_MAX_EXPORT_POINTS_PER_TICK: u64 = 2_000_000;
 
+/// Default max data points per batch (spec §7.1 step 4).
+const DEFAULT_MAX_BATCH_POINTS: usize = 8192;
+
 /// Max length for string attribute values (spec §8.2).
 const ATTRIBUTE_LENGTH_CAP: usize = 256;
 
@@ -41,6 +45,15 @@ const POINTS_PER_FLOW: u64 = 3;
 
 /// Number of per-flow-rule data points (flows, evictions, drops, packets, bytes).
 const POINTS_PER_FLOW_RULE: u64 = 5;
+
+/// Maximum retries per batch (spec §7.3).
+const MAX_RETRIES: u32 = 3;
+
+/// Base delay for exponential backoff (spec §7.3).
+const RETRY_BASE: Duration = Duration::from_secs(1);
+
+/// Cap for exponential backoff (spec §7.3).
+const RETRY_CAP: Duration = Duration::from_secs(30);
 
 // ── OTLP Exporter ──────────────────────────────────────────────────
 
@@ -51,6 +64,8 @@ pub struct OtlpExporter {
     #[allow(dead_code)] // stored for future reload support
     instance_id_path: Option<String>,
     max_export_points_per_tick: u64,
+    max_batch_points: usize,
+    export_timeout: Duration,
     resource_attrs: Vec<KeyValue>,
     client: Mutex<Option<MetricsServiceClient<Channel>>>,
     metrics: Arc<ExporterMetrics>,
@@ -70,6 +85,14 @@ impl OtlpExporter {
             .get("max_export_points_per_tick")
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(DEFAULT_MAX_EXPORT_POINTS_PER_TICK);
+
+        let max_batch_points = cfg
+            .extra
+            .get("max_batch_points")
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_MAX_BATCH_POINTS);
+
+        let export_timeout = cfg.export_timeout;
 
         // Optional configurable instance_id path (default: /var/lib/infmon/instance_id)
         let instance_id_path = cfg.extra.get("instance_id_path").cloned();
@@ -122,6 +145,8 @@ impl OtlpExporter {
             endpoint,
             instance_id_path,
             max_export_points_per_tick,
+            max_batch_points,
+            export_timeout,
             resource_attrs,
             client: Mutex::new(None),
             metrics: Arc::new(ExporterMetrics::default()),
@@ -607,6 +632,249 @@ impl OtlpExporter {
             points_emitted_count,
         )
     }
+    /// Slice a single OTLP request into multiple batches, each containing
+    /// at most `max_batch_points` data points (spec §7.1 step 4).
+    fn slice_into_batches(
+        &self,
+        request: ExportMetricsServiceRequest,
+    ) -> Vec<ExportMetricsServiceRequest> {
+        if self.max_batch_points == 0 {
+            log::warn!(
+                "max_batch_points is 0 (batching disabled) — this is likely a misconfiguration"
+            );
+            return vec![request];
+        }
+
+        // Guard against empty request
+        if request.resource_metrics.is_empty() {
+            return vec![request];
+        }
+
+        if request.resource_metrics[0].scope_metrics.is_empty() {
+            return vec![request];
+        }
+
+        // Count total data points
+        let total_points: usize = request
+            .resource_metrics
+            .iter()
+            .flat_map(|rm| &rm.scope_metrics)
+            .flat_map(|sm| &sm.metrics)
+            .map(count_metric_data_points)
+            .sum();
+
+        if total_points <= self.max_batch_points {
+            return vec![request];
+        }
+
+        // NOTE: InFMon always produces a single ResourceMetrics with a single
+        // ScopeMetrics. If multiple resources/scopes are ever needed, this
+        // flattening must be updated to preserve per-resource/scope grouping.
+        debug_assert!(
+            request.resource_metrics.len() == 1
+                && request.resource_metrics[0].scope_metrics.len() == 1,
+            "slice_into_batches assumes single resource + single scope"
+        );
+
+        // Flatten all metrics, then partition into batches
+        let resource = request.resource_metrics[0].resource.clone();
+        let scope = request.resource_metrics[0].scope_metrics[0].scope.clone();
+        let schema_url_rm = request.resource_metrics[0].schema_url.clone();
+        let schema_url_sm = request.resource_metrics[0].scope_metrics[0]
+            .schema_url
+            .clone();
+
+        let all_metrics: Vec<Metric> = request
+            .resource_metrics
+            .into_iter()
+            .flat_map(|rm| rm.scope_metrics)
+            .flat_map(|sm| sm.metrics)
+            .collect();
+
+        let mut batches = Vec::new();
+        let mut current_metrics: Vec<Metric> = Vec::new();
+        let mut current_points: usize = 0;
+
+        for metric in all_metrics {
+            let pts = count_metric_data_points(&metric);
+            if pts == 0 {
+                current_metrics.push(metric);
+                continue;
+            }
+
+            // If this metric fits in the current batch, add it
+            if current_points + pts <= self.max_batch_points {
+                current_points += pts;
+                current_metrics.push(metric);
+            } else if pts <= self.max_batch_points && current_points > 0 {
+                // Flush current batch, start new one with this metric
+                batches.push(self.wrap_batch(
+                    std::mem::take(&mut current_metrics),
+                    resource.clone(),
+                    scope.clone(),
+                    schema_url_rm.clone(),
+                    schema_url_sm.clone(),
+                ));
+                current_points = pts;
+                current_metrics.push(metric);
+            } else {
+                // This single metric exceeds batch size — split its data points
+                if !current_metrics.is_empty() {
+                    batches.push(self.wrap_batch(
+                        std::mem::take(&mut current_metrics),
+                        resource.clone(),
+                        scope.clone(),
+                        schema_url_rm.clone(),
+                        schema_url_sm.clone(),
+                    ));
+                    current_points = 0;
+                }
+                // Split the metric's data points across batches
+                let split = split_metric_data_points(metric, self.max_batch_points);
+                for (m, count) in split {
+                    if current_points + count <= self.max_batch_points {
+                        current_points += count;
+                        current_metrics.push(m);
+                    } else {
+                        if !current_metrics.is_empty() {
+                            batches.push(self.wrap_batch(
+                                std::mem::take(&mut current_metrics),
+                                resource.clone(),
+                                scope.clone(),
+                                schema_url_rm.clone(),
+                                schema_url_sm.clone(),
+                            ));
+                        }
+                        current_points = count;
+                        current_metrics.push(m);
+                    }
+                }
+            }
+        }
+
+        if !current_metrics.is_empty() {
+            batches.push(self.wrap_batch(
+                current_metrics,
+                resource.clone(),
+                scope.clone(),
+                schema_url_rm,
+                schema_url_sm,
+            ));
+        }
+
+        if batches.is_empty() {
+            batches.push(ExportMetricsServiceRequest {
+                resource_metrics: vec![],
+            });
+        }
+
+        batches
+    }
+
+    /// Wrap metrics into a full OTLP request.
+    fn wrap_batch(
+        &self,
+        metrics: Vec<Metric>,
+        resource: Option<Resource>,
+        scope: Option<InstrumentationScope>,
+        schema_url_rm: String,
+        schema_url_sm: String,
+    ) -> ExportMetricsServiceRequest {
+        ExportMetricsServiceRequest {
+            resource_metrics: vec![ResourceMetrics {
+                resource,
+                scope_metrics: vec![ScopeMetrics {
+                    scope,
+                    metrics,
+                    schema_url: schema_url_sm,
+                }],
+                schema_url: schema_url_rm,
+            }],
+        }
+    }
+
+    /// Export a single batch with retry and exponential backoff (spec §7.3).
+    ///
+    /// Retries up to `MAX_RETRIES` times on transient/retryable errors.
+    /// Uses exponential backoff with full jitter: `min(cap, base * 2^attempt) * rand(0,1)`.
+    async fn export_batch_with_retry(
+        &self,
+        request: ExportMetricsServiceRequest,
+    ) -> Result<(), ExporterError> {
+        let mut last_err = None;
+
+        for attempt in 0..=MAX_RETRIES {
+            if attempt > 0 {
+                // Exponential backoff with full jitter
+                let backoff_max = RETRY_CAP.min(RETRY_BASE * 2u32.saturating_pow(attempt));
+                let jitter = rand::thread_rng().gen_range(0.0..1.0);
+                let delay = backoff_max.mul_f64(jitter);
+                log::warn!(
+                    "OTLP export retry {}/{} after {:.1}s backoff",
+                    attempt,
+                    MAX_RETRIES,
+                    delay.as_secs_f64()
+                );
+                tokio::time::sleep(delay).await;
+            }
+
+            let client_result = self.get_client().await;
+            let mut client = match client_result {
+                Ok(c) => c,
+                Err(e) => {
+                    last_err = Some(ExporterError::Transient(e));
+                    continue;
+                }
+            };
+
+            let result =
+                tokio::time::timeout(self.export_timeout, client.export(request.clone())).await;
+
+            match result {
+                Ok(Ok(_)) => {
+                    return Ok(());
+                }
+                Ok(Err(e)) => {
+                    let is_retryable = matches!(
+                        e.code(),
+                        tonic::Code::Unavailable
+                            | tonic::Code::DeadlineExceeded
+                            | tonic::Code::ResourceExhausted
+                            | tonic::Code::Aborted
+                    );
+                    if is_retryable {
+                        log::warn!(
+                            "OTLP export attempt {}/{} failed with retryable gRPC code {:?}: {}",
+                            attempt,
+                            MAX_RETRIES,
+                            e.code(),
+                            e.message()
+                        );
+                        self.clear_client().await;
+                        last_err = Some(ExporterError::Transient(Box::new(e)));
+                        continue;
+                    } else {
+                        // Non-retryable: drop immediately
+                        log::error!(
+                            "OTLP export failed with permanent gRPC code {:?}: {}",
+                            e.code(),
+                            e.message()
+                        );
+                        return Err(ExporterError::Permanent(Box::new(e)));
+                    }
+                }
+                Err(_elapsed) => {
+                    // Timeout
+                    self.clear_client().await;
+                    last_err = Some(ExporterError::Timeout);
+                    continue;
+                }
+            }
+        }
+
+        // All retries exhausted
+        Err(last_err.unwrap_or(ExporterError::Timeout))
+    }
 }
 
 impl Exporter for OtlpExporter {
@@ -622,43 +890,73 @@ impl Exporter for OtlpExporter {
         Box::pin(async move {
             let (request, points_built) = self.build_request(&snap);
 
-            let mut client = self.get_client().await.map_err(ExporterError::Transient)?;
+            // Slice into batches (spec §7.1 step 4)
+            let batches = self.slice_into_batches(request);
+
+            // Track points per batch for accurate partial-success accounting
+            let batch_points: Vec<u64> = batches
+                .iter()
+                .map(|b| {
+                    b.resource_metrics
+                        .iter()
+                        .flat_map(|rm| &rm.scope_metrics)
+                        .flat_map(|sm| &sm.metrics)
+                        .map(count_metric_data_points)
+                        .sum::<usize>() as u64
+                })
+                .collect();
 
             let start = std::time::Instant::now();
-            match client.export(request).await {
-                Ok(_) => {
-                    let elapsed = start.elapsed().as_secs_f64();
-                    self.metrics.set_export_duration(elapsed);
-                    self.metrics.batches_sent.fetch_add(1, Ordering::Relaxed);
+            let mut failed = false;
+            let mut points_emitted = 0u64;
+
+            for (i, batch) in batches.into_iter().enumerate() {
+                match self.export_batch_with_retry(batch).await {
+                    Ok(()) => {
+                        self.metrics.batches_sent.fetch_add(1, Ordering::Relaxed);
+                        points_emitted += batch_points[i];
+                    }
+                    Err(ExporterError::Permanent(e)) => {
+                        self.metrics
+                            .batches_failed_non_retryable
+                            .fetch_add(1, Ordering::Relaxed);
+                        if points_emitted > 0 {
+                            self.metrics
+                                .points_emitted
+                                .fetch_add(points_emitted, Ordering::Relaxed);
+                        }
+                        let elapsed = start.elapsed().as_secs_f64();
+                        self.metrics.set_export_duration(elapsed);
+                        return Err(ExporterError::Permanent(e));
+                    }
+                    Err(_) => {
+                        self.metrics
+                            .batches_failed_transient
+                            .fetch_add(1, Ordering::Relaxed);
+                        failed = true;
+                        // Continue trying remaining batches — don't poison-pill
+                    }
+                }
+            }
+
+            let elapsed = start.elapsed().as_secs_f64();
+            self.metrics.set_export_duration(elapsed);
+
+            if !failed {
+                self.metrics
+                    .points_emitted
+                    .fetch_add(points_built, Ordering::Relaxed);
+                Ok(())
+            } else {
+                // Some batches failed — emit exact count for successfully sent batches.
+                if points_emitted > 0 {
                     self.metrics
                         .points_emitted
-                        .fetch_add(points_built, Ordering::Relaxed);
-                    Ok(())
+                        .fetch_add(points_emitted, Ordering::Relaxed);
                 }
-                Err(e) => {
-                    let elapsed = start.elapsed().as_secs_f64();
-                    self.metrics.set_export_duration(elapsed);
-                    // Classify gRPC status codes
-                    let err = match e.code() {
-                        tonic::Code::Unavailable
-                        | tonic::Code::DeadlineExceeded
-                        | tonic::Code::ResourceExhausted
-                        | tonic::Code::Aborted => {
-                            // Clear cached client on transient errors so next tick reconnects
-                            self.clear_client().await;
-                            ExporterError::Transient(Box::new(e))
-                        }
-                        tonic::Code::Unauthenticated
-                        | tonic::Code::PermissionDenied
-                        | tonic::Code::InvalidArgument
-                        | tonic::Code::Unimplemented => ExporterError::Permanent(Box::new(e)),
-                        _ => {
-                            self.clear_client().await;
-                            ExporterError::Transient(Box::new(e))
-                        }
-                    };
-                    Err(err)
-                }
+                Err(ExporterError::Transient(
+                    "some batches failed after retries".into(),
+                ))
             }
         })
     }
@@ -698,6 +996,82 @@ inventory::submit!(ExporterRegistration {
 /// Saturating u64 → i64 conversion: clamps at i64::MAX instead of wrapping.
 fn saturating_i64(v: u64) -> i64 {
     i64::try_from(v).unwrap_or(i64::MAX)
+}
+
+/// Count the number of data points in a single metric.
+fn count_metric_data_points(m: &Metric) -> usize {
+    match &m.data {
+        Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(s)) => s.data_points.len(),
+        Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(g)) => {
+            g.data_points.len()
+        }
+        _ => 0,
+    }
+}
+
+/// Split a metric's data points into chunks of at most `max_points`.
+/// Returns a list of `(metric, point_count)` pairs.
+fn split_metric_data_points(m: Metric, max_points: usize) -> Vec<(Metric, usize)> {
+    let max_points = max_points.max(1);
+    match m.data {
+        Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(sum)) => {
+            let chunks: Vec<Vec<NumberDataPoint>> = sum
+                .data_points
+                .chunks(max_points)
+                .map(|c| c.to_vec())
+                .collect();
+            chunks
+                .into_iter()
+                .map(|dp| {
+                    let count = dp.len();
+                    (
+                        Metric {
+                            name: m.name.clone(),
+                            description: m.description.clone(),
+                            unit: m.unit.clone(),
+                            data: Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(
+                                Sum {
+                                    data_points: dp,
+                                    aggregation_temporality: sum.aggregation_temporality,
+                                    is_monotonic: sum.is_monotonic,
+                                },
+                            )),
+                            metadata: m.metadata.clone(),
+                        },
+                        count,
+                    )
+                })
+                .collect()
+        }
+        Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(gauge)) => {
+            let chunks: Vec<Vec<NumberDataPoint>> = gauge
+                .data_points
+                .chunks(max_points)
+                .map(|c| c.to_vec())
+                .collect();
+            chunks
+                .into_iter()
+                .map(|dp| {
+                    let count = dp.len();
+                    (
+                        Metric {
+                            name: m.name.clone(),
+                            description: m.description.clone(),
+                            unit: m.unit.clone(),
+                            data: Some(
+                                opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(
+                                    Gauge { data_points: dp },
+                                ),
+                            ),
+                            metadata: m.metadata.clone(),
+                        },
+                        count,
+                    )
+                })
+                .collect()
+        }
+        _ => vec![(m, 0)],
+    }
 }
 
 /// Build a cumulative monotonic `Sum` metric.
