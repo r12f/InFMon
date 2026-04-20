@@ -82,7 +82,8 @@ jobs:
             fakeroot \
             lintian \
             cmake \
-            pkg-config
+            pkg-config \
+            libgtest-dev
 
       - name: Validate debian/control parses
         run: dpkg-checkbuilddeps || true   # informational
