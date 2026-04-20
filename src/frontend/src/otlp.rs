@@ -648,7 +648,7 @@ impl OtlpExporter {
             .iter()
             .flat_map(|rm| &rm.scope_metrics)
             .flat_map(|sm| &sm.metrics)
-            .map(|m| count_metric_data_points(m))
+            .map(count_metric_data_points)
             .sum();
 
         if total_points <= self.max_batch_points {
