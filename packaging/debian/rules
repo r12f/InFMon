@@ -59,9 +59,9 @@ override_dh_auto_configure:
 # ----------------------------------------------------------------------
 override_dh_auto_build:
 	# ---- backend (VPP plugin) ----
-	if [ -f src/infmon-backend/CMakeLists.txt ]; then \
+	if [ -f src/backend/CMakeLists.txt ]; then \
 	  echo ">>> building infmon-backend (cmake)"; \
-	  cmake -S src/infmon-backend -B $(BACKEND_BUILD_DIR) \
+	  cmake -S src/backend -B $(BACKEND_BUILD_DIR) \
 	        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
 	        -DCMAKE_INSTALL_PREFIX=/usr; \
 	  cmake --build $(BACKEND_BUILD_DIR) --parallel; \
@@ -73,8 +73,8 @@ override_dh_auto_build:
 	if [ -f Cargo.toml ]; then \
 	  echo ">>> building infmon-frontend + infmon-cli (cargo)"; \
 	  cargo build --release --locked \
-	      $$( [ -d src/infmon-frontend ] && echo -p infmon-frontend ) \
-	      $$( [ -d src/infmon-cli ]      && echo -p infmon-cli ); \
+	      $$( [ -d src/frontend ] && echo -p infmon-frontend ) \
+	      $$( [ -d src/cli ]      && echo -p infmon-cli ); \
 	else \
 	  echo ">>> skipping cargo build (no Cargo.toml yet)"; \
 	fi
