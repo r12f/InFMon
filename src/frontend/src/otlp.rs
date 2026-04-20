@@ -639,7 +639,7 @@ impl OtlpExporter {
         request: ExportMetricsServiceRequest,
     ) -> Vec<ExportMetricsServiceRequest> {
         if self.max_batch_points == 0 {
-            log::warn!(
+            tracing::warn!(
                 "max_batch_points is 0 (batching disabled) — this is likely a misconfiguration"
             );
             return vec![request];
@@ -809,7 +809,7 @@ impl OtlpExporter {
                 let backoff_max = RETRY_CAP.min(RETRY_BASE * 2u32.saturating_pow(attempt));
                 let jitter = rand::thread_rng().gen_range(0.0..1.0);
                 let delay = backoff_max.mul_f64(jitter);
-                log::warn!(
+                tracing::warn!(
                     "OTLP export retry {}/{} after {:.1}s backoff",
                     attempt,
                     MAX_RETRIES,
@@ -843,7 +843,7 @@ impl OtlpExporter {
                             | tonic::Code::Aborted
                     );
                     if is_retryable {
-                        log::warn!(
+                        tracing::warn!(
                             "OTLP export attempt {}/{} failed with retryable gRPC code {:?}: {}",
                             attempt,
                             MAX_RETRIES,
@@ -855,7 +855,7 @@ impl OtlpExporter {
                         continue;
                     } else {
                         // Non-retryable: drop immediately
-                        log::error!(
+                        tracing::error!(
                             "OTLP export failed with permanent gRPC code {:?}: {}",
                             e.code(),
                             e.message()
@@ -975,7 +975,7 @@ impl Exporter for OtlpExporter {
             // Drop the client to close the gRPC channel.
             let mut guard = self.client.lock().await;
             *guard = None;
-            log::info!("OTLP exporter '{}' shut down", self.name);
+            tracing::info!("OTLP exporter '{}' shut down", self.name);
         })
     }
 

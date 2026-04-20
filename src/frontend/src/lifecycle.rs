@@ -62,7 +62,7 @@ impl Frontend {
     /// 3. Build exporters from config
     /// 4. Spawn poller and exporter threads
     pub fn start(config_path: &Path, shutdown: Arc<AtomicBool>) -> Result<Self, LifecycleError> {
-        log::info!("starting infmon-frontend");
+        tracing::info!("starting infmon-frontend");
 
         // Validate exporter registrations
         validate_registrations();
@@ -95,7 +95,7 @@ impl Frontend {
         while start_time.elapsed() < startup_timeout {
             match InFMonStatsClient::open(&stats_socket) {
                 Ok(_client) => {
-                    log::info!(
+                    tracing::info!(
                         "backend stats segment reachable at {}",
                         stats_socket.display()
                     );
@@ -103,7 +103,7 @@ impl Frontend {
                     break;
                 }
                 Err(e) => {
-                    log::debug!("backend not yet reachable: {e}");
+                    tracing::debug!("backend not yet reachable: {e}");
                     std::thread::sleep(Duration::from_millis(200));
                 }
             }
@@ -170,7 +170,7 @@ impl Frontend {
     /// A future iteration will diff the old and new configs and hot-swap
     /// exporters / update flow rules via the control client.
     pub fn reload(&mut self) -> Result<(), LifecycleError> {
-        log::info!(
+        tracing::info!(
             "reloading configuration from {}",
             self.config_path.display()
         );
@@ -186,19 +186,19 @@ impl Frontend {
 
         // TODO: diff flow rules, apply via control client
         // TODO: reload existing exporters, add/remove as needed
-        log::warn!("reload: config validated but hot-swap not yet implemented — changes take effect on restart");
+        tracing::warn!("reload: config validated but hot-swap not yet implemented — changes take effect on restart");
         Ok(())
     }
 
     /// Graceful shutdown. Always exits 0.
     pub fn stop(mut self) {
-        log::info!("stopping infmon-frontend");
+        tracing::info!("stopping infmon-frontend");
         self.shutdown.store(true, Ordering::Release);
 
         // 1. Stop the poller
         if let Some(handle) = self.poller_handle.take() {
             handle.stop();
-            log::info!("poller stopped");
+            tracing::info!("poller stopped");
         }
 
         // 2. Close exporter channels (drop senders) so exporters drain
@@ -210,7 +210,7 @@ impl Frontend {
             handle.join();
         }
 
-        log::info!("infmon-frontend stopped");
+        tracing::info!("infmon-frontend stopped");
     }
 
     /// Check if shutdown has been signalled.
@@ -271,7 +271,7 @@ pub fn parse_duration(s: &str) -> Option<Duration> {
         // Bare integer → milliseconds
         s.parse::<u64>().ok().map(Duration::from_millis)
     } else {
-        log::warn!(
+        tracing::warn!(
             "parse_duration: unrecognised format {:?}, returning None",
             s
         );

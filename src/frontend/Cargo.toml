@@ -10,12 +10,10 @@ name = "infmon-frontend"
 path = "src/main.rs"
 
 [dependencies]
-env_logger = "0.11"
 hostname = "0.4"
 infmon-common = { path = "../common", default-features = false }
 inventory = "0.3"
 libc = "0.2"
-log = "0.4"
 syslog-tracing = "0.3"
 tracing = "0.1"
 tracing-appender = "0.2"

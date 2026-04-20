@@ -99,7 +99,7 @@ fn monotonic_ns() -> u64 {
     // SAFETY: CLOCK_MONOTONIC is always valid.
     let ret = unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
     if ret != 0 {
-        log::error!("clock_gettime(CLOCK_MONOTONIC) failed: {}", ret);
+        tracing::error!("clock_gettime(CLOCK_MONOTONIC) failed: {}", ret);
         return 0;
     }
     debug_assert!(ts.tv_sec >= 0, "CLOCK_MONOTONIC returned negative tv_sec");
@@ -115,7 +115,7 @@ fn wall_clock_ns() -> u64 {
     };
     let ret = unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, &mut ts) };
     if ret != 0 {
-        log::error!("clock_gettime(CLOCK_REALTIME) failed: {}", ret);
+        tracing::error!("clock_gettime(CLOCK_REALTIME) failed: {}", ret);
         return 0;
     }
     debug_assert!(ts.tv_sec >= 0, "CLOCK_REALTIME returned negative tv_sec");
@@ -126,11 +126,11 @@ fn wall_clock_ns() -> u64 {
 fn try_connect(path: &Path) -> Option<InFMonStatsClient> {
     match InFMonStatsClient::open(path) {
         Ok(c) => {
-            log::info!("connected to stats segment at {}", path.display());
+            tracing::info!("connected to stats segment at {}", path.display());
             Some(c)
         }
         Err(e) => {
-            log::warn!(
+            tracing::warn!(
                 "failed to connect to stats segment at {}: {}",
                 path.display(),
                 e
@@ -175,14 +175,14 @@ fn decode_snapshot(
                     let start = slot.key_offset as usize;
                     let end = start + slot.key_len as usize;
                     if end > desc.key_arena.len() {
-                        log::warn!("slot key extends past arena, skipping");
+                        tracing::warn!("slot key extends past arena, skipping");
                         return None;
                     }
                     let key_bytes = &desc.key_arena[start..end];
                     let key = match decode_key(&fields, key_bytes) {
                         Ok(k) => k,
                         Err(e) => {
-                            log::warn!("failed to decode flow key: {}", e);
+                            tracing::warn!("failed to decode flow key: {}", e);
                             return None;
                         }
                     };
@@ -246,7 +246,7 @@ fn run_loop(
             client = try_connect(&config.stats_socket);
             if client.is_none() {
                 // Exponential backoff on reconnection.
-                log::debug!("reconnect backoff: {:?}", backoff);
+                tracing::debug!("reconnect backoff: {:?}", backoff);
                 sleep_interruptible(backoff, stop);
                 backoff = (backoff * 2).min(max_backoff);
                 continue;
@@ -272,7 +272,7 @@ fn run_loop(
                     // Fan out to exporters.
                     for (i, tx) in senders.iter().enumerate() {
                         if tx.try_send(snap.clone()).is_err() {
-                            log::warn!(
+                            tracing::warn!(
                                 "exporter {} channel full, dropping snapshot (tick {})",
                                 i,
                                 tick_id
@@ -281,7 +281,7 @@ fn run_loop(
                     }
                 }
                 Err(e) => {
-                    log::warn!("snapshot_and_clear failed: {} — disconnecting", e);
+                    tracing::warn!("snapshot_and_clear failed: {} — disconnecting", e);
                     client = None;
                     continue;
                 }
@@ -295,7 +295,7 @@ fn run_loop(
         }
     }
 
-    log::info!("poller stopped after {} ticks", tick_id);
+    tracing::info!("poller stopped after {} ticks", tick_id);
 }
 
 /// Sleep for `dur`, but wake early if `stop` is set.

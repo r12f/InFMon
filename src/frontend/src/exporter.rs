@@ -214,7 +214,7 @@ pub fn validate_registrations() {
     let mut seen = std::collections::HashSet::new();
     for reg in inventory::iter::<ExporterRegistration> {
         if !seen.insert(reg.kind) {
-            log::warn!(
+            tracing::warn!(
                 "duplicate exporter registration for kind '{}' — only the first will be used",
                 reg.kind,
             );
@@ -251,7 +251,7 @@ pub struct SnapshotReceiver {
 /// the drop-newest overflow policy.
 pub fn snapshot_channel(capacity: usize) -> (SnapshotSender, SnapshotReceiver) {
     let cap = if capacity == 0 {
-        log::warn!("snapshot_channel: capacity 0 clamped to 1");
+        tracing::warn!("snapshot_channel: capacity 0 clamped to 1");
         1
     } else {
         capacity
@@ -311,7 +311,7 @@ impl ExporterHandle {
     pub fn join(mut self) {
         if let Some(h) = self.join.take() {
             if let Err(e) = h.join() {
-                log::error!("exporter thread panicked: {:?}", e);
+                tracing::error!("exporter thread panicked: {:?}", e);
             }
         }
     }
@@ -324,7 +324,7 @@ impl Drop for ExporterHandle {
         // without this the thread could outlive resources it references.
         if let Some(h) = self.join.take() {
             if let Err(e) = h.join() {
-                log::error!("exporter thread panicked: {:?}", e);
+                tracing::error!("exporter thread panicked: {:?}", e);
             }
         }
     }
@@ -353,7 +353,7 @@ pub fn spawn_exporter_thread(
         {
             Ok(rt) => rt,
             Err(e) => {
-                log::error!(
+                tracing::error!(
                     "exporter '{}': failed to build tokio runtime: {}",
                     exporter.name(),
                     e,
@@ -374,7 +374,7 @@ pub fn spawn_exporter_thread(
                         backoff = Duration::from_millis(100); // reset on success
                     }
                     Ok(Err(ExporterError::Timeout)) => {
-                        log::warn!("exporter '{}' self-reported timeout", exporter.name(),);
+                        tracing::warn!("exporter '{}' self-reported timeout", exporter.name(),);
                         if let Some(ref m) = metrics {
                             m.batches_failed_transient.fetch_add(1, Ordering::Relaxed);
                         }
@@ -383,7 +383,7 @@ pub fn spawn_exporter_thread(
                         backoff = (backoff * 2).min(MAX_BACKOFF);
                     }
                     Err(_) => {
-                        log::warn!(
+                        tracing::warn!(
                             "exporter '{}' export exceeded framework deadline ({:?})",
                             exporter.name(),
                             export_timeout,
@@ -396,7 +396,7 @@ pub fn spawn_exporter_thread(
                         backoff = (backoff * 2).min(MAX_BACKOFF);
                     }
                     Ok(Err(ExporterError::Transient(e))) => {
-                        log::warn!("exporter '{}' transient error: {}", exporter.name(), e);
+                        tracing::warn!("exporter '{}' transient error: {}", exporter.name(), e);
                         if let Some(ref m) = metrics {
                             m.batches_failed_transient.fetch_add(1, Ordering::Relaxed);
                         }
@@ -404,7 +404,7 @@ pub fn spawn_exporter_thread(
                         backoff = (backoff * 2).min(MAX_BACKOFF);
                     }
                     Ok(Err(ExporterError::Permanent(e))) => {
-                        log::error!(
+                        tracing::error!(
                             "exporter '{}' permanent error: {} — disabling",
                             exporter.name(),
                             e,
@@ -420,7 +420,7 @@ pub fn spawn_exporter_thread(
 
             // Flush exporter buffers on shutdown (spec §9.3).
             exporter.shutdown().await;
-            log::info!("exporter '{}' thread exiting", exporter.name());
+            tracing::info!("exporter '{}' thread exiting", exporter.name());
         });
     })?;
 
