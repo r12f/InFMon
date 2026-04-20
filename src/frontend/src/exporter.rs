@@ -45,7 +45,7 @@ pub struct ExporterMetrics {
     /// Cumulative attribute truncations.
     pub attrs_truncated: Arc<AtomicU64>,
     /// Last export duration in seconds, stored as `f64::to_bits()` in an
-    /// `AtomicU64` (not a plain integer counter — use [`get_export_duration`]
+    /// `AtomicU64` (not a plain integer counter — use [`Self::get_export_duration`]
     /// to read back as `f64`).
     pub export_duration_bits: Arc<AtomicU64>,
     /// Current queue depth.
