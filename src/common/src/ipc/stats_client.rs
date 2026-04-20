@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use crate::error::IpcError;
-use crate::types::*;
+use super::error::IpcError;
+use super::types::*;
 
 /// Raw snapshot data before decoding into FlowStatsSnapshot
 #[derive(Debug)]

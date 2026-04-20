@@ -665,6 +665,7 @@ dependencies = [
 name = "infmon-common"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "serde",
  "serde_yaml",
  "tempfile",
@@ -708,10 +709,8 @@ dependencies = [
 name = "infmon-ipc"
 version = "0.1.0"
 dependencies = [
- "infmon-config",
- "libc",
+ "infmon-common",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
 ]
 
