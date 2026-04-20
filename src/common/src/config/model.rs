@@ -130,6 +130,54 @@ pub struct FlowRule {
     pub eviction_policy: EvictionPolicy,
 }
 
+/// Log destination
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogDestination {
+    Syslog,
+    File,
+}
+
+fn default_log_level() -> String {
+    "info".into()
+}
+
+fn default_log_destination() -> LogDestination {
+    LogDestination::Syslog
+}
+
+fn default_rotation() -> String {
+    "daily".into()
+}
+
+/// File logging configuration
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogFileConfig {
+    pub path: String,
+    #[serde(default = "default_rotation")]
+    pub rotation: String, // daily | hourly | never
+}
+
+/// Logging configuration
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    #[serde(default = "default_log_level")]
+    pub level: String, // trace, debug, info, warn, error
+    #[serde(default = "default_log_destination")]
+    pub destination: LogDestination, // syslog | file
+    pub file: Option<LogFileConfig>,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            level: default_log_level(),
+            destination: default_log_destination(),
+            file: None,
+        }
+    }
+}
+
 /// Top-level config
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -139,4 +187,6 @@ pub struct Config {
     pub flow_rules: Vec<FlowRule>,
     #[serde(default)]
     pub exporters: Option<Vec<ExporterEntry>>,
+    #[serde(default)]
+    pub logging: Option<LoggingConfig>,
 }

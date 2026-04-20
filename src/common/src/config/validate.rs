@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::config::model::{Config, ExporterEntry, Field, FlowRule, FrontendConfig};
+use crate::config::model::{Config, ExporterEntry, Field, FlowRule, FrontendConfig, LogDestination, LoggingConfig};
 use thiserror::Error;
 
 pub const MAX_KEY_WIDTH: u32 = 64;
@@ -16,6 +16,9 @@ pub const VALID_OVERFLOW_POLICIES: &[&str] = &["drop_newest"];
 
 /// Maximum allowed queue_depth per exporter.
 pub const MAX_QUEUE_DEPTH: usize = 10_000;
+
+pub const VALID_LOG_LEVELS: &[&str] = &["trace", "debug", "info", "warn", "error"];
+pub const VALID_ROTATIONS: &[&str] = &["daily", "hourly", "never"];
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ValidationError {
@@ -79,6 +82,14 @@ pub enum ValidationError {
     InvalidExporterName { name: String },
     #[error("exporter '{name}': OTLP exporter must have a non-empty 'endpoint'")]
     MissingOtlpEndpoint { name: String },
+    #[error("logging: invalid level '{level}' (valid: {valid})")]
+    InvalidLogLevel { level: String, valid: String },
+    #[error("logging: destination is 'file' but no file config provided")]
+    MissingLogFileConfig,
+    #[error("logging: file path must not be empty")]
+    EmptyLogFilePath,
+    #[error("logging: invalid rotation '{rotation}' (valid: {valid})")]
+    InvalidLogRotation { rotation: String, valid: String },
 }
 
 /// Validate a flow-rule name.
@@ -262,12 +273,44 @@ pub fn validate_exporter(entry: &ExporterEntry, index: usize) -> Result<(), Vali
     Ok(())
 }
 
+/// Validate the logging configuration block.
+pub fn validate_logging(cfg: &LoggingConfig) -> Result<(), ValidationError> {
+    if !VALID_LOG_LEVELS.contains(&cfg.level.as_str()) {
+        return Err(ValidationError::InvalidLogLevel {
+            level: cfg.level.clone(),
+            valid: VALID_LOG_LEVELS.join(", "),
+        });
+    }
+    if cfg.destination == LogDestination::File {
+        match &cfg.file {
+            None => return Err(ValidationError::MissingLogFileConfig),
+            Some(file_cfg) => {
+                if file_cfg.path.is_empty() {
+                    return Err(ValidationError::EmptyLogFilePath);
+                }
+                if !VALID_ROTATIONS.contains(&file_cfg.rotation.as_str()) {
+                    return Err(ValidationError::InvalidLogRotation {
+                        rotation: file_cfg.rotation.clone(),
+                        valid: VALID_ROTATIONS.join(", "),
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Validate the entire config (all rules, cross-rule constraints,
 /// frontend config, and exporter entries).
 pub fn validate_config(config: &Config) -> Result<(), ValidationError> {
     // Validate frontend section if present
     if let Some(ref frontend) = config.frontend {
         validate_frontend(frontend)?;
+    }
+
+    // Validate logging section if present
+    if let Some(ref logging) = config.logging {
+        validate_logging(logging)?;
     }
 
     // Validate flow rules
