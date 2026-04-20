@@ -226,8 +226,7 @@ impl OtlpExporter {
 
             // Per-flow data points
             for flow in fr.flows.iter().take(flows_to_emit) {
-                let attrs =
-                    build_flow_attributes(fr, flow, &fr.fields, Some(trunc_counter));
+                let attrs = build_flow_attributes(fr, flow, &fr.fields, Some(trunc_counter));
 
                 // infmon.flow.packets
                 flow_packets_points.push(NumberDataPoint {
@@ -484,9 +483,12 @@ impl OtlpExporter {
             .fetch_add(points_dropped_count, Ordering::Relaxed);
 
         // Helper: build a cumulative monotonic Sum metric with no flow attrs
-        let make_sum_metric =
-            |name: &str, unit: &str, value: u64, attrs: Vec<KeyValue>| -> Metric {
-                Metric {
+        let make_sum_metric = |name: &str,
+                               unit: &str,
+                               value: u64,
+                               attrs: Vec<KeyValue>|
+         -> Metric {
+            Metric {
                     name: name.into(),
                     description: String::new(),
                     unit: unit.into(),
@@ -508,11 +510,10 @@ impl OtlpExporter {
                     )),
                     metadata: Vec::new(),
                 }
-            };
+        };
 
-        let make_gauge_metric =
-            |name: &str, unit: &str, value: f64| -> Metric {
-                Metric {
+        let make_gauge_metric = |name: &str, unit: &str, value: f64| -> Metric {
+            Metric {
                     name: name.into(),
                     description: String::new(),
                     unit: unit.into(),
@@ -532,7 +533,7 @@ impl OtlpExporter {
                     ),
                     metadata: Vec::new(),
                 }
-            };
+        };
 
         let m = &self.metrics;
 
@@ -558,8 +559,7 @@ impl OtlpExporter {
 
         // batches_failed: emit two data points with reason attribute
         let failed_non_retryable = m.batches_failed_non_retryable.load(Ordering::Relaxed);
-        let failed_retries_exhausted =
-            m.batches_failed_retries_exhausted.load(Ordering::Relaxed);
+        let failed_retries_exhausted = m.batches_failed_retries_exhausted.load(Ordering::Relaxed);
         metrics.push(Metric {
             name: "infmon.exporter.batches_failed".into(),
             description: String::new(),
@@ -770,6 +770,7 @@ fn kv_int(key: &str, value: i64) -> KeyValue {
 
 /// Truncate a string to at most `max_bytes` bytes, respecting UTF-8 char
 /// boundaries, appending `…` if truncated (spec §8.2).
+#[cfg(test)]
 fn truncate_utf8(s: &str, max_bytes: usize) -> std::borrow::Cow<'_, str> {
     truncate_utf8_counted(s, max_bytes, None)
 }
@@ -831,10 +832,18 @@ fn build_flow_attributes(
         if let Some(value) = flow.key.get(i) {
             match (field_id, value) {
                 (FieldId::SrcIp, FieldValue::Ip(addr)) => {
-                    attrs.push(kv_string_counted("flow.src_ip", &render_ip(addr), trunc_counter));
+                    attrs.push(kv_string_counted(
+                        "flow.src_ip",
+                        &render_ip(addr),
+                        trunc_counter,
+                    ));
                 }
                 (FieldId::DstIp, FieldValue::Ip(addr)) => {
-                    attrs.push(kv_string_counted("flow.dst_ip", &render_ip(addr), trunc_counter));
+                    attrs.push(kv_string_counted(
+                        "flow.dst_ip",
+                        &render_ip(addr),
+                        trunc_counter,
+                    ));
                 }
                 (FieldId::MirrorSrcIp, FieldValue::Ip(addr)) => {
                     attrs.push(kv_string_counted(
@@ -1249,8 +1258,17 @@ mod tests {
                 };
                 for dp in points {
                     for attr in &dp.attributes {
-                        assert_ne!(attr.key, "flow-rule", "self-obs metric {} has flow-rule attr", m.name);
-                        assert!(!attr.key.starts_with("flow."), "self-obs metric {} has flow attr {}", m.name, attr.key);
+                        assert_ne!(
+                            attr.key, "flow-rule",
+                            "self-obs metric {} has flow-rule attr",
+                            m.name
+                        );
+                        assert!(
+                            !attr.key.starts_with("flow."),
+                            "self-obs metric {} has flow attr {}",
+                            m.name,
+                            attr.key
+                        );
                     }
                 }
             }
@@ -1285,14 +1303,20 @@ mod tests {
         // First build: 1 flow × 3 per-flow + 5 per-flow-rule = 8 data points
         let _ = exporter.build_request(&snap);
         assert_eq!(
-            exporter.metrics.points_emitted.load(std::sync::atomic::Ordering::Relaxed),
+            exporter
+                .metrics
+                .points_emitted
+                .load(std::sync::atomic::Ordering::Relaxed),
             8
         );
 
         // Second build: cumulative, so 16 total
         let _ = exporter.build_request(&snap);
         assert_eq!(
-            exporter.metrics.points_emitted.load(std::sync::atomic::Ordering::Relaxed),
+            exporter
+                .metrics
+                .points_emitted
+                .load(std::sync::atomic::Ordering::Relaxed),
             16
         );
     }
@@ -1340,7 +1364,10 @@ mod tests {
         let _ = exporter.build_request(&snap);
         // 3 flows, but cap allows only 1 → 2 dropped × 3 points_per_flow = 6
         assert_eq!(
-            exporter.metrics.points_dropped.load(std::sync::atomic::Ordering::Relaxed),
+            exporter
+                .metrics
+                .points_dropped
+                .load(std::sync::atomic::Ordering::Relaxed),
             6
         );
     }
@@ -1358,7 +1385,10 @@ mod tests {
         };
         let req = exporter.build_request(&snap);
         let metrics = &req.resource_metrics[0].scope_metrics[0].metrics;
-        let bf = metrics.iter().find(|m| m.name == "infmon.exporter.batches_failed").unwrap();
+        let bf = metrics
+            .iter()
+            .find(|m| m.name == "infmon.exporter.batches_failed")
+            .unwrap();
         if let Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(s)) = &bf.data {
             assert_eq!(s.data_points.len(), 2);
             let reasons: Vec<&str> = s.data_points.iter().map(|dp| {
