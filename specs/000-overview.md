@@ -175,12 +175,10 @@ InFMon/
 │   │   ├── test/           # gtest unit tests
 │   │   └── CMakeLists.txt
 │   ├── frontend/           # infmon-frontend (Rust)
-│   │   ├── src/
-│   │   ├── test/
+│   │   ├── src/            # includes *_tests.rs companion files
 │   │   └── Cargo.toml
 │   └── cli/                # infmon-cli (Rust)
-│       ├── src/
-│       ├── test/
+│       ├── src/            # includes *_tests.rs companion files
 │       └── Cargo.toml
 ├── tests/                  # E2E, real-packet replay (NOT in CI)
 │   ├── pcaps/
@@ -203,6 +201,10 @@ InFMon/
   - Stable toolchain pinned via `rust-toolchain.toml`.
   - `rustfmt` and `clippy -D warnings` enforced in CI.
   - `cargo test` for unit + integration tests.
+  - **Unit tests** live in companion `_tests.rs` files next to the source
+    (e.g. `foo.rs` → `foo_tests.rs`), declared as
+    `#[cfg(test)] mod foo_tests;` at the bottom of `foo.rs`. Inline
+    `#[cfg(test)] mod tests { }` blocks are not used.
   - Workspace `Cargo.toml` at repo root if/when shared crates appear.
 - **Commits:** Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`,
   `test:`, `ci:`, `chore:`). All commits include `Signed-off-by:` (DCO).
