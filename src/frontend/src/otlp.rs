@@ -162,7 +162,9 @@ impl OtlpExporter {
     }
 
     /// Build the full OTLP request from a snapshot.
-    fn build_request(&self, snap: &FlowStatsSnapshot) -> ExportMetricsServiceRequest {
+    /// Returns `(request, points_built)` — the caller increments `points_emitted`
+    /// only after a successful export.
+    fn build_request(&self, snap: &FlowStatsSnapshot) -> (ExportMetricsServiceRequest, u64) {
         let wall_ns = snap.wall_clock_ns;
         let trunc_counter = &self.metrics.attrs_truncated;
 
@@ -474,66 +476,11 @@ impl OtlpExporter {
 
         // ── Append self-observability metric objects ──────────────────────
 
-        // Update atomic counters
-        self.metrics
-            .points_emitted
-            .fetch_add(points_emitted_count, Ordering::Relaxed);
+        // Update atomic counters (points_dropped tracked here; points_emitted
+        // is deferred to the caller so it only counts successfully exported points)
         self.metrics
             .points_dropped
             .fetch_add(points_dropped_count, Ordering::Relaxed);
-
-        // Helper: build a cumulative monotonic Sum metric with no flow attrs
-        let make_sum_metric = |name: &str,
-                               unit: &str,
-                               value: u64,
-                               attrs: Vec<KeyValue>|
-         -> Metric {
-            Metric {
-                    name: name.into(),
-                    description: String::new(),
-                    unit: unit.into(),
-                    data: Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(
-                        Sum {
-                            data_points: vec![NumberDataPoint {
-                                attributes: attrs,
-                                time_unix_nano: wall_ns,
-                                value: Some(
-                                    opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsInt(
-                                        saturating_i64(value),
-                                    ),
-                                ),
-                                ..Default::default()
-                            }],
-                            aggregation_temporality: AggregationTemporality::Cumulative as i32,
-                            is_monotonic: true,
-                        },
-                    )),
-                    metadata: Vec::new(),
-                }
-        };
-
-        let make_gauge_metric = |name: &str, unit: &str, value: f64| -> Metric {
-            Metric {
-                    name: name.into(),
-                    description: String::new(),
-                    unit: unit.into(),
-                    data: Some(
-                        opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(Gauge {
-                            data_points: vec![NumberDataPoint {
-                                attributes: vec![],
-                                time_unix_nano: wall_ns,
-                                value: Some(
-                                    opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsDouble(
-                                        value,
-                                    ),
-                                ),
-                                ..Default::default()
-                            }],
-                        }),
-                    ),
-                    metadata: Vec::new(),
-                }
-        };
 
         let m = &self.metrics;
 
@@ -543,23 +490,26 @@ impl OtlpExporter {
             "{ticks}",
             m.ticks_dropped.load(Ordering::Relaxed),
             vec![],
+            wall_ns,
         ));
         metrics.push(make_sum_metric(
             "infmon.exporter.batches_sent",
             "{batches}",
             m.batches_sent.load(Ordering::Relaxed),
             vec![],
+            wall_ns,
         ));
         metrics.push(make_sum_metric(
             "infmon.exporter.batches_dropped",
             "{batches}",
             m.batches_dropped.load(Ordering::Relaxed),
             vec![],
+            wall_ns,
         ));
 
         // batches_failed: emit two data points with reason attribute
         let failed_non_retryable = m.batches_failed_non_retryable.load(Ordering::Relaxed);
-        let failed_retries_exhausted = m.batches_failed_retries_exhausted.load(Ordering::Relaxed);
+        let failed_transient = m.batches_failed_transient.load(Ordering::Relaxed);
         metrics.push(Metric {
             name: "infmon.exporter.batches_failed".into(),
             description: String::new(),
@@ -578,11 +528,11 @@ impl OtlpExporter {
                             ..Default::default()
                         },
                         NumberDataPoint {
-                            attributes: vec![kv_string("reason", "retries_exhausted")],
+                            attributes: vec![kv_string("reason", "transient")],
                             time_unix_nano: wall_ns,
                             value: Some(
                                 opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsInt(
-                                    saturating_i64(failed_retries_exhausted),
+                                    saturating_i64(failed_transient),
                                 ),
                             ),
                             ..Default::default()
@@ -600,6 +550,7 @@ impl OtlpExporter {
             "{points}",
             m.points_emitted.load(Ordering::Relaxed),
             vec![],
+            wall_ns,
         ));
 
         // points_dropped with reason
@@ -608,6 +559,7 @@ impl OtlpExporter {
             "{points}",
             m.points_dropped.load(Ordering::Relaxed),
             vec![kv_string("reason", "export_cap")],
+            wall_ns,
         ));
 
         metrics.push(make_sum_metric(
@@ -615,6 +567,7 @@ impl OtlpExporter {
             "{attrs}",
             m.attrs_truncated.load(Ordering::Relaxed),
             vec![],
+            wall_ns,
         ));
 
         // Gauges
@@ -622,32 +575,37 @@ impl OtlpExporter {
             "infmon.exporter.export_duration",
             "s",
             m.get_export_duration(),
+            wall_ns,
         ));
         metrics.push(make_gauge_metric(
             "infmon.exporter.queue_depth",
             "{batches}",
             m.queue_depth.load(Ordering::Relaxed) as f64,
+            wall_ns,
         ));
 
-        ExportMetricsServiceRequest {
-            resource_metrics: vec![ResourceMetrics {
-                resource: Some(Resource {
-                    attributes: self.resource_attrs.clone(),
-                    dropped_attributes_count: 0,
-                }),
-                scope_metrics: vec![ScopeMetrics {
-                    scope: Some(InstrumentationScope {
-                        name: "infmon".into(),
-                        version: option_env!("CARGO_PKG_VERSION").unwrap_or("0.0.0").into(),
-                        attributes: Vec::new(),
+        (
+            ExportMetricsServiceRequest {
+                resource_metrics: vec![ResourceMetrics {
+                    resource: Some(Resource {
+                        attributes: self.resource_attrs.clone(),
                         dropped_attributes_count: 0,
                     }),
-                    metrics,
+                    scope_metrics: vec![ScopeMetrics {
+                        scope: Some(InstrumentationScope {
+                            name: "infmon".into(),
+                            version: option_env!("CARGO_PKG_VERSION").unwrap_or("0.0.0").into(),
+                            attributes: Vec::new(),
+                            dropped_attributes_count: 0,
+                        }),
+                        metrics,
+                        schema_url: String::new(),
+                    }],
                     schema_url: String::new(),
                 }],
-                schema_url: String::new(),
-            }],
-        }
+            },
+            points_emitted_count,
+        )
     }
 }
 
@@ -662,7 +620,7 @@ impl Exporter for OtlpExporter {
 
     fn export(&self, snap: Arc<FlowStatsSnapshot>) -> BoxFuture<'_, Result<(), ExporterError>> {
         Box::pin(async move {
-            let request = self.build_request(&snap);
+            let (request, points_built) = self.build_request(&snap);
 
             let mut client = self.get_client().await.map_err(ExporterError::Transient)?;
 
@@ -672,6 +630,9 @@ impl Exporter for OtlpExporter {
                     let elapsed = start.elapsed().as_secs_f64();
                     self.metrics.set_export_duration(elapsed);
                     self.metrics.batches_sent.fetch_add(1, Ordering::Relaxed);
+                    self.metrics
+                        .points_emitted
+                        .fetch_add(points_built, Ordering::Relaxed);
                     Ok(())
                 }
                 Err(e) => {
@@ -739,6 +700,62 @@ fn saturating_i64(v: u64) -> i64 {
     i64::try_from(v).unwrap_or(i64::MAX)
 }
 
+/// Build a cumulative monotonic `Sum` metric.
+fn make_sum_metric(
+    name: &str,
+    unit: &str,
+    value: u64,
+    attrs: Vec<KeyValue>,
+    time_unix_nano: u64,
+) -> Metric {
+    Metric {
+        name: name.into(),
+        description: String::new(),
+        unit: unit.into(),
+        data: Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(
+            Sum {
+                data_points: vec![NumberDataPoint {
+                    attributes: attrs,
+                    time_unix_nano,
+                    value: Some(
+                        opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsInt(
+                            saturating_i64(value),
+                        ),
+                    ),
+                    ..Default::default()
+                }],
+                aggregation_temporality: AggregationTemporality::Cumulative as i32,
+                is_monotonic: true,
+            },
+        )),
+        metadata: Vec::new(),
+    }
+}
+
+/// Build a `Gauge` metric with a double value.
+fn make_gauge_metric(name: &str, unit: &str, value: f64, time_unix_nano: u64) -> Metric {
+    Metric {
+        name: name.into(),
+        description: String::new(),
+        unit: unit.into(),
+        data: Some(
+            opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(Gauge {
+                data_points: vec![NumberDataPoint {
+                    attributes: vec![],
+                    time_unix_nano,
+                    value: Some(
+                        opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsDouble(
+                            value,
+                        ),
+                    ),
+                    ..Default::default()
+                }],
+            }),
+        ),
+        metadata: Vec::new(),
+    }
+}
+
 /// Build a `KeyValue` with a string value.
 fn kv_string(key: &str, value: &str) -> KeyValue {
     kv_string_counted(key, value, None)
@@ -766,13 +783,6 @@ fn kv_int(key: &str, value: i64) -> KeyValue {
             value: Some(opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(value)),
         }),
     }
-}
-
-/// Truncate a string to at most `max_bytes` bytes, respecting UTF-8 char
-/// boundaries, appending `…` if truncated (spec §8.2).
-#[cfg(test)]
-fn truncate_utf8(s: &str, max_bytes: usize) -> std::borrow::Cow<'_, str> {
-    truncate_utf8_counted(s, max_bytes, None)
 }
 
 /// Like [`truncate_utf8`] but optionally bumps an atomic counter on truncation.
@@ -927,13 +937,13 @@ mod tests {
     #[test]
     fn truncate_utf8_no_truncation() {
         let s = "hello";
-        assert_eq!(truncate_utf8(s, 256).as_ref(), "hello");
+        assert_eq!(truncate_utf8_counted(s, 256, None).as_ref(), "hello");
     }
 
     #[test]
     fn truncate_utf8_truncates() {
         let s = "a".repeat(300);
-        let result = truncate_utf8(&s, 256);
+        let result = truncate_utf8_counted(&s, 256, None);
         assert!(result.len() <= 256);
         assert!(result.ends_with('…'));
     }
@@ -942,7 +952,7 @@ mod tests {
     fn truncate_utf8_respects_char_boundaries() {
         // '€' is 3 bytes in UTF-8
         let s = "€".repeat(100); // 300 bytes
-        let result = truncate_utf8(&s, 10);
+        let result = truncate_utf8_counted(&s, 10, None);
         // Should truncate to a valid UTF-8 string
         assert!(result.len() <= 10);
         assert!(result.ends_with('…'));
@@ -978,7 +988,7 @@ mod tests {
             interval_ns: 1_000_000_000,
             flow_rules: vec![],
         };
-        let req = exporter.build_request(&snap);
+        let req = exporter.build_request(&snap).0;
         assert_eq!(req.resource_metrics.len(), 1);
         let rm = &req.resource_metrics[0];
         assert!(rm.resource.is_some());
@@ -1018,7 +1028,7 @@ mod tests {
                 },
             }],
         };
-        let req = exporter.build_request(&snap);
+        let req = exporter.build_request(&snap).0;
         let metrics = &req.resource_metrics[0].scope_metrics[0].metrics;
 
         // 3 per-flow + 5 per-flow-rule + 9 self-observability = 17
@@ -1076,7 +1086,7 @@ mod tests {
             }],
         };
 
-        let req = exporter.build_request(&snap);
+        let req = exporter.build_request(&snap).0;
         let metrics = &req.resource_metrics[0].scope_metrics[0].metrics;
 
         // Count per-flow metrics (should be capped to 2 flows)
@@ -1214,7 +1224,7 @@ mod tests {
             interval_ns: 1_000_000_000,
             flow_rules: vec![],
         };
-        let req = exporter.build_request(&snap);
+        let req = exporter.build_request(&snap).0;
         let metrics = &req.resource_metrics[0].scope_metrics[0].metrics;
         let names: Vec<&str> = metrics.iter().map(|m| m.name.as_str()).collect();
 
@@ -1241,7 +1251,7 @@ mod tests {
             interval_ns: 1_000_000_000,
             flow_rules: vec![],
         };
-        let req = exporter.build_request(&snap);
+        let req = exporter.build_request(&snap).0;
         let metrics = &req.resource_metrics[0].scope_metrics[0].metrics;
 
         // Self-observability metrics must NOT have flow-rule or flow attributes
@@ -1301,24 +1311,20 @@ mod tests {
         };
 
         // First build: 1 flow × 3 per-flow + 5 per-flow-rule = 8 data points
-        let _ = exporter.build_request(&snap);
+        let (_, points1) = exporter.build_request(&snap);
+        assert_eq!(points1, 8);
+        // points_emitted is NOT incremented by build_request (only on successful export)
         assert_eq!(
             exporter
                 .metrics
                 .points_emitted
                 .load(std::sync::atomic::Ordering::Relaxed),
-            8
+            0
         );
 
-        // Second build: cumulative, so 16 total
-        let _ = exporter.build_request(&snap);
-        assert_eq!(
-            exporter
-                .metrics
-                .points_emitted
-                .load(std::sync::atomic::Ordering::Relaxed),
-            16
-        );
+        // Second build: also 8 points
+        let (_, points2) = exporter.build_request(&snap);
+        assert_eq!(points2, 8);
     }
 
     #[test]
@@ -1383,7 +1389,7 @@ mod tests {
             interval_ns: 1_000_000_000,
             flow_rules: vec![],
         };
-        let req = exporter.build_request(&snap);
+        let req = exporter.build_request(&snap).0;
         let metrics = &req.resource_metrics[0].scope_metrics[0].metrics;
         let bf = metrics
             .iter()
@@ -1400,7 +1406,7 @@ mod tests {
                     }).unwrap_or("")
             }).collect();
             assert!(reasons.contains(&"non_retryable"));
-            assert!(reasons.contains(&"retries_exhausted"));
+            assert!(reasons.contains(&"transient"));
         } else {
             panic!("batches_failed should be a Sum");
         }

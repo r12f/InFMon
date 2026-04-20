@@ -23,24 +23,33 @@ use infmon_ipc::types::FlowStatsSnapshot;
 #[derive(Debug, Default, Clone)]
 pub struct ExporterMetrics {
     /// Cumulative ticks dropped due to backpressure.
+    /// TODO: wire up in poller/channel integration (channel-full branch).
     pub ticks_dropped: Arc<AtomicU64>,
     /// Cumulative batches successfully sent.
     pub batches_sent: Arc<AtomicU64>,
     /// Cumulative batches dropped (channel overflow).
+    /// TODO: wire up in poller/channel integration (channel-full branch).
     pub batches_dropped: Arc<AtomicU64>,
-    /// Cumulative batches that failed (non-retryable).
+    /// Cumulative batches that failed (non-retryable / permanent).
     pub batches_failed_non_retryable: Arc<AtomicU64>,
-    /// Cumulative batches that failed (retries exhausted).
-    pub batches_failed_retries_exhausted: Arc<AtomicU64>,
-    /// Cumulative data points emitted.
+    /// Cumulative batches that failed (transient: timeout, network blip, etc.).
+    ///
+    /// Note: the exporter loop does not retry within a tick — each snapshot gets
+    /// one export attempt. A transient failure therefore means this tick's batch
+    /// was lost (the next tick will try a fresh snapshot).
+    pub batches_failed_transient: Arc<AtomicU64>,
+    /// Cumulative data points emitted (successfully exported).
     pub points_emitted: Arc<AtomicU64>,
     /// Cumulative data points dropped (export cap).
     pub points_dropped: Arc<AtomicU64>,
     /// Cumulative attribute truncations.
     pub attrs_truncated: Arc<AtomicU64>,
-    /// Last export duration in seconds (stored as f64 bits).
+    /// Last export duration in seconds, stored as `f64::to_bits()` in an
+    /// `AtomicU64` (not a plain integer counter — use [`get_export_duration`]
+    /// to read back as `f64`).
     pub export_duration_bits: Arc<AtomicU64>,
     /// Current queue depth.
+    /// TODO: wire up in poller/channel integration (derive from channel `len()`).
     pub queue_depth: Arc<AtomicU64>,
 }
 
@@ -366,8 +375,7 @@ pub fn spawn_exporter_thread(
                     Ok(Err(ExporterError::Timeout)) => {
                         log::warn!("exporter '{}' self-reported timeout", exporter.name(),);
                         if let Some(ref m) = metrics {
-                            m.batches_failed_retries_exhausted
-                                .fetch_add(1, Ordering::Relaxed);
+                            m.batches_failed_transient.fetch_add(1, Ordering::Relaxed);
                         }
                         // Transient-like, apply backoff
                         tokio::time::sleep(backoff).await;
@@ -380,8 +388,7 @@ pub fn spawn_exporter_thread(
                             export_timeout,
                         );
                         if let Some(ref m) = metrics {
-                            m.batches_failed_retries_exhausted
-                                .fetch_add(1, Ordering::Relaxed);
+                            m.batches_failed_transient.fetch_add(1, Ordering::Relaxed);
                         }
                         // Transient-like, apply backoff
                         tokio::time::sleep(backoff).await;
@@ -390,8 +397,7 @@ pub fn spawn_exporter_thread(
                     Ok(Err(ExporterError::Transient(e))) => {
                         log::warn!("exporter '{}' transient error: {}", exporter.name(), e);
                         if let Some(ref m) = metrics {
-                            m.batches_failed_retries_exhausted
-                                .fetch_add(1, Ordering::Relaxed);
+                            m.batches_failed_transient.fetch_add(1, Ordering::Relaxed);
                         }
                         tokio::time::sleep(backoff).await;
                         backoff = (backoff * 2).min(MAX_BACKOFF);
