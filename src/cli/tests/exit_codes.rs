@@ -22,11 +22,7 @@ fn exit_usage_on_unknown_subcommand() {
 #[test]
 fn exit_usage_on_missing_required_arg() {
     // stats export requires --format
-    cmd()
-        .args(["stats", "export"])
-        .assert()
-        .failure()
-        .code(2);
+    cmd().args(["stats", "export"]).assert().failure().code(2);
 }
 
 #[test]
@@ -55,20 +51,12 @@ fn exit_usage_on_config_set_missing_value() {
 
 #[test]
 fn exit_usage_on_flow_rule_add_missing_spec() {
-    cmd()
-        .args(["flow-rule", "add"])
-        .assert()
-        .failure()
-        .code(2);
+    cmd().args(["flow-rule", "add"]).assert().failure().code(2);
 }
 
 #[test]
 fn exit_usage_on_flow_rule_rm_missing_target() {
-    cmd()
-        .args(["flow-rule", "rm"])
-        .assert()
-        .failure()
-        .code(2);
+    cmd().args(["flow-rule", "rm"]).assert().failure().code(2);
 }
 
 // ---------------------------------------------------------------------------

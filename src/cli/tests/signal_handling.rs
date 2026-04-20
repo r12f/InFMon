@@ -6,7 +6,7 @@
 
 #[cfg(unix)]
 mod unix {
-    use std::io::{Read, Write};
+    use std::io::Read;
     use std::process::{Command, Stdio};
     use std::time::Duration;
 
@@ -33,16 +33,10 @@ mod unix {
         let _ = stdout.read(&mut buf);
         drop(stdout);
 
-        let status = child
-            .wait()
-            .expect("wait for infmonctl");
+        let status = child.wait().expect("wait for infmonctl");
         // --help is short enough that it completes before pipe close most of the time,
         // so we accept exit 0 (either completed normally or got SIGPIPE→0).
-        assert!(
-            status.success(),
-            "expected exit 0, got {:?}",
-            status.code()
-        );
+        assert!(status.success(), "expected exit 0, got {:?}", status.code());
     }
 
     /// SIGINT → exit 130.
