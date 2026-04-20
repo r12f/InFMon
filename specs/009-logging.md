@@ -8,6 +8,7 @@
 | 0.2     | 2026-04-20 | Riff (r12f)  | Address review: add enum defs, PathBuf, error contract, format, directory creation, naming, validation, SIGHUP, max_log_files, RUST_LOG directives, bootstrap threading, backpressure note. |
 | 0.3     | 2026-04-20 | Riff (r12f)  | Address review: use reload::Layer for subscriber swap (set_global_default is once-only), add #[derive(Deserialize)] to config structs. |
 | 0.4     | 2026-04-20 | Riff (r12f)  | Address review: add #[serde(default)] to config structs, change max_files to Option<usize> (None=unlimited), add ReloadHandle type alias note. |
+| 0.5     | 2026-04-20 | Riff (r12f)  | Address review: remove struct-level #[serde(default)] from LogFileConfig (path must be required), add per-field defaults, guard struct definitions, schema fix for max_files type. |
 
 - **Depends on:** [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md)
 - **Related:** [`008-packaging-install`](008-packaging-install.md)
@@ -278,7 +279,7 @@ logging:                      # optional, defaults applied if absent
   file:                       # required when destination=file
     path: <PathBuf>           # required
     rotation: <Rotation>      # optional, default: daily
-    max_files: <usize>        # optional, default: 7; omit for unlimited
+    max_files: <usize | null>  # optional, default: 7; null/omit for unlimited
 ```
 
 ### Public API (`infmon-frontend::logging`)
@@ -303,6 +304,22 @@ pub fn init_logging(config: &LoggingConfig, handle: &ReloadHandle) -> Result<Log
 > ```rust
 > type ReloadHandle = reload::Handle<Box<dyn Layer<Registry> + Send + Sync>, Registry>;
 > ```
+
+### Guard structs
+
+```rust
+/// Holds the reload handle from the bootstrap phase.
+/// Must be passed to `init_logging` so it can swap the inner layer.
+pub struct BootstrapGuard {
+    pub handle: ReloadHandle,
+}
+
+/// Holds WorkerGuard instances (e.g. non-blocking file appender guard).
+/// Must be kept alive until process exit to ensure buffered output is flushed.
+pub struct LoggingGuard {
+    pub guards: Vec<tracing_appender::non_blocking::WorkerGuard>,
+}
+```
 
 ### CLI flag
 
