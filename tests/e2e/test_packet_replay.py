@@ -40,7 +40,12 @@ def discover_scenarios() -> List[str]:
 # Test
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("scenario", discover_scenarios(), ids=lambda s: s)
+_DISCOVERED = discover_scenarios()
+if not _DISCOVERED:
+    pytest.skip("No E2E scenarios found under scenarios/", allow_module_level=True)
+
+
+@pytest.mark.parametrize("scenario", _DISCOVERED, ids=lambda s: s)
 def test_packet_replay(scenario: str, infmon_env: dict) -> None:
     """Replay a pcap and verify flow counters match the expected baseline."""
     scenario_dir = _SCENARIOS_DIR / scenario
@@ -65,46 +70,50 @@ def test_packet_replay(scenario: str, infmon_env: dict) -> None:
     else:
         # Default: match all traffic on the RX interface
         fields = {}
-        max_keys = 0
+        max_keys = 0  # 0 = unlimited keys (sentinel value in InFMon API)
 
     flow_rule_add(name=scenario, fields=fields, max_keys=max_keys)
 
-    # 3. Replay traffic
-    tx_iface = infmon_env["tx_iface"]
-    tx_mode = infmon_env["tx_mode"]
-    tx_host = infmon_env.get("tx_host", "")
+    try:
+        # 3. Replay traffic
+        tx_iface = infmon_env["tx_iface"]
+        tx_mode = infmon_env["tx_mode"]
+        tx_host = infmon_env.get("tx_host", "")
 
-    # The dst_ip is the RX side IP (without prefix length)
-    dst_ip = infmon_env["rx_ip"].split("/")[0]
+        # The dst_ip is the RX side IP (without prefix length)
+        dst_ip = infmon_env["rx_ip"].split("/")[0]
 
-    replay(
-        pcap_path=pcap_path,
-        dst_ip=dst_ip,
-        iface=tx_iface,
-        remote_host=tx_host if tx_mode == "remote" else "",
-    )
-
-    # 4. Pull flow counters
-    stats = wait_for_stats(rule_name=scenario, timeout=30.0, poll_interval=1.0)
-
-    # 5. Compare or refresh baseline
-    if refresh_mode:
-        with open(expected_path, "w") as f:
-            json.dump(stats, f, indent=2, sort_keys=True)
-            f.write("\n")
-        pytest.skip(f"Baseline refreshed for {scenario}")
-    else:
-        with open(expected_path) as f:
-            expected = json.load(f)
-
-        if not expected:
-            pytest.fail(
-                f"Expected baseline for {scenario!r} is empty. "
-                f"Run with INFMON_E2E_TEST_REFRESH_BASELINE=1 to populate it."
-            )
-
-        assert stats == expected, (
-            f"Flow stats mismatch for {scenario!r}.\n"
-            f"Expected: {json.dumps(expected, indent=2)}\n"
-            f"Actual:   {json.dumps(stats, indent=2)}"
+        replay(
+            pcap_path=pcap_path,
+            dst_ip=dst_ip,
+            iface=tx_iface,
+            remote_host=tx_host if tx_mode == "remote" else "",
         )
+
+        # 4. Pull flow counters
+        stats = wait_for_stats(rule_name=scenario, timeout=30.0, poll_interval=1.0)
+
+        # 5. Compare or refresh baseline
+        if refresh_mode:
+            with open(expected_path, "w") as f:
+                json.dump(stats, f, indent=2, sort_keys=True)
+                f.write("\n")
+            pytest.skip(f"Baseline refreshed for {scenario}")
+        else:
+            with open(expected_path) as f:
+                expected = json.load(f)
+
+            if not expected:
+                pytest.fail(
+                    f"Expected baseline for {scenario!r} is empty. "
+                    f"Run with INFMON_E2E_TEST_REFRESH_BASELINE=1 to populate it."
+                )
+
+            assert stats == expected, (
+                f"Flow stats mismatch for {scenario!r}.\n"
+                f"Expected: {json.dumps(expected, indent=2)}\n"
+                f"Actual:   {json.dumps(stats, indent=2)}"
+            )
+    finally:
+        # Ensure flow rules are cleaned up even on failure
+        clear_all_flow_rules()
