@@ -1,3 +1,5 @@
 [workspace]
 resolver = "2"
-members = ["src/infmon-config", "src/infmon-ipc", "src/frontend", "src/cli"]
+# infmon-config and infmon-ipc will be migrated into infmon-common and
+# removed once source files are moved (tracked in #99).
+members = ["src/infmon-config", "src/infmon-ipc", "src/common", "src/frontend", "src/cli"]

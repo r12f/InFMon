@@ -662,6 +662,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "infmon-common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "infmon-config"
 version = "0.1.0"
 dependencies = [
