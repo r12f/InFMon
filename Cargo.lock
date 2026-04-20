@@ -564,6 +564,7 @@ dependencies = [
  "libc",
  "log",
  "opentelemetry-proto",
+ "rand",
  "serde_yaml",
  "signal-hook",
  "tempfile",

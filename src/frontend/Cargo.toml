@@ -22,7 +22,8 @@ log = "0.4"
 opentelemetry-proto = { version = "0.27", features = ["gen-tonic-messages", "metrics"] }
 serde_yaml = "0.9"
 signal-hook = "0.3"
-tokio = { version = "1", features = ["rt", "time"] }
+rand = "0.8"
+tokio = { version = "1", features = ["rt", "time", "sync"] }
 tonic = "0.12"
 uuid = { version = "1", features = ["v4"] }
 
