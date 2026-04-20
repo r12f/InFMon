@@ -270,7 +270,7 @@ impl SnapshotSender {
     /// [`TrySendError::Full`] so the caller can track drops via
     /// `ExporterMetrics::batches_dropped`.
     pub fn try_send(&self, snap: Arc<FlowStatsSnapshot>) -> Result<(), TrySendError> {
-        match self.inner.try_send(snap.clone()) {
+        match self.inner.try_send(snap) {
             Ok(()) => Ok(()),
             Err(std::sync::mpsc::TrySendError::Full(_)) => Err(TrySendError::Full),
             Err(std::sync::mpsc::TrySendError::Disconnected(_)) => Err(TrySendError::Disconnected),
