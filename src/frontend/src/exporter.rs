@@ -266,21 +266,13 @@ impl SnapshotSender {
         &self.inner
     }
 
-    /// Try to send a snapshot. If the queue is full, drops the **oldest**
-    /// batch (spec §7.2: freshest cumulative data supersedes older data)
-    /// and retries.
+    /// Try to send a snapshot. If the queue is full, returns
+    /// [`TrySendError::Full`] so the caller can track drops via
+    /// `ExporterMetrics::batches_dropped`.
     pub fn try_send(&self, snap: Arc<FlowStatsSnapshot>) -> Result<(), TrySendError> {
         match self.inner.try_send(snap.clone()) {
             Ok(()) => Ok(()),
-            Err(std::sync::mpsc::TrySendError::Full(_)) => {
-                // Drop oldest: drain one item and retry
-                // The receiver may have already consumed it, so ignore errors.
-                // We use a separate recv to drain the oldest entry.
-                // NOTE: Since we only have a SyncSender, we need to signal
-                // back that an item was dropped. The caller can track this via
-                // ExporterMetrics::batches_dropped.
-                Err(TrySendError::Full)
-            }
+            Err(std::sync::mpsc::TrySendError::Full(_)) => Err(TrySendError::Full),
             Err(std::sync::mpsc::TrySendError::Disconnected(_)) => Err(TrySendError::Disconnected),
         }
     }

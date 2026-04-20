@@ -639,6 +639,18 @@ impl OtlpExporter {
         request: ExportMetricsServiceRequest,
     ) -> Vec<ExportMetricsServiceRequest> {
         if self.max_batch_points == 0 {
+            log::warn!(
+                "max_batch_points is 0 (batching disabled) — this is likely a misconfiguration"
+            );
+            return vec![request];
+        }
+
+        // Guard against empty request
+        if request.resource_metrics.is_empty() {
+            return vec![request];
+        }
+
+        if request.resource_metrics[0].scope_metrics.is_empty() {
             return vec![request];
         }
 
@@ -788,6 +800,12 @@ impl OtlpExporter {
                 let backoff_max = RETRY_CAP.min(RETRY_BASE * 2u32.saturating_pow(attempt));
                 let jitter = rand::thread_rng().gen_range(0.0..1.0);
                 let delay = backoff_max.mul_f64(jitter);
+                log::warn!(
+                    "OTLP export retry {}/{} after {:.1}s backoff",
+                    attempt,
+                    MAX_RETRIES,
+                    delay.as_secs_f64()
+                );
                 tokio::time::sleep(delay).await;
             }
 
@@ -816,11 +834,23 @@ impl OtlpExporter {
                             | tonic::Code::Aborted
                     );
                     if is_retryable {
+                        log::warn!(
+                            "OTLP export attempt {}/{} failed with retryable gRPC code {:?}: {}",
+                            attempt,
+                            MAX_RETRIES,
+                            e.code(),
+                            e.message()
+                        );
                         self.clear_client().await;
                         last_err = Some(ExporterError::Transient(Box::new(e)));
                         continue;
                     } else {
                         // Non-retryable: drop immediately
+                        log::error!(
+                            "OTLP export failed with permanent gRPC code {:?}: {}",
+                            e.code(),
+                            e.message()
+                        );
                         return Err(ExporterError::Permanent(Box::new(e)));
                     }
                 }
@@ -853,15 +883,29 @@ impl Exporter for OtlpExporter {
 
             // Slice into batches (spec §7.1 step 4)
             let batches = self.slice_into_batches(request);
-            let num_batches = batches.len();
+
+            // Track points per batch for accurate partial-success accounting
+            let batch_points: Vec<u64> = batches
+                .iter()
+                .map(|b| {
+                    b.resource_metrics
+                        .iter()
+                        .flat_map(|rm| &rm.scope_metrics)
+                        .flat_map(|sm| &sm.metrics)
+                        .map(count_metric_data_points)
+                        .sum::<usize>() as u64
+                })
+                .collect();
 
             let start = std::time::Instant::now();
             let mut failed = false;
+            let mut points_emitted = 0u64;
 
-            for batch in batches {
+            for (i, batch) in batches.into_iter().enumerate() {
                 match self.export_batch_with_retry(batch).await {
                     Ok(()) => {
                         self.metrics.batches_sent.fetch_add(1, Ordering::Relaxed);
+                        points_emitted += batch_points[i];
                     }
                     Err(ExporterError::Permanent(e)) => {
                         self.metrics
@@ -890,17 +934,11 @@ impl Exporter for OtlpExporter {
                     .fetch_add(points_built, Ordering::Relaxed);
                 Ok(())
             } else {
-                // Some batches failed but we still emitted partial data.
-                // Count points for successfully sent batches.
-                let sent = self.metrics.batches_sent.load(Ordering::Relaxed);
-                if sent > 0 && num_batches > 0 {
-                    // Approximate: proportional points for sent batches
-                    let points_per_batch = points_built / num_batches as u64;
-                    // Already counted in batches_sent, estimate emitted points
-                    self.metrics.points_emitted.fetch_add(
-                        points_per_batch * (num_batches as u64 - 1),
-                        Ordering::Relaxed,
-                    );
+                // Some batches failed — emit exact count for successfully sent batches.
+                if points_emitted > 0 {
+                    self.metrics
+                        .points_emitted
+                        .fetch_add(points_emitted, Ordering::Relaxed);
                 }
                 Err(ExporterError::Transient(
                     "some batches failed after retries".into(),
