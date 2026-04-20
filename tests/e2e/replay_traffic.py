@@ -15,7 +15,6 @@ import argparse
 import os
 import shlex
 import subprocess
-import sys
 import tempfile
 
 from scapy.all import IP, IPv6, rdpcap, wrpcap
@@ -74,10 +73,12 @@ def replay(
                 f"scp {shlex.quote(tmp_path)} {shlex.quote(remote_host)}:{shlex.quote(remote_tmp)}",
                 shell=True, check=True, capture_output=True,
             )
+            remote_cmd = (
+                f"tcpreplay {loop_arg} -i {shlex.quote(iface)} {shlex.quote(remote_tmp)}; "
+                f"rm -f {shlex.quote(remote_tmp)}"
+            )
             subprocess.run(
-                f"ssh {shlex.quote(remote_host)}"
-                f" 'tcpreplay {loop_arg} -i {shlex.quote(iface)} {shlex.quote(remote_tmp)};"
-                f" rm -f {shlex.quote(remote_tmp)}'",
+                f"ssh {shlex.quote(remote_host)} {shlex.quote(remote_cmd)}",
                 shell=True, check=True, capture_output=True,
             )
         else:

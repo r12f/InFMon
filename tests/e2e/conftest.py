@@ -115,6 +115,8 @@ def _ensure_infmon_running() -> None:
             time.sleep(0.5)
             if _run("systemctl is-active infmon", check=False).stdout.strip() == "active":
                 break
+        else:
+            pytest.fail("InFMon did not become active within 10s")
 
 
 # ---------------------------------------------------------------------------
