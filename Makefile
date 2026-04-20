@@ -13,6 +13,7 @@ help:
 	@echo "  make cppcheck-full         Run cppcheck over the full C/C++ tree"
 	@echo "  make test                  Run unit tests (Rust + C/C++); E2E NOT included"
 	@echo "  make e2e                   Run E2E tests (requires BF3 + loopback or remote TX)"
+	@echo "                             Pass PYTEST_ARGS to filter (e.g. PYTEST_ARGS='-k erspan3')"
 	@echo "  make build                 Build all targets (Rust + C/C++)"
 	@echo "  make clean                 Remove all build artefacts"
 	@echo "  make ci-branch-protection  Apply branch protection to main (admin only)"
@@ -66,7 +67,10 @@ test:
 
 e2e:
 	@echo "==> E2E tests (requires BF3 + physical loopback or remote TX)"
-	cd tests/e2e && python3 -m pytest -v --tb=short $(PYTEST_ARGS)
+	@[ "$$INFMON_E2E_ENABLED" = "1" ] || { echo "Set INFMON_E2E_ENABLED=1 to run E2E tests (requires BF3 hardware)"; exit 1; }
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found"; exit 1; }
+	@python3 -c 'import pytest' 2>/dev/null || { echo "pytest not installed — pip install pytest"; exit 1; }
+	@cd tests/e2e && python3 -m pytest -v --tb=short $(PYTEST_ARGS)
 
 build:
 	@echo "==> Rust workspace"

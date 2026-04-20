@@ -40,8 +40,8 @@ pip install -r tests/e2e/requirements.txt
 | `INFMON_E2E_TX_HOST` | *(empty)* | SSH-reachable hostname for remote TX mode. |
 | `INFMON_E2E_TX_HOST_IFACE` | *(empty)* | Network interface on the remote TX host. |
 | `INFMON_E2E_RX_VPP_IFACE` | `TwoHundredGigabitEthernet3/0/0` | VPP interface receiving traffic. |
-| `INFMON_E2E_RX_IP` | `10.123.0.1/24` | IP address assigned to the VPP RX interface. |
-| `INFMON_E2E_TX_IP` | `10.123.0.2/24` | IP address assigned to the TX interface. |
+| `INFMON_E2E_RX_IP` | `10.123.0.1/24` | IP address (CIDR notation) assigned to the VPP RX interface. The framework uses the prefix length for subnet configuration. |
+| `INFMON_E2E_TX_IP` | `10.123.0.2/24` | IP address (CIDR notation) assigned to the TX interface. Pass the full CIDR form, not bare IP. |
 | `INFMON_E2E_TEST_REFRESH_BASELINE` | `0` | Set to `1` to overwrite expected baselines with actual results. |
 
 ### How to Run
@@ -76,6 +76,8 @@ python3 -m pytest -v --tb=short
   separate host over SSH. Set `INFMON_E2E_TX_HOST` and
   `INFMON_E2E_TX_HOST_IFACE`. The test framework automatically copies
   replay scripts and scenario assets to the remote host via SCP.
+  **Note:** passwordless SSH (key-based auth) to the remote host is
+  required — otherwise SCP will hang waiting for a password prompt.
 
 ### How to Add a New Scenario
 
