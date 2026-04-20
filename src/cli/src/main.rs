@@ -46,6 +46,20 @@ fn main() {
 
     let cli = Cli::parse();
 
+    // Initialize tracing subscriber when -v is passed (spec: issue #121).
+    // -v = DEBUG, -vv = TRACE.  Output goes to stderr so it never mixes
+    // with machine-readable stdout.  Existing eprintln! output is kept.
+    if cli.verbose > 0 {
+        let level = match cli.verbose {
+            1 => tracing::Level::DEBUG,
+            _ => tracing::Level::TRACE,
+        };
+        tracing_subscriber::fmt()
+            .with_writer(std::io::stderr)
+            .with_max_level(level)
+            .init();
+    }
+
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -92,6 +106,8 @@ fn main() {
 
 async fn run(cli: Cli) -> i32 {
     let _output_format = cli.effective_output();
+
+    tracing::debug!(command = ?cli.command, "dispatching subcommand");
 
     match cli.command {
         Commands::Install { force } => run_install(force).await,
