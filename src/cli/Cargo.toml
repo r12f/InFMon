@@ -1,0 +1,25 @@
+[package]
+name = "infmon-cli"
+version = "0.1.0"
+edition = "2021"
+description = "infmonctl — operator CLI for InFMon"
+license = "Apache-2.0"
+
+[[bin]]
+name = "infmonctl"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+infmon-config = { path = "../infmon-config" }
+infmon-ipc = { path = "../infmon-ipc" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+libc = "0.2"
+tokio = { version = "1", features = ["rt", "net", "sync", "macros", "signal"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
