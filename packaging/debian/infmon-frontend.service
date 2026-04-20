@@ -34,13 +34,14 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
-# Stats segment is a hugepages-backed mmap. ReadOnlyPaths= creates a
-# read-only bind mount, which on some kernels rejects mmap() of files
-# that live under it even with PROT_READ only. The implementation PR
-# MUST validate on the target kernel. If mmap() fails, switch to
-# ReadWritePaths=/dev/hugepages.
-ReadOnlyPaths=/dev/hugepages
-CapabilityBoundingSet=
+# Stats segment is a hugepages-backed mmap. ReadWritePaths= confines
+# access to /dev/hugepages without risking mmap() failures on kernels
+# that reject read-only bind mounts for hugepage-backed files.
+# Operators who have validated ReadOnlyPaths=/dev/hugepages on their
+# target kernel can switch to it via a systemd drop-in for tighter
+# hardening.
+ReadWritePaths=/dev/hugepages
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 AmbientCapabilities=
 
 [Install]

@@ -18,6 +18,9 @@ case "$1" in
         # Never remove config.yaml — it is owned by infmon-backend.
         rmdir --ignore-fail-on-non-empty /etc/infmon/flow_rules.d 2>/dev/null || true
         rmdir --ignore-fail-on-non-empty /etc/infmon 2>/dev/null || true
+        # Purge operator state. Any operator-created files in these
+        # directories (ad-hoc exports, custom scripts, etc.) are
+        # intentionally removed — this is standard purge semantics.
         rm -rf /var/log/infmon
         rm -rf /var/lib/infmon
 
