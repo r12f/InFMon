@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
-use crate::config::model::{Config, ExporterEntry, Field, FlowRule, FrontendConfig, LogType, LoggingConfig};
+use crate::config::model::{
+    Config, ExporterEntry, Field, FlowRule, FrontendConfig, LogType, LoggingConfig,
+};
 use thiserror::Error;
 
 pub const MAX_KEY_WIDTH: u32 = 64;
