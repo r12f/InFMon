@@ -5,6 +5,7 @@
 | Version | Date       | Author       | Changes        |
 | ------- | ---------- | ------------ | -------------- |
 | 0.1     | 2026-04-20 | Riff (r12f)  | Initial draft. |
+| 0.2     | 2026-04-20 | Riff (r12f)  | Address review: add enum defs, PathBuf, error contract, format, directory creation, naming, validation, SIGHUP, max_log_files, RUST_LOG directives, bootstrap threading, backpressure note. |
 
 - **Depends on:** [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md)
 - **Related:** [`008-packaging-install`](008-packaging-install.md)
@@ -75,11 +76,43 @@ logging:
   file:
     path: /var/log/infmon/infmon.log
     rotation: daily    # daily | hourly | never
+    max_files: 7       # max rotated files to retain (0 = unlimited)
 ```
 
 Rust types:
 
 ```rust
+/// Log severity level, maps 1:1 to `tracing::Level`.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    Trace,
+    Debug,
+    #[default]
+    Info,
+    Warn,
+    Error,
+}
+
+/// Log output destination.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogType {
+    #[default]
+    Syslog,
+    File,
+}
+
+/// File rotation strategy, maps to `tracing_appender::rolling::Rotation`.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Rotation {
+    #[default]
+    Daily,
+    Hourly,
+    Never,
+}
+
 pub struct LoggingConfig {
     pub level: LogLevel,       // default: Info
     pub destination: LogType,  // default: Syslog
@@ -87,30 +120,53 @@ pub struct LoggingConfig {
 }
 
 pub struct LogFileConfig {
-    pub path: String,
+    pub path: PathBuf,
     pub rotation: Rotation,    // default: Daily
+    pub max_files: usize,      // default: 7
 }
 ```
+
+**Config validation:** When `destination` is `File`, the `file` section
+is required. This is enforced during config deserialization/validation
+(not deferred to `init_logging`), producing a clear error message like
+`"logging.file is required when destination is 'file'"`. A missing
+`file` section with `destination: syslog` is fine (`file` is ignored).
+
+**Path resolution:** `LogFileConfig.path` is a `PathBuf`. Relative
+paths are resolved against the working directory of the process. In
+practice, the packaging spec should set an absolute path in the default
+config shipped with the `.deb`. The spec does not mandate canonicalization.
 
 **`RUST_LOG` override:** When the `RUST_LOG` environment variable is
 set, it takes precedence over `config.logging.level`.  This is
 implemented via `EnvFilter::try_from_default_env()` with a fallback
-to the configured level.
+to the configured level. Note that `RUST_LOG` supports full directive
+syntax (e.g. `infmon_frontend=debug,hyper=warn`), not just a bare
+level — this allows per-crate filtering for ad-hoc debugging.
 
 ### 4. Frontend logging lifecycle
 
 1. **Bootstrap phase** — Before config is parsed, `logging::init_bootstrap()`
-   installs a thread-local stderr subscriber at `info` level (or
-   `RUST_LOG` if set). This ensures early startup errors are visible.
-   Returns a `DefaultGuard`; dropping it removes the thread-local
-   subscriber.
+   installs a **global** subscriber at `info` level (or `RUST_LOG` if
+   set) using `tracing::subscriber::set_global_default()`. This ensures
+   early startup errors are visible across all threads, including any
+   async runtime threads spawned before config parsing completes.
+   Returns a `BootstrapGuard` whose `Drop` impl is a no-op (the global
+   subscriber cannot be removed, but will be replaced by the configured
+   subscriber in the next phase).
 
 2. **Configured phase** — After config is parsed successfully,
-   `logging::init_logging(&config.logging)` installs the global
-   subscriber matching the configured destination. The bootstrap
-   guard is dropped at this point.
+   `logging::init_logging(&config.logging)` replaces the global
+   subscriber with the one matching the configured destination.
 
-3. **Guard pattern** — `init_logging` returns a `LoggingGuard` that
+3. **Error contract** — If `init_logging` returns `Err`, the bootstrap
+   subscriber remains active (it was installed globally and is not
+   removed). The caller should log the error via the still-active
+   bootstrap subscriber and then decide whether to abort startup or
+   continue with degraded (stderr-only) logging. The recommended
+   default is to abort with a clear error message.
+
+4. **Guard pattern** — `init_logging` returns a `LoggingGuard` that
    holds any `WorkerGuard` instances (e.g. the non-blocking file
    appender guard). This guard must be held until process exit to
    ensure all buffered output is flushed.
@@ -122,20 +178,40 @@ to the configured level.
   - Options: `LOG_PID`
   - Facility: `Daemon`
 - Syslog writes go to a Unix domain socket (kernel-buffered), so
-  blocking I/O is acceptable for normal log volumes.
-- No `WorkerGuard` needed — the `LoggingGuard._guards` vector is empty.
+  blocking I/O is acceptable. Even under burst conditions (e.g. a
+  flap storm generating hundreds of log lines per second), the
+  kernel socket buffer absorbs the writes without blocking the event
+  loop for meaningful durations. If this assumption proves wrong under
+  production load, a non-blocking wrapper can be added as a follow-up.
+- No `WorkerGuard` needed — the `LoggingGuard.guards` vector is empty.
 
 ### 6. File destination
 
 - Uses `tracing-appender` rolling file appender.
 - Rotation options: `daily`, `hourly`, `never`.
+- **Max log files:** Uses `RollingFileAppender::builder().max_log_files(N)`
+  to cap retained rotated files. Default: 7 (for daily rotation, one
+  week of history). Set `max_files: 0` to disable the cap (rely on
+  external `logrotate` instead).
 - Wrapped in `tracing_appender::non_blocking` for async-safe writes.
 - The `WorkerGuard` from the non-blocking wrapper is stored in
   `LoggingGuard` to guarantee flush-on-drop.
-- **Log retention:** `tracing-appender` does not limit old log files.
-  For production, configure external log rotation (e.g. `logrotate`)
-  or use `RollingFileAppender::builder().max_log_files(N)` when
-  available in a future `tracing-appender` release.
+- **Directory creation:** `init_logging` calls
+  `std::fs::create_dir_all()` on the parent directory of `path` before
+  creating the appender. If directory creation fails (e.g. permission
+  denied), `init_logging` returns `Err` with context.
+- **Log line format:** File output uses `tracing_subscriber::fmt::format::Full`
+  (the default `fmt` formatter), producing lines like:
+  `2026-04-20T07:31:04.123456Z  INFO infmon_frontend::poller: polling interface eth0`.
+  Each line includes: RFC 3339 timestamp, level, target (module path),
+  and message. Span context is included when active. This can be changed
+  to `json` format in a future spec if structured output is needed.
+- **SIGHUP re-open:** Deferred. Since `tracing-appender`'s rolling
+  appender manages rotation internally (opening new files on the
+  configured schedule), external `logrotate` with `copytruncate` works
+  without SIGHUP support. If a future requirement mandates
+  `logrotate`-with-`create` (rename-and-signal), SIGHUP handling will
+  be specified in a follow-up.
 
 ### 7. CLI verbose flag
 
@@ -174,17 +250,19 @@ logging:                      # optional, defaults applied if absent
   level: <LogLevel>           # optional, default: info
   destination: <LogType>      # optional, default: syslog
   file:                       # required when destination=file
-    path: <string>            # required
+    path: <PathBuf>           # required
     rotation: <Rotation>      # optional, default: daily
+    max_files: <usize>        # optional, default: 7
 ```
 
 ### Public API (`infmon-frontend::logging`)
 
 ```rust
-/// Install a bootstrap stderr subscriber (thread-local).
-pub fn init_bootstrap() -> tracing::subscriber::DefaultGuard;
+/// Install a bootstrap global subscriber.
+pub fn init_bootstrap() -> BootstrapGuard;
 
 /// Install the configured global subscriber.
+/// On error, the bootstrap subscriber remains active.
 pub fn init_logging(config: &LoggingConfig) -> Result<LoggingGuard, Box<dyn Error>>;
 ```
 
@@ -203,10 +281,14 @@ Options:
   - `init_bootstrap` returns a guard and does not panic.
   - `init_logging` with syslog config succeeds.
   - `init_logging` with file config creates the appender and returns
-    a guard with a non-empty `_guards` vector.
+    a guard with a non-empty `guards` vector.
   - `init_logging` with file destination but missing `file` config
-    returns an error.
+    is rejected at config validation (deserialization error), not at
+    `init_logging` time.
   - `RUST_LOG` override is respected when set.
+  - Log directory is created if it does not exist.
+  - `init_logging` returns `Err` if directory creation fails
+    (e.g. permission denied).
 
 - **CLI tests** (`assert_cmd`):
   - `infmonctl --help` mentions `-v`/`--verbose`.
@@ -223,7 +305,3 @@ Options:
 
 1. **Structured JSON output** — Should we add a `json` format option
    alongside plain text? *Proposed default: defer to a future spec.*
-
-2. **Max log files for file rotation** — Should we enforce a cap on
-   retained log files in-process, or rely on external `logrotate`?
-   *Proposed default: rely on external `logrotate` for v1.*
