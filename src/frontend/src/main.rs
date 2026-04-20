@@ -11,9 +11,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use infmon_frontend::lifecycle;
+use infmon_frontend::logging;
 
 fn main() {
-    env_logger::init();
+    let _bootstrap_guard = logging::init_bootstrap();
 
     let config_path = match std::env::args().nth(1) {
         Some(arg) if arg == "--help" || arg == "-h" => {
@@ -26,7 +27,7 @@ fn main() {
         None => PathBuf::from("/etc/infmon/config.yaml"),
     };
 
-    log::info!(
+    tracing::info!(
         "infmon-frontend starting with config: {}",
         config_path.display()
     );
@@ -46,7 +47,7 @@ fn main() {
     let mut frontend = match lifecycle::Frontend::start(&config_path, shutdown.clone()) {
         Ok(f) => f,
         Err(e) => {
-            log::error!("failed to start: {e}");
+            tracing::error!("failed to start: {e}");
             std::process::exit(1);
         }
     };
@@ -55,12 +56,12 @@ fn main() {
     while !shutdown.load(Ordering::Acquire) {
         if reload.swap(false, Ordering::AcqRel) {
             if let Err(e) = frontend.reload() {
-                log::error!("reload failed: {e}");
+                tracing::error!("reload failed: {e}");
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 
     frontend.stop();
-    log::info!("infmon-frontend exited");
+    tracing::info!("infmon-frontend exited");
 }
