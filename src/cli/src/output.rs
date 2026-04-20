@@ -10,14 +10,16 @@ pub fn print_output<T: Serialize + TableDisplay>(value: &T, format: &OutputForma
             if compact {
                 println!(
                     "{}",
-                    serde_json::to_string(value)
-                        .unwrap_or_else(|e| format!("{{\"error\":\"serialize failed: {e}\"}}")),
+                    serde_json::to_string(value).unwrap_or_else(|e| {
+                        serde_json::json!({"error": format!("serialize failed: {e}")}).to_string()
+                    }),
                 );
             } else {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(value)
-                        .unwrap_or_else(|e| format!("{{\"error\":\"serialize failed: {e}\"}}")),
+                    serde_json::to_string_pretty(value).unwrap_or_else(|e| {
+                        serde_json::json!({"error": format!("serialize failed: {e}")}).to_string()
+                    }),
                 );
             }
         }
