@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv6Addr};
 
-use crate::error::IpcError;
-use crate::types::*;
+use super::error::IpcError;
+use super::types::*;
 
 /// Decode raw key bytes into a vector of FieldValues according to the field list.
 pub fn decode_key(fields: &[FieldId], key_bytes: &[u8]) -> Result<Vec<FieldValue>, IpcError> {

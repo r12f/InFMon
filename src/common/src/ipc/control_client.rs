@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use crate::error::CtlError;
-use crate::types::{FlowRuleId, FlowRuleStats};
+use super::error::CtlError;
+use super::types::{FlowRuleId, FlowRuleStats};
 
 // Re-export FlowRule from infmon-config so CLI/frontend use one type
-pub use infmon_config::model::{EvictionPolicy, Field, FlowRule as FlowRuleDef};
+pub use crate::config::model::{EvictionPolicy, Field, FlowRule as FlowRuleDef};
 
 /// Status of a single exporter
 #[derive(Debug, Clone)]
