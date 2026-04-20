@@ -139,7 +139,7 @@ Upgrading from REST to gRPC
 
 Prior InFMon versions exposed an HTTP/REST control interface on port
 9880 (`[rest].bind`). This release replaces it with a gRPC interface
-on the same default port (`grpc.bind: "[::]:9880"`). If you have
+on the same default port (`grpc.bind: "127.0.0.1:9880"`). If you have
 reverse proxies, firewall rules, or HTTP health checks targeting the
 old REST endpoint, update them to speak gRPC (HTTP/2) instead.
 
