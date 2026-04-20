@@ -37,6 +37,7 @@ def rewrite_dst_ip(packets, dst_ip: str):
             pkt = pkt.__class__(bytes(pkt))
         elif pkt.haslayer(IPv6):
             pkt[IPv6].dst = dst_ip
+            pkt = pkt.__class__(bytes(pkt))
         rewritten.append(pkt)
     return rewritten
 

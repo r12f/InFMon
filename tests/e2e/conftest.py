@@ -107,7 +107,11 @@ def _ensure_infmon_running() -> None:
     result = _run("systemctl is-active infmon", check=False)
     if result.stdout.strip() != "active":
         _run("systemctl start infmon", check=False)
-        time.sleep(2)
+        # Poll until active (up to 10s) instead of a fixed sleep
+        for _ in range(20):
+            time.sleep(0.5)
+            if _run("systemctl is-active infmon", check=False).stdout.strip() == "active":
+                break
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +122,9 @@ def _ensure_infmon_running() -> None:
 def infmon_env():
     """Set up networking, verify connectivity, and yield config dict."""
     mode = _env("INFMON_E2E_TX_MODE")
+
+    if mode not in ("local", "remote"):
+        pytest.fail(f"Invalid INFMON_E2E_TX_MODE: {mode!r}. Must be 'local' or 'remote'.")
 
     # 1. Assign IPs
     _assign_rx_ip()
@@ -152,6 +159,11 @@ def infmon_env():
     # Stop InFMon if we started it during setup.
     if service_was_inactive:
         _run("systemctl stop infmon", check=False)
+
+    # Remove VPP RX IP
+    rx_iface = _env("INFMON_E2E_RX_VPP_IFACE")
+    rx_ip = _env("INFMON_E2E_RX_IP")
+    _run(f"vppctl set interface ip address {shlex.quote(rx_iface)} del {shlex.quote(rx_ip)}", check=False)
 
     # Flush IPs assigned during setup to avoid stale addresses on next run.
     tx_iface = _env("INFMON_E2E_TX_IFACE")

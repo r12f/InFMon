@@ -7,9 +7,9 @@ import json
 import logging
 import subprocess
 import time
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
-from typing import Any, Dict, List, Optional
 
 
 def _run_infmonctl(*args: str, check: bool = True) -> subprocess.CompletedProcess:
