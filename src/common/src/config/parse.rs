@@ -2,8 +2,8 @@ use std::path::Path;
 
 use thiserror::Error;
 
-use crate::crud::{CrudError, FlowRuleSet};
-use crate::model::Config;
+use crate::config::crud::{CrudError, FlowRuleSet};
+use crate::config::model::Config;
 
 #[derive(Debug, Error)]
 pub enum ParseError {

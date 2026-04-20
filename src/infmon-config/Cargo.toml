@@ -6,6 +6,7 @@ license = "Apache-2.0"
 description = "InFMon flow-rule YAML configuration parsing and validation"
 
 [dependencies]
+infmon-common = { path = "../common", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 thiserror = "2"

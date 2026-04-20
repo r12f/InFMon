@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::model::{Config, ExporterEntry, Field, FlowRule, FrontendConfig};
+use crate::config::model::{Config, ExporterEntry, Field, FlowRule, FrontendConfig};
 use thiserror::Error;
 
 pub const MAX_KEY_WIDTH: u32 = 64;
@@ -278,10 +278,10 @@ pub fn validate_config(config: &Config) -> Result<(), ValidationError> {
         }
         validate_rule(rule)?;
     }
-    if config.flow_rules.len() > crate::crud::FLOW_RULE_SET_MAX {
+    if config.flow_rules.len() > crate::config::crud::FLOW_RULE_SET_MAX {
         return Err(ValidationError::TooManyRules {
             count: config.flow_rules.len(),
-            max: crate::crud::FLOW_RULE_SET_MAX,
+            max: crate::config::crud::FLOW_RULE_SET_MAX,
         });
     }
     let total: u64 = config.flow_rules.iter().map(|r| r.max_keys as u64).sum();

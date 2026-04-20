@@ -1,5 +1,5 @@
-use crate::model::{Config, FlowRule};
-use crate::validate::{validate_config, validate_rule, ValidationError, MAX_KEYS_BUDGET};
+use crate::config::model::{Config, FlowRule};
+use crate::config::validate::{validate_config, validate_rule, ValidationError, MAX_KEYS_BUDGET};
 use thiserror::Error;
 
 pub const FLOW_RULE_SET_MAX: usize = 16;

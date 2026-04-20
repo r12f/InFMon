@@ -676,6 +676,7 @@ dependencies = [
 name = "infmon-config"
 version = "0.1.0"
 dependencies = [
+ "infmon-common",
  "serde",
  "serde_yaml",
  "tempfile",
