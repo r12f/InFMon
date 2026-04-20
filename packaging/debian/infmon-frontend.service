@@ -40,16 +40,10 @@ NoNewPrivileges=true
 # mmap() of the stats segment succeeds under this confinement. If it
 # does not, switch to ReadWritePaths=/dev/hugepages via a drop-in.
 ReadOnlyPaths=/dev/hugepages
-# Frontend opens its own listening socket (spec 005); if that ever
-# requires CAP_NET_BIND_SERVICE for port < 1024, operators can add it
-# back via a systemd drop-in (see README.Debian).
-# Note: with all capabilities dropped, accessing hugepages-backed
-# files relies entirely on filesystem permissions. The VPP stats-segment
-# file mode/group on the target image is typically 0640 root:vpp, and
-# SupplementaryGroups=vpp above grants sufficient access. If VPP is
-# configured to create the segment 0600 root:root, the operator must
-# either reconfigure VPP's stats-segment permissions or add
-# CAP_DAC_READ_SEARCH back to the bounding set via a drop-in.
+# Capabilities are dropped for security (spec 008 §6). If the frontend
+# needs CAP_NET_BIND_SERVICE (port < 1024) or CAP_DAC_READ_SEARCH
+# (restricted stats-segment), add them back via a systemd drop-in.
+# See README.Debian for examples.
 CapabilityBoundingSet=
 AmbientCapabilities=
 
