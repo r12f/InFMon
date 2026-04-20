@@ -47,9 +47,19 @@ if not _DISCOVERED:
 
 @pytest.mark.parametrize("scenario", _DISCOVERED, ids=lambda s: s)
 def test_packet_replay(scenario: str, infmon_env: dict) -> None:
-    """Replay a pcap and verify flow counters match the expected baseline."""
+    """Replay a pcap and verify flow counters match the expected baseline.
+
+    Args:
+        scenario: Name of the scenario directory under scenarios/.
+        infmon_env: Fixture (from conftest.py) providing environment config.
+            Expected keys: tx_iface, tx_mode, rx_ip, and optionally tx_host.
+    """
     scenario_dir = _SCENARIOS_DIR / scenario
-    pcap_path = str((scenario_dir / "input.pcap").resolve())
+    pcap_path_raw = scenario_dir / "input.pcap"
+    resolved = pcap_path_raw.resolve()
+    if not resolved.exists():
+        pytest.fail(f"input.pcap symlink target missing: {resolved}")
+    pcap_path = str(resolved)
     expected_path = scenario_dir / "expected_flows.json"
 
     refresh_mode = os.environ.get("INFMON_E2E_TEST_REFRESH_BASELINE", "0") == "1"
