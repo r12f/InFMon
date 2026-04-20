@@ -40,10 +40,19 @@ fn fish_completions_generated() {
 fn unsupported_shell_exits_2() {
     Command::cargo_bin("infmonctl")
         .unwrap()
-        .args(["--generate-completions", "powershell"])
+        .args(["--generate-completions", "nosuchshell"])
         .assert()
         .code(2)
         .stderr(predicate::str::contains("unsupported shell"));
+}
+
+#[test]
+fn powershell_completions_generated() {
+    Command::cargo_bin("infmonctl")
+        .unwrap()
+        .args(["--generate-completions", "powershell"])
+        .assert()
+        .success();
 }
 
 #[test]
@@ -65,4 +74,14 @@ fn generate_completions_equals_syntax() {
         .assert()
         .success()
         .stdout(predicate::str::contains("_infmonctl"));
+}
+
+#[test]
+fn generate_completions_missing_arg_exits_2() {
+    Command::cargo_bin("infmonctl")
+        .unwrap()
+        .arg("--generate-completions")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("requires a shell argument"));
 }

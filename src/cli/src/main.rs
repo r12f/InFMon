@@ -10,6 +10,11 @@ use infmon_cli::{
 fn main() {
     // Handle --generate-completions and --generate-manpage before clap
     // parsing, since these flags are used without a subcommand.
+    // NOTE: We scan all args (not just args[1]) so that the flags work
+    // regardless of position.  This is intentional — these are hidden
+    // build-time helpers, not user-facing subcommands, so a positional
+    // collision (e.g. `infmonctl install --generate-completions bash`)
+    // is acceptable and extremely unlikely in practice.
     let args: Vec<String> = std::env::args().collect();
     for (i, arg) in args.iter().enumerate() {
         if arg == "--generate-completions" {

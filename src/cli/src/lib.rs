@@ -255,17 +255,18 @@ pub enum LogCommands {
 /// Generate shell completions for the given shell and write to stdout.
 pub fn generate_completions(shell: &str) {
     use clap_complete::{generate, Shell};
-    let shell = match shell {
-        "bash" => Shell::Bash,
-        "zsh" => Shell::Zsh,
-        "fish" => Shell::Fish,
-        _ => {
-            eprintln!("infmonctl: unsupported shell: {shell} (expected bash, zsh, or fish)");
-            std::process::exit(exit_codes::EXIT_USAGE);
-        }
-    };
+    use std::io::Write;
+    let shell: Shell = shell.parse().unwrap_or_else(|_| {
+        eprintln!("infmonctl: unsupported shell: {shell}");
+        std::process::exit(exit_codes::EXIT_USAGE);
+    });
     let mut cmd = Cli::command();
-    generate(shell, &mut cmd, "infmonctl", &mut std::io::stdout());
+    let mut out = std::io::stdout().lock();
+    generate(shell, &mut cmd, "infmonctl", &mut out);
+    out.flush().unwrap_or_else(|e| {
+        eprintln!("infmonctl: failed to write completions: {e}");
+        std::process::exit(exit_codes::EXIT_FAILURE);
+    });
 }
 
 /// Generate a man page and write to stdout.
