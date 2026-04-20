@@ -3,7 +3,9 @@ use std::process;
 use clap::Parser;
 
 use infmon_cli::exit_codes::*;
-use infmon_cli::{Cli, Commands, ConfigCommands, FlowCommands, FlowRuleCommands, LogCommands, StatsCommands};
+use infmon_cli::{
+    Cli, Commands, ConfigCommands, FlowCommands, FlowRuleCommands, LogCommands, StatsCommands,
+};
 
 fn main() {
     // Install SIGPIPE handler: exit 0 silently (spec requirement)
@@ -46,7 +48,7 @@ async fn run(cli: Cli) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
-// Subcommand implementations (stubs that connect to the frontend via IPC)
+// Subcommand implementations (stubs — will await IPC client when wired)
 // ---------------------------------------------------------------------------
 
 async fn run_install(force: bool) -> i32 {
@@ -92,7 +94,11 @@ async fn run_config(cmd: &ConfigCommands, cli: &Cli) -> i32 {
             eprintln!("infmonctl: config get: not yet implemented (stub)");
             EXIT_FAILURE
         }
-        ConfigCommands::Set { ref key, ref value, ref r#type } => {
+        ConfigCommands::Set {
+            ref key,
+            ref value,
+            ref r#type,
+        } => {
             if !is_root() {
                 eprintln!("infmonctl: config set requires root privileges");
                 return EXIT_PERMISSION_DENIED;
@@ -152,7 +158,11 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
 
 async fn run_flow(cmd: &FlowCommands, cli: &Cli) -> i32 {
     match cmd {
-        FlowCommands::List { ref rule, top, ref sort } => {
+        FlowCommands::List {
+            ref rule,
+            top,
+            ref sort,
+        } => {
             let _ = (rule, top, sort, cli);
             eprintln!("infmonctl: flow list: not yet implemented (stub)");
             EXIT_FAILURE
@@ -167,7 +177,11 @@ async fn run_flow(cmd: &FlowCommands, cli: &Cli) -> i32 {
 
 async fn run_stats(cmd: &StatsCommands, cli: &Cli) -> i32 {
     match cmd {
-        StatsCommands::Show { ref name, top, ref watch } => {
+        StatsCommands::Show {
+            ref name,
+            top,
+            ref watch,
+        } => {
             let _ = (name, top, watch, cli);
             eprintln!("infmonctl: stats show: not yet implemented (stub)");
             EXIT_FAILURE
@@ -182,7 +196,11 @@ async fn run_stats(cmd: &StatsCommands, cli: &Cli) -> i32 {
 
 async fn run_log(cmd: &LogCommands) -> i32 {
     match cmd {
-        LogCommands::Tail { follow, ref since, n } => {
+        LogCommands::Tail {
+            follow,
+            ref since,
+            n,
+        } => {
             let _ = (follow, since, n);
             eprintln!("infmonctl: log tail: not yet implemented (stub)");
             EXIT_FAILURE

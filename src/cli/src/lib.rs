@@ -154,6 +154,7 @@ pub enum FlowRuleCommands {
     /// Add a flow rule (requires root)
     Add {
         /// Flow-rule spec in key=value form
+        #[arg(required = true, num_args = 1..)]
         spec: Vec<String>,
     },
     /// Remove a flow rule (requires root)

@@ -1,5 +1,7 @@
 use clap::Parser;
-use infmon_cli::{Cli, Commands, ConfigCommands, FlowRuleCommands, FlowCommands, StatsCommands, LogCommands};
+use infmon_cli::{
+    Cli, Commands, ConfigCommands, FlowCommands, FlowRuleCommands, LogCommands, StatsCommands,
+};
 
 /// Helper: parse CLI args, returning the Cli struct
 fn parse(args: &[&str]) -> Cli {
@@ -77,7 +79,9 @@ fn parse_health() {
 fn parse_config_get() {
     let cli = parse(&["config", "get", "exporter.otlp.endpoint"]);
     match cli.command {
-        Commands::Config { command: ConfigCommands::Get { key } } => {
+        Commands::Config {
+            command: ConfigCommands::Get { key },
+        } => {
             assert_eq!(key, "exporter.otlp.endpoint");
         }
         _ => panic!("expected config get"),
@@ -88,7 +92,9 @@ fn parse_config_get() {
 fn parse_config_set() {
     let cli = parse(&["config", "set", "frontend.polling_interval_ms", "500"]);
     match cli.command {
-        Commands::Config { command: ConfigCommands::Set { key, value, r#type } } => {
+        Commands::Config {
+            command: ConfigCommands::Set { key, value, r#type },
+        } => {
             assert_eq!(key, "frontend.polling_interval_ms");
             assert_eq!(value, "500");
             assert!(r#type.is_none());
@@ -101,7 +107,9 @@ fn parse_config_set() {
 fn parse_config_set_with_type() {
     let cli = parse(&["config", "set", "key", "val", "--type", "int"]);
     match cli.command {
-        Commands::Config { command: ConfigCommands::Set { r#type, .. } } => {
+        Commands::Config {
+            command: ConfigCommands::Set { r#type, .. },
+        } => {
             assert_eq!(r#type, Some("int".to_string()));
         }
         _ => panic!("expected config set"),
@@ -111,14 +119,21 @@ fn parse_config_set_with_type() {
 #[test]
 fn parse_config_reload() {
     let cli = parse(&["config", "reload"]);
-    assert!(matches!(cli.command, Commands::Config { command: ConfigCommands::Reload }));
+    assert!(matches!(
+        cli.command,
+        Commands::Config {
+            command: ConfigCommands::Reload
+        }
+    ));
 }
 
 #[test]
 fn parse_config_show() {
     let cli = parse(&["config", "show"]);
     match cli.command {
-        Commands::Config { command: ConfigCommands::Show { annotate } } => {
+        Commands::Config {
+            command: ConfigCommands::Show { annotate },
+        } => {
             assert!(!annotate);
         }
         _ => panic!("expected config show"),
@@ -129,7 +144,9 @@ fn parse_config_show() {
 fn parse_config_show_annotate() {
     let cli = parse(&["config", "show", "--annotate"]);
     match cli.command {
-        Commands::Config { command: ConfigCommands::Show { annotate } } => {
+        Commands::Config {
+            command: ConfigCommands::Show { annotate },
+        } => {
             assert!(annotate);
         }
         _ => panic!("expected config show --annotate"),
@@ -142,7 +159,9 @@ fn parse_config_show_annotate() {
 fn parse_flow_rule_add() {
     let cli = parse(&["flow-rule", "add", "src_ip=10.0.0.0/8", "name=test"]);
     match cli.command {
-        Commands::FlowRule { command: FlowRuleCommands::Add { spec } } => {
+        Commands::FlowRule {
+            command: FlowRuleCommands::Add { spec },
+        } => {
             assert_eq!(spec, vec!["src_ip=10.0.0.0/8", "name=test"]);
         }
         _ => panic!("expected flow-rule add"),
@@ -153,7 +172,9 @@ fn parse_flow_rule_add() {
 fn parse_flow_rule_rm() {
     let cli = parse(&["flow-rule", "rm", "test-rule"]);
     match cli.command {
-        Commands::FlowRule { command: FlowRuleCommands::Rm { target, all } } => {
+        Commands::FlowRule {
+            command: FlowRuleCommands::Rm { target, all },
+        } => {
             assert_eq!(target, "test-rule");
             assert!(!all);
         }
@@ -165,7 +186,9 @@ fn parse_flow_rule_rm() {
 fn parse_flow_rule_rm_all() {
     let cli = parse(&["flow-rule", "rm", "test-rule", "--all"]);
     match cli.command {
-        Commands::FlowRule { command: FlowRuleCommands::Rm { target, all } } => {
+        Commands::FlowRule {
+            command: FlowRuleCommands::Rm { target, all },
+        } => {
             assert_eq!(target, "test-rule");
             assert!(all);
         }
@@ -176,14 +199,21 @@ fn parse_flow_rule_rm_all() {
 #[test]
 fn parse_flow_rule_list() {
     let cli = parse(&["flow-rule", "list"]);
-    assert!(matches!(cli.command, Commands::FlowRule { command: FlowRuleCommands::List }));
+    assert!(matches!(
+        cli.command,
+        Commands::FlowRule {
+            command: FlowRuleCommands::List
+        }
+    ));
 }
 
 #[test]
 fn parse_flow_rule_show() {
     let cli = parse(&["flow-rule", "show", "my-rule"]);
     match cli.command {
-        Commands::FlowRule { command: FlowRuleCommands::Show { target } } => {
+        Commands::FlowRule {
+            command: FlowRuleCommands::Show { target },
+        } => {
             assert_eq!(target, "my-rule");
         }
         _ => panic!("expected flow-rule show"),
@@ -196,7 +226,9 @@ fn parse_flow_rule_show() {
 fn parse_flow_list() {
     let cli = parse(&["flow", "list", "my-rule"]);
     match cli.command {
-        Commands::Flow { command: FlowCommands::List { rule, top, .. } } => {
+        Commands::Flow {
+            command: FlowCommands::List { rule, top, .. },
+        } => {
             assert_eq!(rule, "my-rule");
             assert_eq!(top, 50);
         }
@@ -208,7 +240,9 @@ fn parse_flow_list() {
 fn parse_flow_list_top_sort() {
     let cli = parse(&["flow", "list", "rule1", "--top", "10", "--sort", "packets"]);
     match cli.command {
-        Commands::Flow { command: FlowCommands::List { rule, top, .. } } => {
+        Commands::Flow {
+            command: FlowCommands::List { rule, top, .. },
+        } => {
             assert_eq!(rule, "rule1");
             assert_eq!(top, 10);
         }
@@ -220,7 +254,9 @@ fn parse_flow_list_top_sort() {
 fn parse_flow_show() {
     let cli = parse(&["flow", "show", "rule1", "src_ip=10.0.0.7 dst_ip=10.0.1.4"]);
     match cli.command {
-        Commands::Flow { command: FlowCommands::Show { rule, key } } => {
+        Commands::Flow {
+            command: FlowCommands::Show { rule, key },
+        } => {
             assert_eq!(rule, "rule1");
             assert_eq!(key, "src_ip=10.0.0.7 dst_ip=10.0.1.4");
         }
@@ -234,7 +270,9 @@ fn parse_flow_show() {
 fn parse_stats_show() {
     let cli = parse(&["stats", "show"]);
     match cli.command {
-        Commands::Stats { command: StatsCommands::Show { name, top, watch } } => {
+        Commands::Stats {
+            command: StatsCommands::Show { name, top, watch },
+        } => {
             assert!(name.is_none());
             assert_eq!(top, 20);
             assert!(watch.is_none());
@@ -245,9 +283,13 @@ fn parse_stats_show() {
 
 #[test]
 fn parse_stats_show_with_options() {
-    let cli = parse(&["stats", "show", "--name", "export_*", "--top", "5", "--watch", "2"]);
+    let cli = parse(&[
+        "stats", "show", "--name", "export_*", "--top", "5", "--watch", "2",
+    ]);
     match cli.command {
-        Commands::Stats { command: StatsCommands::Show { name, top, watch } } => {
+        Commands::Stats {
+            command: StatsCommands::Show { name, top, watch },
+        } => {
             assert_eq!(name, Some("export_*".to_string()));
             assert_eq!(top, 5);
             assert_eq!(watch, Some(2));
@@ -259,7 +301,12 @@ fn parse_stats_show_with_options() {
 #[test]
 fn parse_stats_export() {
     let cli = parse(&["stats", "export", "--format", "prom"]);
-    assert!(matches!(cli.command, Commands::Stats { command: StatsCommands::Export { .. } }));
+    assert!(matches!(
+        cli.command,
+        Commands::Stats {
+            command: StatsCommands::Export { .. }
+        }
+    ));
 }
 
 // ---- Log subcommands ----
@@ -268,7 +315,9 @@ fn parse_stats_export() {
 fn parse_log_tail() {
     let cli = parse(&["log", "tail"]);
     match cli.command {
-        Commands::Log { command: LogCommands::Tail { follow, since, n } } => {
+        Commands::Log {
+            command: LogCommands::Tail { follow, since, n },
+        } => {
             assert!(!follow);
             assert!(since.is_none());
             assert_eq!(n, 100);
@@ -281,7 +330,9 @@ fn parse_log_tail() {
 fn parse_log_tail_follow() {
     let cli = parse(&["log", "tail", "-f", "--since", "10 min ago", "-n", "50"]);
     match cli.command {
-        Commands::Log { command: LogCommands::Tail { follow, since, n } } => {
+        Commands::Log {
+            command: LogCommands::Tail { follow, since, n },
+        } => {
             assert!(follow);
             assert_eq!(since, Some("10 min ago".to_string()));
             assert_eq!(n, 50);
@@ -296,22 +347,35 @@ fn parse_log_tail_follow() {
 fn parse_json_flag() {
     let cli = parse(&["--json", "status"]);
     assert!(cli.json);
-    assert!(matches!(cli.effective_output(), infmon_cli::OutputFormat::Json));
+    assert!(matches!(
+        cli.effective_output(),
+        infmon_cli::OutputFormat::Json
+    ));
 }
 
 #[test]
 fn parse_output_json() {
     let cli = parse(&["--output", "json", "status"]);
-    assert!(matches!(cli.effective_output(), infmon_cli::OutputFormat::Json));
+    assert!(matches!(
+        cli.effective_output(),
+        infmon_cli::OutputFormat::Json
+    ));
 }
 
 #[test]
 fn parse_global_flags() {
     let cli = parse(&[
-        "--compact", "--raw-bytes", "--no-color", "-q", "-vvv",
-        "--config", "/tmp/test.yaml",
-        "--socket", "/tmp/test.sock",
-        "--timeout", "10",
+        "--compact",
+        "--raw-bytes",
+        "--no-color",
+        "-q",
+        "-vvv",
+        "--config",
+        "/tmp/test.yaml",
+        "--socket",
+        "/tmp/test.sock",
+        "--timeout",
+        "10",
         "health",
     ]);
     assert!(cli.compact);
@@ -359,4 +423,9 @@ fn reject_config_set_without_value() {
 #[test]
 fn reject_flow_show_without_key() {
     assert!(try_parse(&["flow", "show", "rule1"]).is_err());
+}
+
+#[test]
+fn reject_flow_rule_add_without_spec() {
+    assert!(try_parse(&["flow-rule", "add"]).is_err());
 }
