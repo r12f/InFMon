@@ -6,6 +6,7 @@
 | ------- | ---------- | ------------ | -------------- |
 | 0.1     | 2026-04-20 | Riff (r12f)  | Initial draft. |
 | 0.2     | 2026-04-20 | Riff (r12f)  | Address review: add enum defs, PathBuf, error contract, format, directory creation, naming, validation, SIGHUP, max_log_files, RUST_LOG directives, bootstrap threading, backpressure note. |
+| 0.3     | 2026-04-20 | Riff (r12f)  | Address review: use reload::Layer for subscriber swap (set_global_default is once-only), add #[derive(Deserialize)] to config structs. |
 
 - **Depends on:** [`005-frontend-architecture`](005-frontend-architecture.md), [`007-cli`](007-cli.md)
 - **Related:** [`008-packaging-install`](008-packaging-install.md)
@@ -113,12 +114,14 @@ pub enum Rotation {
     Never,
 }
 
+#[derive(Debug, Clone, Deserialize)]
 pub struct LoggingConfig {
     pub level: LogLevel,       // default: Info
     pub destination: LogType,  // default: Syslog
     pub file: Option<LogFileConfig>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
 pub struct LogFileConfig {
     pub path: PathBuf,
     pub rotation: Rotation,    // default: Daily
@@ -147,17 +150,21 @@ level — this allows per-crate filtering for ad-hoc debugging.
 ### 4. Frontend logging lifecycle
 
 1. **Bootstrap phase** — Before config is parsed, `logging::init_bootstrap()`
-   installs a **global** subscriber at `info` level (or `RUST_LOG` if
-   set) using `tracing::subscriber::set_global_default()`. This ensures
-   early startup errors are visible across all threads, including any
-   async runtime threads spawned before config parsing completes.
-   Returns a `BootstrapGuard` whose `Drop` impl is a no-op (the global
-   subscriber cannot be removed, but will be replaced by the configured
-   subscriber in the next phase).
+   installs a **global** subscriber using `set_global_default()`. The
+   subscriber is built with a `tracing_subscriber::reload::Layer`
+   wrapping the inner filter+fmt layers, so the active layer can be
+   hot-swapped without calling `set_global_default()` a second time
+   (which would fail — it can only be called once per process). The
+   initial layer is a stderr formatter at `info` level (or `RUST_LOG`
+   if set). This ensures early startup errors are visible across all
+   threads and async tasks. Returns a `BootstrapGuard` holding the
+   `reload::Handle` needed by the configured phase.
 
 2. **Configured phase** — After config is parsed successfully,
-   `logging::init_logging(&config.logging)` replaces the global
-   subscriber with the one matching the configured destination.
+   `logging::init_logging(&config.logging, &handle)` uses the
+   `reload::Handle` (from the `BootstrapGuard`) to swap the inner
+   layer to the one matching the configured destination. No second
+   `set_global_default()` call is needed.
 
 3. **Error contract** — If `init_logging` returns `Err`, the bootstrap
    subscriber remains active (it was installed globally and is not
@@ -258,12 +265,14 @@ logging:                      # optional, defaults applied if absent
 ### Public API (`infmon-frontend::logging`)
 
 ```rust
-/// Install a bootstrap global subscriber.
+/// Install a bootstrap global subscriber with a reload layer.
+/// The returned guard holds the reload handle for later reconfiguration.
 pub fn init_bootstrap() -> BootstrapGuard;
 
-/// Install the configured global subscriber.
+/// Swap the global subscriber's inner layer to the configured destination.
+/// Uses the reload handle from the BootstrapGuard.
 /// On error, the bootstrap subscriber remains active.
-pub fn init_logging(config: &LoggingConfig) -> Result<LoggingGuard, Box<dyn Error>>;
+pub fn init_logging(config: &LoggingConfig, handle: &ReloadHandle) -> Result<LoggingGuard, Box<dyn Error>>;
 ```
 
 ### CLI flag
