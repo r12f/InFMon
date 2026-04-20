@@ -30,7 +30,7 @@ vpp:
 
 grpc:
   # Frontend gRPC listener (spec 005). The CLI (infmonctl) connects here
-  # over a Unix socket by default.
+  # over localhost TCP by default.
   bind: "127.0.0.1:9880"
 
 flow_rules:
