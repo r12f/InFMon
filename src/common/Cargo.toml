@@ -7,10 +7,11 @@ description = "Shared configuration and IPC library for InFMon"
 
 [features]
 default = ["control"]
+# config is always available since it's co-located in this crate;
+# only IPC (which needs tokio) is gated behind the "control" feature.
 control = ["dep:tokio"]
 
 [dependencies]
-libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 thiserror = "2"
