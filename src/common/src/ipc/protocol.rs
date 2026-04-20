@@ -60,7 +60,7 @@ pub struct ErrorData {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type")]
 pub enum ResponseData {
     FlowRuleId(FlowRuleIdData),
     FlowRuleList(Vec<FlowRuleData>),

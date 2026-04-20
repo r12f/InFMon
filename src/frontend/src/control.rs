@@ -4,6 +4,7 @@
 //! from `infmonctl` to the frontend's in-memory state.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
@@ -12,18 +13,25 @@ use infmon_common::ipc::protocol::*;
 use infmon_common::ipc::types::FlowStatsSnapshot;
 
 /// Shared state accessible to the control server.
+///
+/// **Lock ordering invariant**: always acquire `flow_rules` before
+/// `latest_snapshot`. Never reverse to avoid deadlocks.
 pub struct ControlState {
     /// Flow rules configured via the CLI (or loaded from config).
     pub flow_rules: RwLock<Vec<FlowRule>>,
     /// Latest stats snapshot from the poller (if any).
     pub latest_snapshot: Mutex<Option<Arc<FlowStatsSnapshot>>>,
+    /// Monotonic counter for generating unique flow rule IDs.
+    next_rule_id: AtomicU64,
 }
 
 impl ControlState {
     pub fn new(initial_rules: Vec<FlowRule>) -> Self {
+        let initial_count = initial_rules.len() as u64;
         Self {
             flow_rules: RwLock::new(initial_rules),
             latest_snapshot: Mutex::new(None),
+            next_rule_id: AtomicU64::new(initial_count + 1),
         }
     }
 }
@@ -126,8 +134,18 @@ fn run_server(
         let mut reader = BufReader::new(&stream);
         let mut line = String::new();
 
+        // Cap read to 64 KiB to prevent OOM from malicious clients.
+        const MAX_LINE: usize = 64 * 1024;
         match reader.read_line(&mut line) {
-            Ok(0) => continue, // EOF
+            Ok(0) => continue,
+            Ok(_) if line.len() > MAX_LINE => {
+                let resp = Response::err(-1, "request too large");
+                let mut resp_line = serde_json::to_string(&resp).unwrap_or_default();
+                resp_line.push('\n');
+                let mut writer = &stream;
+                let _ = writer.write_all(resp_line.as_bytes());
+                continue;
+            }
             Ok(_) => {}
             Err(e) => {
                 tracing::warn!("control: read error: {e}");
@@ -175,22 +193,23 @@ fn handle_flow_rule_add(params: &FlowRuleAddParams, state: &ControlState) -> Res
         eviction_policy: params.eviction_policy,
     };
 
-    let mut rules = state.flow_rules.write().unwrap();
+    let mut rules = state.flow_rules.write().unwrap_or_else(|e| e.into_inner());
 
-    // Check for duplicate name
     if rules.iter().any(|r| r.name == rule.name) {
         return Response::err(6, format!("flow rule '{}' already exists", rule.name));
     }
 
     rules.push(rule);
 
-    // Generate a synthetic ID
-    let id = format!("{:016x}-{:016x}", rules.len() as u64, 0u64);
+    let seq = state
+        .next_rule_id
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let id = format!("{:016x}-{:016x}", seq, 0u64);
     Response::ok(ResponseData::FlowRuleId(FlowRuleIdData { id }))
 }
 
 fn handle_flow_rule_rm(params: &FlowRuleRmParams, state: &ControlState) -> Response {
-    let mut rules = state.flow_rules.write().unwrap();
+    let mut rules = state.flow_rules.write().unwrap_or_else(|e| e.into_inner());
     let before = rules.len();
     rules.retain(|r| r.name != params.name);
     if rules.len() == before {
@@ -200,20 +219,23 @@ fn handle_flow_rule_rm(params: &FlowRuleRmParams, state: &ControlState) -> Respo
 }
 
 fn handle_flow_rule_list(state: &ControlState) -> Response {
-    let rules = state.flow_rules.read().unwrap();
+    let rules = state.flow_rules.read().unwrap_or_else(|e| e.into_inner());
     let data: Vec<FlowRuleData> = rules.iter().map(FlowRuleData::from).collect();
     Response::ok(ResponseData::FlowRuleList(data))
 }
 
 fn handle_flow_rule_show(params: &FlowRuleShowParams, state: &ControlState) -> Response {
-    let rules = state.flow_rules.read().unwrap();
+    let rules = state.flow_rules.read().unwrap_or_else(|e| e.into_inner());
     let rule = match rules.iter().find(|r| r.name == params.name) {
         Some(r) => r,
         None => return Response::err(3, format!("flow rule '{}' not found", params.name)),
     };
 
     // Try to get flow stats from the latest snapshot
-    let snapshot = state.latest_snapshot.lock().unwrap();
+    let snapshot = state
+        .latest_snapshot
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     let (counters, flows) = if let Some(snap) = snapshot.as_ref() {
         if let Some(frs) = snap.flow_rules.iter().find(|fr| fr.name == params.name) {
             let counters = FlowRuleCountersData {
@@ -268,14 +290,17 @@ fn handle_flow_rule_show(params: &FlowRuleShowParams, state: &ControlState) -> R
 }
 
 fn handle_stats_show(params: &StatsShowParams, state: &ControlState) -> Response {
-    let rules = state.flow_rules.read().unwrap();
-    let snapshot = state.latest_snapshot.lock().unwrap();
+    let rules = state.flow_rules.read().unwrap_or_else(|e| e.into_inner());
+    let snapshot = state
+        .latest_snapshot
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
 
     let mut flow_rule_stats: Vec<FlowRuleStatsData> = Vec::new();
 
     for rule in rules.iter() {
         if let Some(ref name_filter) = params.name {
-            if !rule.name.contains(name_filter) {
+            if !rule.name.eq(name_filter) {
                 continue;
             }
         }

@@ -48,6 +48,23 @@ impl InFMonControlClient {
         }
     }
 
+    /// Send a request, receive a response, and check for errors.
+    /// Returns the optional response data on success, or a `CtlError` on failure.
+    async fn rpc_ok(&self, request: &Request) -> Result<Option<ResponseData>, CtlError> {
+        let resp = self.rpc(request).await?;
+        if !resp.ok {
+            let err = resp.error.unwrap_or(ErrorData {
+                code: -1,
+                message: "unknown error".into(),
+            });
+            return Err(CtlError::Backend {
+                code: err.code,
+                message: err.message,
+            });
+        }
+        Ok(resp.data)
+    }
+
     /// Send a request and receive a response over the Unix socket.
     async fn rpc(&self, request: &Request) -> Result<Response, CtlError> {
         let stream = tokio::time::timeout(self.timeout, UnixStream::connect(&self.socket_path))
@@ -102,18 +119,7 @@ impl InFMonControlClient {
             max_keys: def.max_keys,
             eviction_policy: def.eviction_policy,
         });
-        let resp = self.rpc(&request).await?;
-        if !resp.ok {
-            let err = resp.error.unwrap_or(ErrorData {
-                code: -1,
-                message: "unknown error".into(),
-            });
-            return Err(CtlError::Backend {
-                code: err.code,
-                message: err.message,
-            });
-        }
-        match resp.data {
+        match self.rpc_ok(&request).await? {
             Some(ResponseData::FlowRuleId(id_data)) => id_data
                 .id
                 .parse::<FlowRuleId>()
@@ -127,35 +133,14 @@ impl InFMonControlClient {
         let request = Request::FlowRuleRm(FlowRuleRmParams {
             name: name.to_string(),
         });
-        let resp = self.rpc(&request).await?;
-        if !resp.ok {
-            let err = resp.error.unwrap_or(ErrorData {
-                code: -1,
-                message: "unknown error".into(),
-            });
-            return Err(CtlError::Backend {
-                code: err.code,
-                message: err.message,
-            });
-        }
+        self.rpc_ok(&request).await?;
         Ok(())
     }
 
     /// List all flow rules.
     pub async fn flow_rule_list(&self) -> Result<Vec<FlowRuleDef>, CtlError> {
         let request = Request::FlowRuleList;
-        let resp = self.rpc(&request).await?;
-        if !resp.ok {
-            let err = resp.error.unwrap_or(ErrorData {
-                code: -1,
-                message: "unknown error".into(),
-            });
-            return Err(CtlError::Backend {
-                code: err.code,
-                message: err.message,
-            });
-        }
-        match resp.data {
+        match self.rpc_ok(&request).await? {
             Some(ResponseData::FlowRuleList(rules)) => Ok(rules
                 .into_iter()
                 .map(|r| FlowRuleDef {
@@ -174,26 +159,17 @@ impl InFMonControlClient {
         let request = Request::FlowRuleShow(FlowRuleShowParams {
             name: name.to_string(),
         });
-        let resp = self.rpc(&request).await?;
-        if !resp.ok {
-            let err = resp.error.unwrap_or(ErrorData {
-                code: -1,
-                message: "unknown error".into(),
-            });
-            return Err(CtlError::Backend {
-                code: err.code,
-                message: err.message,
-            });
-        }
-        match resp.data {
+        match self.rpc_ok(&request).await? {
             Some(ResponseData::FlowRuleDetail(detail)) => Ok(FlowRuleStats {
                 name: detail.name,
                 fields: detail.fields.iter().filter_map(field_to_field_id).collect(),
+                max_keys: detail.max_keys,
+                eviction_policy: detail.eviction_policy,
                 flows: detail
                     .flows
                     .into_iter()
                     .map(|f| FlowStats {
-                        key: f.key.iter().map(|_k| FieldValue::Proto(0)).collect(), // simplified
+                        key: f.key.iter().map(|_k| FieldValue::Proto(0)).collect(), // simplified: wire keys are strings, lossless round-trip deferred
                         counters: FlowCounters {
                             packets: f.packets,
                             bytes: f.bytes,
@@ -218,18 +194,7 @@ impl InFMonControlClient {
         let request = Request::StatsShow(StatsShowParams {
             name: name.map(|s| s.to_string()),
         });
-        let resp = self.rpc(&request).await?;
-        if !resp.ok {
-            let err = resp.error.unwrap_or(ErrorData {
-                code: -1,
-                message: "unknown error".into(),
-            });
-            return Err(CtlError::Backend {
-                code: err.code,
-                message: err.message,
-            });
-        }
-        match resp.data {
+        match self.rpc_ok(&request).await? {
             Some(ResponseData::StatsShow(data)) => Ok(data),
             _ => Err(CtlError::Protocol("unexpected response data".into())),
         }

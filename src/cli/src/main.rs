@@ -335,7 +335,10 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
                 eprintln!("infmonctl: flow-rule rm requires root privileges");
                 return EXIT_PERMISSION_DENIED;
             }
-            let _ = all;
+            if *all {
+                eprintln!("infmonctl: flow-rule rm --all: not yet implemented");
+                return EXIT_FAILURE;
+            }
 
             match client.flow_rule_rm(target).await {
                 Ok(()) => {
@@ -369,42 +372,39 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
                 ctl_error_to_exit_code(&e)
             }
         },
-        FlowRuleCommands::Show { ref target } => {
-            match client.flow_rule_show(target).await {
-                Ok(stats) => {
-                    // Use protocol types for JSON output
-                    let detail = FlowRuleDetailData {
-                        name: stats.name,
-                        fields: stats.fields.iter().filter_map(field_id_to_field).collect(),
-                        max_keys: 0, // not available from FlowRuleStats
-                        eviction_policy: infmon_common::config::model::EvictionPolicy::LruDrop,
-                        counters: infmon_common::ipc::protocol::FlowRuleCountersData {
-                            packets: stats.counters.packets,
-                            bytes: stats.counters.bytes,
-                            evictions: stats.counters.evictions,
-                            drops: stats.counters.drops,
-                        },
-                        flows: stats
-                            .flows
-                            .iter()
-                            .map(|f| infmon_common::ipc::protocol::FlowEntryData {
-                                key: f.key.iter().map(|v| format!("{:?}", v)).collect(),
-                                packets: f.counters.packets,
-                                bytes: f.counters.bytes,
-                                first_seen_ns: f.counters.first_seen_ns,
-                                last_seen_ns: f.counters.last_seen_ns,
-                            })
-                            .collect(),
-                    };
-                    print_output(&FlowRuleShowOutput(detail), &output, cli.compact);
-                    EXIT_SUCCESS
-                }
-                Err(e) => {
-                    eprintln!("infmonctl: flow-rule show: {e}");
-                    ctl_error_to_exit_code(&e)
-                }
+        FlowRuleCommands::Show { ref target } => match client.flow_rule_show(target).await {
+            Ok(stats) => {
+                let detail = FlowRuleDetailData {
+                    name: stats.name,
+                    fields: stats.fields.iter().map(field_id_to_field).collect(),
+                    max_keys: stats.max_keys,
+                    eviction_policy: stats.eviction_policy,
+                    counters: infmon_common::ipc::protocol::FlowRuleCountersData {
+                        packets: stats.counters.packets,
+                        bytes: stats.counters.bytes,
+                        evictions: stats.counters.evictions,
+                        drops: stats.counters.drops,
+                    },
+                    flows: stats
+                        .flows
+                        .iter()
+                        .map(|f| infmon_common::ipc::protocol::FlowEntryData {
+                            key: f.key.iter().map(|v| format!("{:?}", v)).collect(),
+                            packets: f.counters.packets,
+                            bytes: f.counters.bytes,
+                            first_seen_ns: f.counters.first_seen_ns,
+                            last_seen_ns: f.counters.last_seen_ns,
+                        })
+                        .collect(),
+                };
+                print_output(&FlowRuleShowOutput(detail), &output, cli.compact);
+                EXIT_SUCCESS
             }
-        }
+            Err(e) => {
+                eprintln!("infmonctl: flow-rule show: {e}");
+                ctl_error_to_exit_code(&e)
+            }
+        },
     }
 }
 
@@ -437,7 +437,12 @@ async fn run_stats(cmd: &StatsCommands, cli: &Cli) -> i32 {
             top,
             ref watch,
         } => {
-            let _ = (top, watch);
+            if *top > 0 {
+                eprintln!("infmonctl: stats show --top: not yet implemented, showing all");
+            }
+            if watch.is_some() {
+                eprintln!("infmonctl: stats show --watch: not yet implemented, showing once");
+            }
 
             match client.stats_show(name.as_deref()).await {
                 Ok(data) => {
@@ -596,14 +601,14 @@ fn ctl_error_to_exit_code(e: &infmon_common::ipc::CtlError) -> i32 {
 
 fn field_id_to_field(
     id: &infmon_common::ipc::types::FieldId,
-) -> Option<infmon_common::config::model::Field> {
+) -> infmon_common::config::model::Field {
     use infmon_common::config::model::Field;
     use infmon_common::ipc::types::FieldId;
     match id {
-        FieldId::SrcIp => Some(Field::SrcIp),
-        FieldId::DstIp => Some(Field::DstIp),
-        FieldId::IpProto => Some(Field::IpProto),
-        FieldId::Dscp => Some(Field::Dscp),
-        FieldId::MirrorSrcIp => Some(Field::MirrorSrcIp),
+        FieldId::SrcIp => Field::SrcIp,
+        FieldId::DstIp => Field::DstIp,
+        FieldId::IpProto => Field::IpProto,
+        FieldId::Dscp => Field::Dscp,
+        FieldId::MirrorSrcIp => Field::MirrorSrcIp,
     }
 }
