@@ -24,7 +24,10 @@ export PATH := $(HOME)/.cargo/bin:$(PATH)
 
 # Cargo / cargo target dirs — keep build artefacts inside debian/ so
 # `dpkg-buildpackage -nc` and clean(1) behave predictably.
-export CARGO_HOME       ?= $(CURDIR)/debian/cargo-home
+# Force a build-local CARGO_HOME so that `dh_auto_clean → rm -rf
+# $(CARGO_HOME)` never accidentally deletes the system toolchain
+# installed by dtolnay/rust-toolchain (which lives in ~/.cargo).
+export CARGO_HOME       := $(CURDIR)/debian/cargo-home
 export CARGO_TARGET_DIR ?= $(CURDIR)/target
 
 # CMake build tree for the backend plugin.

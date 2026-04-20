@@ -111,6 +111,7 @@ jobs:
         env:
           DEB_BUILD_OPTIONS: "nocheck parallel=2"
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           dpkg-buildpackage -S -us -uc -d
           ls -la ../
 
@@ -118,6 +119,7 @@ jobs:
         env:
           DEB_BUILD_OPTIONS: "nocheck parallel=2"
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           # -B = binary-only, -d = ignore build-dep check (vpp-dev is
           # not available in CI so the backend plugin build is stubbed).
           # Frontend and CLI are built from the Rust workspace.
