@@ -1,2 +1,3 @@
 usr/bin/infmon-frontend           usr/bin/
 etc/infmon/config.yaml                 etc/infmon/
+etc/infmon/flow_rules.d                etc/infmon/

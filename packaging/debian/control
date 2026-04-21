@@ -42,6 +42,8 @@ Depends:
  ${misc:Depends},
   adduser,
   lsb-base,
+Breaks: infmon-backend (<< 0.0.1~unreleased-1)
+Replaces: infmon-backend (<< 0.0.1~unreleased-1)
 Recommends:
   infmon-backend (= ${binary:Version}),
 Description: InFMon flow telemetry — frontend daemon
