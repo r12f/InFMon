@@ -144,7 +144,7 @@ override_dh_auto_install:
 	    debian/tmp/usr/bin/infmonctl; \
 	fi
 
-	# Shared config → /etc/infmon/config.yaml (owned by infmon-backend)
+	# Shared config → /etc/infmon/config.yaml (owned by infmon-frontend)
 	install -d debian/tmp/etc/infmon/flow_rules.d
 	install -m 0640 debian/configs/config.yaml debian/tmp/etc/infmon/config.yaml
 
