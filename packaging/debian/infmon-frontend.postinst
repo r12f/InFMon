@@ -42,9 +42,8 @@ case "$1" in
             fi
         done
 
-        # config.yaml is installed 0640 root:root by infmon-backend.
-        # Fix group ownership so the infmon user can read it (the group
-        # only exists after the addgroup above).
+        # config.yaml is installed 0640 root:root by this package.
+        # Fix group ownership so the infmon user can read it.
         if [ -f /etc/infmon/config.yaml ]; then
             chown root:"$INFMON_GROUP" /etc/infmon/config.yaml || true
         fi
