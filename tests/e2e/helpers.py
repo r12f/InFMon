@@ -26,25 +26,31 @@ def _parse_json_output(result: subprocess.CompletedProcess) -> Any:
     return json.loads(output)
 
 
-def flow_rule_add(name: str, fields: Dict[str, str], max_keys: int = 0) -> None:
+def flow_rule_add(name: str, fields: List[str], max_keys: int = 0) -> None:
     """Add a flow rule via infmonctl.
+
+    Uses positional key=value syntax expected by infmonctl:
+        infmonctl flow-rule add name=<name> fields=<f1,f2,...> [max_keys=<N>]
 
     Args:
         name: Rule name.
-        fields: Dict of match field name to value.
+        fields: List of match field names (e.g. ["src_ip", "dst_ip"]).
         max_keys: Maximum number of flow keys (0 = unlimited).
     """
-    args = ["flow-rule", "add", "--name", name]
-    for field_name, field_value in fields.items():
-        args.extend(["--field", f"{field_name}={field_value}"])
+    if not fields:
+        raise ValueError("fields must be non-empty; infmonctl requires at least one match field")
+    args = ["flow-rule", "add", f"name={name}", f"fields={','.join(fields)}"]
     if max_keys > 0:
-        args.extend(["--max-keys", str(max_keys)])
+        args.append(f"max_keys={max_keys}")
     _run_infmonctl(*args)
 
 
 def flow_rule_rm(name: str) -> None:
-    """Remove a flow rule by name."""
-    _run_infmonctl("flow-rule", "rm", "--name", name)
+    """Remove a flow rule by name.
+
+    Uses positional syntax: infmonctl flow-rule rm <name>
+    """
+    _run_infmonctl("flow-rule", "rm", name)
 
 
 def flow_rule_list() -> List[Dict[str, Any]]:
