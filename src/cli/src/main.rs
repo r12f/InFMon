@@ -155,13 +155,162 @@ fn make_client(cli: &Cli) -> InFMonControlClient {
 // ---------------------------------------------------------------------------
 
 async fn run_install(force: bool) -> i32 {
-    let _ = force;
     if !is_root() {
         eprintln!("infmonctl: install requires root privileges");
         return EXIT_PERMISSION_DENIED;
     }
-    eprintln!("infmonctl: install: not yet implemented (stub)");
-    EXIT_FAILURE
+
+    // Step 1: Create infmon system user and group (idempotent)
+    if let Err(code) = ensure_system_user().await {
+        return code;
+    }
+
+    // Step 2: Create config directory and write default config
+    let config_dir = Path::new("/etc/infmon");
+    let config_path = config_dir.join("config.yaml");
+    if let Err(e) = std::fs::create_dir_all(config_dir) {
+        eprintln!(
+            "infmonctl: install: failed to create {}: {e}",
+            config_dir.display()
+        );
+        return EXIT_FAILURE;
+    }
+
+    if config_path.exists() && !force {
+        eprintln!(
+            "infmonctl: install: skipping config (already exists at {}; use --force to overwrite)",
+            config_path.display()
+        );
+    } else {
+        let default_config = infmon_common::config::model::Config {
+            frontend: Some(infmon_common::config::model::FrontendConfig::default()),
+            flow_rules: vec![],
+            exporters: None,
+            logging: None,
+        };
+        match serde_yaml::to_string(&default_config) {
+            Ok(yaml) => {
+                let full_yaml = format!("# InFMon default configuration\n# See https://github.com/r12f/InFMon for documentation\n\n{yaml}");
+                if let Err(e) = std::fs::write(&config_path, full_yaml) {
+                    eprintln!(
+                        "infmonctl: install: failed to write {}: {e}",
+                        config_path.display()
+                    );
+                    return EXIT_FAILURE;
+                }
+                tracing::info!("wrote default config to {}", config_path.display());
+                // Set restrictive permissions (0640 root:infmon)
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let perms = std::fs::Permissions::from_mode(0o640);
+                    if let Err(e) = std::fs::set_permissions(&config_path, perms) {
+                        eprintln!(
+                            "infmonctl: install: warning: failed to set permissions on {}: {e}",
+                            config_path.display()
+                        );
+                    }
+                    match run_cmd("chown", &["root:infmon", &config_path.to_string_lossy()]).await {
+                        Ok(out) if !out.status.success() => {
+                            eprintln!(
+                                "infmonctl: install: warning: failed to chown {} to root:infmon",
+                                config_path.display()
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "infmonctl: install: warning: chown {}: {e}",
+                                config_path.display()
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("infmonctl: install: failed to serialize default config: {e}");
+                return EXIT_FAILURE;
+            }
+        }
+    }
+
+    // Step 3: Create state and runtime directories
+    for dir in &["/var/lib/infmon", "/run/infmon"] {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            eprintln!("infmonctl: install: failed to create {dir}: {e}");
+            return EXIT_FAILURE;
+        }
+        // chown to infmon:infmon
+        match run_cmd("chown", &["infmon:infmon", dir]).await {
+            Ok(out) if !out.status.success() => {
+                eprintln!("infmonctl: install: warning: failed to chown {dir} to infmon:infmon");
+            }
+            Err(e) => {
+                eprintln!("infmonctl: install: warning: chown {dir}: {e}");
+            }
+            _ => {}
+        }
+    }
+
+    // Step 4: Install systemd unit file
+    let service_src = Path::new("/usr/share/infmon/infmon.service");
+    let service_dst = Path::new("/etc/systemd/system/infmon.service");
+
+    // Try bundled service file first, fall back to deploy/ in source tree
+    let service_content = if service_src.exists() {
+        std::fs::read_to_string(service_src).ok()
+    } else {
+        // Try relative to the running binary.
+        // Assumes layout: <prefix>/bin/infmonctl with <prefix>/deploy/infmon.service.
+        // This is the standard layout from `cargo install` or the .deb package.
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| {
+                exe.parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("deploy/infmon.service"))
+            })
+            .and_then(|p| std::fs::read_to_string(p).ok())
+    };
+
+    if let Some(content) = service_content {
+        if service_dst.exists() && !force {
+            eprintln!(
+                "infmonctl: install: service unit already exists at {}; use --force to overwrite",
+                service_dst.display()
+            );
+        } else {
+            if let Err(e) = std::fs::write(service_dst, content) {
+                eprintln!(
+                    "infmonctl: install: failed to write {}: {e}",
+                    service_dst.display()
+                );
+                return EXIT_FAILURE;
+            }
+            // Reload systemd daemon
+            match run_cmd("systemctl", &["daemon-reload"]).await {
+                Ok(out) if !out.status.success() => {
+                    eprintln!(
+                        "infmonctl: install: warning: systemctl daemon-reload failed; \
+                               the new unit file may not be recognized until a manual reload"
+                    );
+                }
+                Err(e) => {
+                    eprintln!("infmonctl: install: warning: daemon-reload: {e}");
+                }
+                _ => {}
+            }
+            tracing::info!("installed systemd unit to {}", service_dst.display());
+        }
+    } else {
+        eprintln!(
+            "infmonctl: install: systemd unit file not found; \
+             skipping service installation (you can install it manually)"
+        );
+    }
+
+    eprintln!("infmonctl: install: completed successfully");
+    EXIT_SUCCESS
 }
 
 async fn run_uninstall(purge: bool) -> i32 {
@@ -179,14 +328,109 @@ async fn run_lifecycle(action: &str) -> i32 {
         eprintln!("infmonctl: {action} requires root privileges");
         return EXIT_PERMISSION_DENIED;
     }
-    eprintln!("infmonctl: {action}: not yet implemented (stub)");
-    EXIT_FAILURE
+
+    let output = run_cmd("systemctl", &[action, "infmon"]).await;
+    match output {
+        Ok(out) => {
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                eprintln!("infmonctl: {action}: systemctl failed: {}", stderr.trim());
+                return EXIT_FAILURE;
+            }
+            eprintln!("infmonctl: {action}: OK");
+            EXIT_SUCCESS
+        }
+        Err(e) => {
+            eprintln!("infmonctl: {action}: failed to run systemctl: {e}");
+            EXIT_FAILURE
+        }
+    }
 }
 
 async fn run_status(cli: &Cli) -> i32 {
-    let _ = cli;
-    eprintln!("infmonctl: status: not yet implemented (stub)");
-    EXIT_FAILURE
+    let output = cli.effective_output();
+
+    // Check systemd service status
+    let systemd_active = match run_cmd("systemctl", &["is-active", "infmon"]).await {
+        Ok(out) => {
+            let state = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            state == "active"
+        }
+        Err(_) => false,
+    };
+
+    let systemd_state = match run_cmd(
+        "systemctl",
+        &[
+            "show",
+            "infmon",
+            "--property=ActiveState,SubState",
+            "--value",
+        ],
+    )
+    .await
+    {
+        Ok(out) => {
+            let raw = String::from_utf8_lossy(&out.stdout);
+            let parts: Vec<&str> = raw.trim().lines().collect();
+            if parts.len() == 2 {
+                format!("{}/{}", parts[0].trim(), parts[1].trim())
+            } else {
+                raw.trim().to_string()
+            }
+        }
+        Err(_) => "unknown".to_string(),
+    };
+
+    // Check if the frontend socket is responsive
+    let client = make_client(cli);
+    let frontend_responsive = client.stats_show(None).await.is_ok();
+
+    let status = ServiceStatus {
+        systemd_active,
+        systemd_state: systemd_state.clone(),
+        frontend_responsive,
+    };
+
+    match output {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "systemd_active": status.systemd_active,
+                    "systemd_state": status.systemd_state,
+                    "frontend_responsive": status.frontend_responsive,
+                })
+            );
+        }
+        OutputFormat::Table => {
+            let service_icon = if status.systemd_active { "●" } else { "○" };
+            let frontend_icon = if status.frontend_responsive {
+                "●"
+            } else {
+                "○"
+            };
+            println!("{} systemd: {}", service_icon, status.systemd_state);
+            println!(
+                "{} frontend: {}",
+                frontend_icon,
+                if status.frontend_responsive {
+                    "responsive"
+                } else {
+                    "not responding"
+                }
+            );
+        }
+    }
+
+    if status.systemd_active && status.frontend_responsive {
+        EXIT_SUCCESS
+    } else if status.systemd_active {
+        // Service running but frontend not responsive
+        EXIT_DEGRADED
+    } else {
+        EXIT_SERVICE_UNAVAILABLE
+    }
 }
 
 async fn run_config(cmd: &ConfigCommands, cli: &Cli) -> i32 {
@@ -620,5 +864,70 @@ fn field_id_to_field(
         FieldId::IpProto => Field::IpProto,
         FieldId::Dscp => Field::Dscp,
         FieldId::MirrorSrcIp => Field::MirrorSrcIp,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ServiceStatus for run_status
+// ---------------------------------------------------------------------------
+
+#[derive(Debug)]
+struct ServiceStatus {
+    systemd_active: bool,
+    systemd_state: String,
+    frontend_responsive: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Shell command helpers for lifecycle management
+// ---------------------------------------------------------------------------
+
+/// Run an external command and return its output.
+async fn run_cmd(program: &str, args: &[&str]) -> Result<std::process::Output, std::io::Error> {
+    let program = program.to_string();
+    let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+    tokio::task::spawn_blocking(move || std::process::Command::new(&program).args(&args).output())
+        .await
+        .unwrap_or_else(|e| Err(std::io::Error::other(e)))
+}
+
+/// Ensure the `infmon` system user and group exist (idempotent).
+async fn ensure_system_user() -> Result<(), i32> {
+    // Check if user already exists
+    match run_cmd("id", &["infmon"]).await {
+        Ok(out) if out.status.success() => return Ok(()),
+        _ => {}
+    }
+
+    // Create system user
+    let result = run_cmd(
+        "useradd",
+        &[
+            "--system",
+            "--no-create-home",
+            "--shell",
+            "/usr/sbin/nologin",
+            "infmon",
+        ],
+    )
+    .await;
+
+    match result {
+        Ok(out) if out.status.success() => {
+            tracing::info!("created system user 'infmon'");
+            Ok(())
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            eprintln!(
+                "infmonctl: install: failed to create user 'infmon': {}",
+                stderr.trim()
+            );
+            Err(EXIT_FAILURE)
+        }
+        Err(e) => {
+            eprintln!("infmonctl: install: failed to run useradd: {e}");
+            Err(EXIT_FAILURE)
+        }
     }
 }
