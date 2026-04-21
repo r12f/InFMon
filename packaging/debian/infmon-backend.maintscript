@@ -1,1 +1,1 @@
-rm_conffile /etc/infmon/config.yaml 0.0.1~unreleased-1
+rm_conffile /etc/infmon/config.yaml 0.0.1~unreleased-1 infmon-backend
