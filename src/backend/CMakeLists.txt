@@ -168,6 +168,77 @@ target_link_libraries(test_integration PRIVATE
 target_include_directories(test_integration PRIVATE include)
 add_test(NAME integration COMMAND test_integration)
 
+# --- VPP plugin shared library (.so) ---
+option(ENABLE_VPP_PLUGIN "Build infmon_plugin.so for VPP runtime loading" OFF)
+
+if(ENABLE_VPP_PLUGIN)
+    # Locate VPP development headers and libraries
+    find_path(VPP_INCLUDE_DIR vlib/vlib.h
+        PATHS /usr/include /usr/local/include
+        DOC "VPP development headers"
+    )
+    find_library(VPP_LIB_VLIB NAMES vlib
+        PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu
+        DOC "VPP vlib library"
+    )
+    find_library(VPP_LIB_VNET NAMES vnet
+        PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu
+        DOC "VPP vnet library"
+    )
+    find_library(VPP_LIB_VLIBMEMORY NAMES vlibmemory
+        PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu
+        DOC "VPP vlibmemory library"
+    )
+    find_library(VPP_LIB_VPPINFRA NAMES vppinfra
+        PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu
+        DOC "VPP vppinfra library"
+    )
+
+    if(NOT VPP_INCLUDE_DIR)
+        message(FATAL_ERROR "ENABLE_VPP_PLUGIN is ON but VPP dev headers not found. Install vpp-dev.")
+    endif()
+
+    add_library(infmon_plugin MODULE
+        src/vpp/infmon_nodes.c
+    )
+    set_target_properties(infmon_plugin PROPERTIES
+        PREFIX ""                              # produce infmon_plugin.so, not libinfmon_plugin.so
+        OUTPUT_NAME "infmon_plugin"
+        C_VISIBILITY_PRESET default
+    )
+    target_compile_definitions(infmon_plugin PRIVATE INFMON_VPP_BUILD)
+    target_include_directories(infmon_plugin PRIVATE
+        include
+        ${VPP_INCLUDE_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}/generated  # for generated API header
+    )
+    target_link_libraries(infmon_plugin PRIVATE
+        infmon_graph_node
+        infmon_parser
+        infmon_flow_rule
+        infmon_counter_table
+        infmon_snapshot
+        infmon_stats_segment
+    )
+    if(VPP_LIB_VLIB)
+        target_link_libraries(infmon_plugin PRIVATE ${VPP_LIB_VLIB})
+    endif()
+    if(VPP_LIB_VNET)
+        target_link_libraries(infmon_plugin PRIVATE ${VPP_LIB_VNET})
+    endif()
+    if(VPP_LIB_VLIBMEMORY)
+        target_link_libraries(infmon_plugin PRIVATE ${VPP_LIB_VLIBMEMORY})
+    endif()
+    if(VPP_LIB_VPPINFRA)
+        target_link_libraries(infmon_plugin PRIVATE ${VPP_LIB_VPPINFRA})
+    endif()
+
+    # Ensure the generated API header is built before the plugin
+    add_dependencies(infmon_plugin infmon_api_generated)
+
+    message(STATUS "VPP plugin target enabled: infmon_plugin.so")
+endif()
+
 if(ENABLE_FUZZER)
     add_executable(fuzz_erspan_parser
         test/fuzz_erspan_parser.cc
