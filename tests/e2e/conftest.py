@@ -5,11 +5,23 @@ connectivity, and optionally pushes replay assets to a remote host.
 """
 
 import os
+import shutil
 import shlex
 import subprocess
 import time
 
 import pytest
+
+
+def pytest_configure(config):
+    """Fail early if required external tools are missing."""
+    missing = []
+    if not shutil.which("tcpreplay"):
+        missing.append("tcpreplay (apt install tcpreplay)")
+    if missing:
+        raise pytest.UsageError(
+            f"Missing E2E prerequisites: {', '.join(missing)}"
+        )
 
 # ---------------------------------------------------------------------------
 # Environment defaults
