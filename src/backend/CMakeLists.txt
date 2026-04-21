@@ -172,9 +172,14 @@ add_test(NAME integration COMMAND test_integration)
 option(ENABLE_VPP_PLUGIN "Build infmon_plugin.so for VPP runtime loading" OFF)
 
 if(ENABLE_VPP_PLUGIN)
+    # Static libraries linked into the MODULE target must be position-independent
+    foreach(_tgt infmon_graph_node infmon_parser infmon_flow_rule
+                 infmon_counter_table infmon_snapshot infmon_stats_segment)
+        set_target_properties(${_tgt} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    endforeach()
+
     # Locate VPP development headers and libraries
     find_path(VPP_INCLUDE_DIR vlib/vlib.h
-        PATHS /usr/include /usr/local/include
         DOC "VPP development headers"
     )
     find_library(VPP_LIB_VLIB NAMES vlib DOC "VPP vlib library")
@@ -211,8 +216,10 @@ if(ENABLE_VPP_PLUGIN)
         infmon_snapshot
         infmon_stats_segment
     )
-    foreach(_lib ${VPP_LIB_VLIB} ${VPP_LIB_VNET} ${VPP_LIB_VLIBMEMORY} ${VPP_LIB_VPPINFRA})
-        target_link_libraries(infmon_plugin PRIVATE ${_lib})
+    foreach(_var VPP_LIB_VLIB VPP_LIB_VNET VPP_LIB_VLIBMEMORY VPP_LIB_VPPINFRA)
+        if(${_var})
+            target_link_libraries(infmon_plugin PRIVATE ${${_var}})
+        endif()
     endforeach()
 
     # Ensure the generated API header is built before the plugin
