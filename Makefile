@@ -70,6 +70,7 @@ e2e:
 	@[ "$$INFMON_E2E_ENABLED" = "1" ] || { echo "Set INFMON_E2E_ENABLED=1 to run E2E tests (requires BF3 hardware)"; exit 1; }
 	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found"; exit 1; }
 	@python3 -c 'import pytest' 2>/dev/null || { echo "pytest not installed — pip install pytest"; exit 1; }
+	@command -v tcpreplay >/dev/null 2>&1 || { echo "tcpreplay not found — apt install tcpreplay"; exit 1; }
 	@cd tests/e2e && python3 -m pytest -v --tb=short $(PYTEST_ARGS)
 
 build:
