@@ -1,0 +1,30 @@
+[Unit]
+Description=InFMon flow-telemetry frontend
+Documentation=https://github.com/r12f/InFMon
+After=vpp.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/infmon-frontend --config /etc/infmon/config.yaml
+Restart=on-failure
+RestartSec=2s
+User=infmon
+Group=infmon
+SupplementaryGroups=vpp
+RuntimeDirectory=infmon
+RuntimeDirectoryMode=0750
+StateDirectory=infmon
+StateDirectoryMode=0750
+LogsDirectory=infmon
+LogsDirectoryMode=0750
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+ReadOnlyPaths=/dev/hugepages
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
