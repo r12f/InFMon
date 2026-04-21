@@ -78,8 +78,8 @@ def test_packet_replay(scenario: str, infmon_env: dict) -> None:
         fields = config.get("fields", [])
         max_keys = config.get("max_keys", 0)
     else:
-        # Default: match all traffic on the RX interface
-        fields = []
+        # Default: match on standard 5-tuple fields
+        fields = ["src_ip", "dst_ip", "src_port", "dst_port", "protocol"]
         max_keys = 0  # 0 = unlimited keys (sentinel value in InFMon API)
 
     flow_rule_add(name=scenario, fields=fields, max_keys=max_keys)

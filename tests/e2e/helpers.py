@@ -37,6 +37,8 @@ def flow_rule_add(name: str, fields: List[str], max_keys: int = 0) -> None:
         fields: List of match field names (e.g. ["src_ip", "dst_ip"]).
         max_keys: Maximum number of flow keys (0 = unlimited).
     """
+    if not fields:
+        raise ValueError("fields must be non-empty; infmonctl requires at least one match field")
     args = ["flow-rule", "add", f"name={name}", f"fields={','.join(fields)}"]
     if max_keys > 0:
         args.append(f"max_keys={max_keys}")
