@@ -210,8 +210,21 @@ async fn run_install(force: bool) -> i32 {
                             config_path.display()
                         );
                     }
-                    let _ =
-                        run_cmd("chown", &["root:infmon", &config_path.to_string_lossy()]).await;
+                    match run_cmd("chown", &["root:infmon", &config_path.to_string_lossy()]).await {
+                        Ok(out) if !out.status.success() => {
+                            eprintln!(
+                                "infmonctl: install: warning: failed to chown {} to root:infmon",
+                                config_path.display()
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "infmonctl: install: warning: chown {}: {e}",
+                                config_path.display()
+                            );
+                        }
+                        _ => {}
+                    }
                 }
             }
             Err(e) => {
