@@ -177,25 +177,16 @@ if(ENABLE_VPP_PLUGIN)
         PATHS /usr/include /usr/local/include
         DOC "VPP development headers"
     )
-    find_library(VPP_LIB_VLIB NAMES vlib
-        PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu
-        DOC "VPP vlib library"
-    )
-    find_library(VPP_LIB_VNET NAMES vnet
-        PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu
-        DOC "VPP vnet library"
-    )
-    find_library(VPP_LIB_VLIBMEMORY NAMES vlibmemory
-        PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu
-        DOC "VPP vlibmemory library"
-    )
-    find_library(VPP_LIB_VPPINFRA NAMES vppinfra
-        PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu
-        DOC "VPP vppinfra library"
-    )
+    find_library(VPP_LIB_VLIB NAMES vlib DOC "VPP vlib library")
+    find_library(VPP_LIB_VNET NAMES vnet DOC "VPP vnet library")
+    find_library(VPP_LIB_VLIBMEMORY NAMES vlibmemory DOC "VPP vlibmemory library")
+    find_library(VPP_LIB_VPPINFRA NAMES vppinfra DOC "VPP vppinfra library")
 
     if(NOT VPP_INCLUDE_DIR)
         message(FATAL_ERROR "ENABLE_VPP_PLUGIN is ON but VPP dev headers not found. Install vpp-dev.")
+    endif()
+    if(NOT VPP_LIB_VLIB OR NOT VPP_LIB_VNET)
+        message(FATAL_ERROR "ENABLE_VPP_PLUGIN is ON but required VPP libraries (vlib, vnet) not found.")
     endif()
 
     add_library(infmon_plugin MODULE
@@ -220,21 +211,18 @@ if(ENABLE_VPP_PLUGIN)
         infmon_snapshot
         infmon_stats_segment
     )
-    if(VPP_LIB_VLIB)
-        target_link_libraries(infmon_plugin PRIVATE ${VPP_LIB_VLIB})
-    endif()
-    if(VPP_LIB_VNET)
-        target_link_libraries(infmon_plugin PRIVATE ${VPP_LIB_VNET})
-    endif()
-    if(VPP_LIB_VLIBMEMORY)
-        target_link_libraries(infmon_plugin PRIVATE ${VPP_LIB_VLIBMEMORY})
-    endif()
-    if(VPP_LIB_VPPINFRA)
-        target_link_libraries(infmon_plugin PRIVATE ${VPP_LIB_VPPINFRA})
-    endif()
+    foreach(_lib ${VPP_LIB_VLIB} ${VPP_LIB_VNET} ${VPP_LIB_VLIBMEMORY} ${VPP_LIB_VPPINFRA})
+        target_link_libraries(infmon_plugin PRIVATE ${_lib})
+    endforeach()
 
     # Ensure the generated API header is built before the plugin
     add_dependencies(infmon_plugin infmon_api_generated)
+
+    # Install to VPP plugin directory
+    include(GNUInstallDirs)
+    install(TARGETS infmon_plugin
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/vpp_plugins
+    )
 
     message(STATUS "VPP plugin target enabled: infmon_plugin.so")
 endif()
