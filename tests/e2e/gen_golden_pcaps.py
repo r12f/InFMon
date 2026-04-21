@@ -9,8 +9,7 @@ from scapy.all import (
     Ether, IP, IPv6, Raw, TCP, wrpcap,
 )
 
-OUTDIR = os.path.join(os.path.dirname(__file__), "..", "pcaps", "erspan")
-os.makedirs(OUTDIR, exist_ok=True)
+SCENARIOS_DIR = os.path.join(os.path.dirname(__file__), "scenarios")
 
 # ERSPAN III header builder (scapy's ERSPAN support is limited)
 def erspan3_hdr(o_bit=False, ver=2, session_id=0):
@@ -57,9 +56,13 @@ def build_pkt(outer_ip, gre_seq=False, erspan_o=False, erspan_ver=2, inner=None)
     return pkt
 
 def save(name, pkt):
-    path = os.path.join(OUTDIR, name)
+    """Save packet as scenarios/<name>/input.pcap."""
+    scenario_name = name.replace(".pcap", "")
+    scenario_dir = os.path.join(SCENARIOS_DIR, scenario_name)
+    os.makedirs(scenario_dir, exist_ok=True)
+    path = os.path.join(scenario_dir, "input.pcap")
     wrpcap(path, [pkt])
-    print(f"  {name}: {len(bytes(pkt))} bytes")
+    print(f"  {scenario_name}/input.pcap: {len(bytes(pkt))} bytes")
 
 print("Generating golden PCAPs...")
 

@@ -371,7 +371,7 @@ The implementation PR (separate from this spec PR) MUST include at minimum:
 
 ### 8.1 Golden PCAPs
 
-Stored under `tests/pcaps/erspan/`:
+Stored under `tests/e2e/scenarios/` (each scenario directory contains an `input.pcap`):
 
 - `erspan3_full.pcap` — full inner packet, no truncation.
 - `erspan3_with_seq.pcap` — GRE `S` flag set.

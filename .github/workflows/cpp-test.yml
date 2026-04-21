@@ -100,5 +100,5 @@ jobs:
           cmake --build build-fuzz --target fuzz_erspan_parser
           mkdir -p fuzz-corpus
           # Seed corpus from golden PCAPs
-          cp tests/pcaps/erspan/*.pcap fuzz-corpus/ 2>/dev/null || true
+          cp tests/e2e/scenarios/*/input.pcap fuzz-corpus/ 2>/dev/null || true
           build-fuzz/fuzz_erspan_parser fuzz-corpus/ -max_total_time=30 -max_len=2048
