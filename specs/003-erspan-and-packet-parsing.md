@@ -371,20 +371,20 @@ The implementation PR (separate from this spec PR) MUST include at minimum:
 
 ### 8.1 Golden PCAPs
 
-Stored under `tests/pcaps/erspan/`:
+Stored under `tests/e2e/scenarios/` (each scenario directory contains an `input.pcap`):
 
-- `erspan3_full.pcap` — full inner packet, no truncation.
-- `erspan3_with_seq.pcap` — GRE `S` flag set.
-- `erspan3_o_bit.pcap` — Platform-Specific Sub-Header present.
-- `erspan3_o_bit_truncated.pcap` — `O = 1` with the mbuf truncated **inside**
+- `erspan3_full/input.pcap` — full inner packet, no truncation.
+- `erspan3_with_seq/input.pcap` — GRE `S` flag set.
+- `erspan3_o_bit/input.pcap` — Platform-Specific Sub-Header present.
+- `erspan3_o_bit_truncated/input.pcap` — `O = 1` with the mbuf truncated **inside**
   the 8-byte Platform-Specific Sub-Header (key bounds-check case for §5.1).
-- `erspan3_ipv6_full.pcap` — IPv6 outer transport, full inner packet.
-- `erspan3_ipv6_trunc128.pcap` — IPv6 outer with BF-3-style 128 B snap.
-- `erspan3_trunc128.pcap` — BF-3-style 128 B snap (IPv4 outer).
-- `erspan3_trunc_outer.pcap` — outer-header truncation (must drop).
-- `erspan3_bad_version.pcap` — Ver=1 (must drop).
-- `erspan3_qinq.pcap` — outer QinQ (must drop).
-- `erspan3_gre_keyed.pcap` — GRE K flag set (must drop).
+- `erspan3_ipv6_full/input.pcap` — IPv6 outer transport, full inner packet.
+- `erspan3_ipv6_trunc128/input.pcap` — IPv6 outer with BF-3-style 128 B snap.
+- `erspan3_trunc128/input.pcap` — BF-3-style 128 B snap (IPv4 outer).
+- `erspan3_trunc_outer/input.pcap` — outer-header truncation (must drop).
+- `erspan3_bad_version/input.pcap` — Ver=1 (must drop).
+- `erspan3_qinq/input.pcap` — outer QinQ (must drop).
+- `erspan3_gre_keyed/input.pcap` — GRE K flag set (must drop).
 
 ### 8.2 Unit Tests (gtest)
 

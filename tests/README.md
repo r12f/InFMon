@@ -85,11 +85,13 @@ python3 -m pytest -v --tb=short
    (e.g. `erspan3_new_feature/`).
 
 2. Add an `input.pcap` file — this is the traffic that will be replayed.
-   It can be a symlink to a shared pcap in the repo.
 
 3. Add an `expected_flows.json` file containing the expected flow counter
-   output from InFMon after replaying the pcap. To generate it
-   automatically, run once with the refresh flag:
+   output from InFMon after replaying the pcap. Use `{}` as an initial
+   placeholder — it means "baseline not yet generated". For scenarios where
+   the packet is truly invalid/dropped, `{}` is also the correct final
+   baseline. To generate baselines automatically, run once with the refresh
+   flag:
 
    ```bash
    INFMON_E2E_TEST_REFRESH_BASELINE=1 make e2e PYTEST_ARGS="-k new_feature"
@@ -108,3 +110,6 @@ python3 -m pytest -v --tb=short
 The test runner (`test_packet_replay.py`) automatically discovers all
 scenario directories that contain both `input.pcap` and
 `expected_flows.json`.
+
+Golden PCAPs can be regenerated with `tests/e2e/gen_golden_pcaps.py`
+(requires `scapy`).

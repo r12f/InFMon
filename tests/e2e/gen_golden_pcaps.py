@@ -9,8 +9,7 @@ from scapy.all import (
     Ether, IP, IPv6, Raw, TCP, wrpcap,
 )
 
-OUTDIR = os.path.join(os.path.dirname(__file__), "..", "pcaps", "erspan")
-os.makedirs(OUTDIR, exist_ok=True)
+SCENARIOS_DIR = os.path.join(os.path.dirname(__file__), "scenarios")
 
 # ERSPAN III header builder (scapy's ERSPAN support is limited)
 def erspan3_hdr(o_bit=False, ver=2, session_id=0):
@@ -57,62 +56,71 @@ def build_pkt(outer_ip, gre_seq=False, erspan_o=False, erspan_ver=2, inner=None)
     return pkt
 
 def save(name, pkt):
-    path = os.path.join(OUTDIR, name)
+    """Save packet as scenarios/<name>/input.pcap."""
+    scenario_name = name
+    scenario_dir = os.path.join(SCENARIOS_DIR, scenario_name)
+    os.makedirs(scenario_dir, exist_ok=True)
+    path = os.path.join(scenario_dir, "input.pcap")
     wrpcap(path, [pkt])
-    print(f"  {name}: {len(bytes(pkt))} bytes")
+    # Ensure expected_flows.json placeholder exists for test discovery
+    baseline = os.path.join(scenario_dir, "expected_flows.json")
+    if not os.path.exists(baseline):
+        with open(baseline, "w") as f:
+            f.write("{}\n")
+    print(f"  {scenario_name}/input.pcap: {len(bytes(pkt))} bytes")
 
 print("Generating golden PCAPs...")
 
-# 1. erspan3_full.pcap — full inner packet, no truncation
-save("erspan3_full.pcap", build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47)))
+# 1. erspan3_full — full inner packet, no truncation
+save("erspan3_full", build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47)))
 
-# 2. erspan3_with_seq.pcap — GRE S flag set
-save("erspan3_with_seq.pcap", build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47), gre_seq=True))
+# 2. erspan3_with_seq — GRE S flag set
+save("erspan3_with_seq", build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47), gre_seq=True))
 
-# 3. erspan3_o_bit.pcap — Platform-Specific Sub-Header present
-save("erspan3_o_bit.pcap", build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47), erspan_o=True))
+# 3. erspan3_o_bit — Platform-Specific Sub-Header present
+save("erspan3_o_bit", build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47), erspan_o=True))
 
-# 4. erspan3_o_bit_truncated.pcap — O=1 with mbuf truncated inside the 8-byte sub-header
+# 4. erspan3_o_bit_truncated — O=1 with mbuf truncated inside the 8-byte sub-header
 pkt4 = build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47), erspan_o=True)
 raw4 = bytes(pkt4)
 # Truncate 4 bytes into the 8-byte platform sub-header
 # Outer Eth(14) + IPv4(20) + GRE(4) + ERSPAN(12) = 50, then sub-header starts
 # We need to cut inside the sub-header, so keep up to offset 50 + 4 = 54
 trunc_len = 14 + 20 + 4 + 12 + 4  # 54 bytes - mid sub-header
-save("erspan3_o_bit_truncated.pcap",
+save("erspan3_o_bit_truncated",
      Ether(raw4[:trunc_len]))
 
-# 5. erspan3_ipv6_full.pcap — IPv6 outer transport, full inner packet
-save("erspan3_ipv6_full.pcap",
+# 5. erspan3_ipv6_full — IPv6 outer transport, full inner packet
+save("erspan3_ipv6_full",
      build_pkt(IPv6(src="2001:db8::1", dst="2001:db8::2", nh=47)))
 
-# 6. erspan3_ipv6_trunc128.pcap — IPv6 outer with BF-3-style 128 B snap
+# 6. erspan3_ipv6_trunc128 — IPv6 outer with BF-3-style 128 B snap
 # Need a large inner to make 128B be a truncation. IPv6 overhead: 14+40+4+12=70
 pkt6 = build_pkt(IPv6(src="2001:db8::1", dst="2001:db8::2", nh=47),
                  inner=bytes(inner_tcp(payload_len=200)))
 raw6 = bytes(pkt6)
 assert len(raw6) > 128, f"pkt6 is only {len(raw6)} bytes"
-save("erspan3_ipv6_trunc128.pcap", Ether(raw6[:128]))
+save("erspan3_ipv6_trunc128", Ether(raw6[:128]))
 
-# 7. erspan3_trunc128.pcap — BF-3-style 128 B snap (IPv4 outer)
+# 7. erspan3_trunc128 — BF-3-style 128 B snap (IPv4 outer)
 # IPv4 overhead: 14+20+4+12=50
 pkt7 = build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47),
                  inner=bytes(inner_tcp(payload_len=200)))
 raw7 = bytes(pkt7)
 assert len(raw7) > 128, f"pkt7 is only {len(raw7)} bytes"
-save("erspan3_trunc128.pcap", Ether(raw7[:128]))
+save("erspan3_trunc128", Ether(raw7[:128]))
 
-# 8. erspan3_trunc_outer.pcap — outer-header truncation (must drop)
+# 8. erspan3_trunc_outer — outer-header truncation (must drop)
 # Truncate in the middle of outer IPv4 header
 pkt8 = build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47))
 raw8 = bytes(pkt8)
-save("erspan3_trunc_outer.pcap", Ether(raw8[:24]))  # Only 14 + 10 bytes of IPv4
+save("erspan3_trunc_outer", Ether(raw8[:24]))  # Only 14 + 10 bytes of IPv4
 
-# 9. erspan3_bad_version.pcap — Ver=1 (must drop)
-save("erspan3_bad_version.pcap",
+# 9. erspan3_bad_version — Ver=1 (must drop)
+save("erspan3_bad_version",
      build_pkt(IP(src="10.0.0.1", dst="10.0.0.2", proto=47), erspan_ver=1))
 
-# 10. erspan3_qinq.pcap — outer QinQ (must drop)
+# 10. erspan3_qinq — outer QinQ (must drop)
 # Build manually with QinQ outer
 inner_raw = bytes(inner_tcp())
 erspan = erspan3_hdr()
@@ -125,9 +133,9 @@ ip_hdr = struct.pack("!BBHHHBBH4s4s",
 raw_after_eth = struct.pack("!HH", 0x88A8, 100) + struct.pack("!HH", 0x8100, 200) + \
     struct.pack("!H", 0x0800) + ip_hdr + ip_payload
 qinq_pkt = b"\x00\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa\xbb" + raw_after_eth
-save("erspan3_qinq.pcap", Ether(qinq_pkt))
+save("erspan3_qinq", Ether(qinq_pkt))
 
-# 11. erspan3_gre_keyed.pcap — GRE K flag set (must drop)
+# 11. erspan3_gre_keyed — GRE K flag set (must drop)
 inner_raw = bytes(inner_tcp())
 erspan = erspan3_hdr()
 # GRE with K flag: flags=0x2000, proto=0x22EB, plus 4-byte key
@@ -139,6 +147,6 @@ ip_hdr = struct.pack("!BBHHHBBH4s4s",
     b"\x0a\x00\x00\x01", b"\x0a\x00\x00\x02")
 eth = b"\x00\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa\xbb" + struct.pack("!H", 0x0800)
 keyed_pkt = eth + ip_hdr + ip_payload
-save("erspan3_gre_keyed.pcap", Ether(keyed_pkt))
+save("erspan3_gre_keyed", Ether(keyed_pkt))
 
 print("Done!")

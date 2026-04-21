@@ -100,8 +100,17 @@ class PcapTest : public ::testing::Test
 
     bool loadPcap(const std::string &name)
     {
-        // Try relative to build dir then to repo root
+        // Derive scenario name by stripping .pcap suffix
+        std::string scenario = name;
+        auto pos = scenario.rfind(".pcap");
+        if (pos != std::string::npos)
+            scenario.erase(pos);
+
+        // Try scenario layout first, then legacy flat layout
         std::string paths[] = {
+            std::string("../tests/e2e/scenarios/") + scenario + "/input.pcap",
+            std::string("tests/e2e/scenarios/") + scenario + "/input.pcap",
+            std::string(PCAP_DIR "/") + scenario + "/input.pcap",
             std::string("../tests/pcaps/erspan/") + name,
             std::string("tests/pcaps/erspan/") + name,
             std::string(PCAP_DIR "/") + name,
