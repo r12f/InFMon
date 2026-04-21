@@ -99,6 +99,6 @@ jobs:
               -DENABLE_FUZZER=ON
           cmake --build build-fuzz --target fuzz_erspan_parser
           mkdir -p fuzz-corpus
-          # Seed corpus from golden PCAPs
-          cp tests/e2e/scenarios/*/input.pcap fuzz-corpus/ 2>/dev/null || true
+          # Seed corpus from golden PCAPs (unique names to avoid overwrite)
+          for f in tests/e2e/scenarios/*/input.pcap; do cp "$f" "fuzz-corpus/$(basename $(dirname $f)).pcap"; done
           build-fuzz/fuzz_erspan_parser fuzz-corpus/ -max_total_time=30 -max_len=2048

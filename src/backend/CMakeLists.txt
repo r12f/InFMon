@@ -33,7 +33,7 @@ add_executable(test_erspan_pcap
 target_link_libraries(test_erspan_pcap PRIVATE infmon_parser GTest::gtest GTest::gtest_main)
 target_include_directories(test_erspan_pcap PRIVATE include)
 target_compile_definitions(test_erspan_pcap PRIVATE
-    PCAP_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/../../tests/pcaps/erspan\")
+    PCAP_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/../../tests/e2e/scenarios\")
 add_test(NAME erspan_pcap COMMAND test_erspan_pcap)
 
 # --- Fuzz target (clang only, requires -fsanitize=fuzzer) ---
