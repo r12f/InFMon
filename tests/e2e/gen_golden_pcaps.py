@@ -62,6 +62,11 @@ def save(name, pkt):
     os.makedirs(scenario_dir, exist_ok=True)
     path = os.path.join(scenario_dir, "input.pcap")
     wrpcap(path, [pkt])
+    # Ensure expected_flows.json placeholder exists for test discovery
+    baseline = os.path.join(scenario_dir, "expected_flows.json")
+    if not os.path.exists(baseline):
+        with open(baseline, "w") as f:
+            f.write("{}\n")
     print(f"  {scenario_name}/input.pcap: {len(bytes(pkt))} bytes")
 
 print("Generating golden PCAPs...")

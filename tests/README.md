@@ -87,9 +87,11 @@ python3 -m pytest -v --tb=short
 2. Add an `input.pcap` file — this is the traffic that will be replayed.
 
 3. Add an `expected_flows.json` file containing the expected flow counter
-   output from InFMon after replaying the pcap. Use `{}` for scenarios
-   where the packet should be dropped (invalid/truncated). To generate it
-   automatically, run once with the refresh flag:
+   output from InFMon after replaying the pcap. Use `{}` as an initial
+   placeholder — it means "baseline not yet generated". For scenarios where
+   the packet is truly invalid/dropped, `{}` is also the correct final
+   baseline. To generate baselines automatically, run once with the refresh
+   flag:
 
    ```bash
    INFMON_E2E_TEST_REFRESH_BASELINE=1 make e2e PYTEST_ARGS="-k new_feature"
