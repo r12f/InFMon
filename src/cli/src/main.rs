@@ -858,6 +858,7 @@ fn field_id_to_field(
 // ServiceStatus for run_status
 // ---------------------------------------------------------------------------
 
+#[derive(Debug)]
 struct ServiceStatus {
     systemd_active: bool,
     systemd_state: String,
