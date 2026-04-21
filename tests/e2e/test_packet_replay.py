@@ -75,11 +75,11 @@ def test_packet_replay(scenario: str, infmon_env: dict) -> None:
     if config_path.exists():
         with open(config_path) as f:
             config = json.load(f)
-        fields = config.get("fields", {})
+        fields = config.get("fields", [])
         max_keys = config.get("max_keys", 0)
     else:
         # Default: match all traffic on the RX interface
-        fields = {}
+        fields = []
         max_keys = 0  # 0 = unlimited keys (sentinel value in InFMon API)
 
     flow_rule_add(name=scenario, fields=fields, max_keys=max_keys)
