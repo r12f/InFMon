@@ -178,15 +178,19 @@ async fn run_install(force: bool) -> i32 {
 
     if config_path.exists() && !force {
         eprintln!(
-            "infmonctl: install: config already exists at {}; use --force to overwrite",
+            "infmonctl: install: skipping config (already exists at {}; use --force to overwrite)",
             config_path.display()
         );
     } else {
-        let default_config = infmon_common::config::model::FrontendConfig::default();
+        let default_config = infmon_common::config::model::Config {
+            frontend: Some(infmon_common::config::model::FrontendConfig::default()),
+            flow_rules: vec![],
+            exporters: None,
+            logging: None,
+        };
         match serde_yaml::to_string(&default_config) {
             Ok(yaml) => {
-                let full_yaml = format!("# InFMon default configuration\n# See https://github.com/r12f/InFMon for documentation\n\nfrontend:\n{}\n\nflow_rules: []\n",
-                    yaml.lines().map(|l| format!("  {l}")).collect::<Vec<_>>().join("\n"));
+                let full_yaml = format!("# InFMon default configuration\n# See https://github.com/r12f/InFMon for documentation\n\n{yaml}");
                 if let Err(e) = std::fs::write(&config_path, full_yaml) {
                     eprintln!(
                         "infmonctl: install: failed to write {}: {e}",
@@ -195,6 +199,20 @@ async fn run_install(force: bool) -> i32 {
                     return EXIT_FAILURE;
                 }
                 tracing::info!("wrote default config to {}", config_path.display());
+                // Set restrictive permissions (0640 root:infmon)
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let perms = std::fs::Permissions::from_mode(0o640);
+                    if let Err(e) = std::fs::set_permissions(&config_path, perms) {
+                        eprintln!(
+                            "infmonctl: install: warning: failed to set permissions on {}: {e}",
+                            config_path.display()
+                        );
+                    }
+                    let _ =
+                        run_cmd("chown", &["root:infmon", &config_path.to_string_lossy()]).await;
+                }
             }
             Err(e) => {
                 eprintln!("infmonctl: install: failed to serialize default config: {e}");
@@ -210,7 +228,15 @@ async fn run_install(force: bool) -> i32 {
             return EXIT_FAILURE;
         }
         // chown to infmon:infmon
-        let _ = run_cmd("chown", &["infmon:infmon", dir]).await;
+        match run_cmd("chown", &["infmon:infmon", dir]).await {
+            Ok(out) if !out.status.success() => {
+                eprintln!("infmonctl: install: warning: failed to chown {dir} to infmon:infmon");
+            }
+            Err(e) => {
+                eprintln!("infmonctl: install: warning: chown {dir}: {e}");
+            }
+            _ => {}
+        }
     }
 
     // Step 4: Install systemd unit file
@@ -221,7 +247,9 @@ async fn run_install(force: bool) -> i32 {
     let service_content = if service_src.exists() {
         std::fs::read_to_string(service_src).ok()
     } else {
-        // Try relative to the running binary
+        // Try relative to the running binary.
+        // Assumes layout: <prefix>/bin/infmonctl with <prefix>/deploy/infmon.service.
+        // This is the standard layout from `cargo install` or the .deb package.
         std::env::current_exe()
             .ok()
             .and_then(|exe| {
@@ -247,7 +275,18 @@ async fn run_install(force: bool) -> i32 {
                 return EXIT_FAILURE;
             }
             // Reload systemd daemon
-            let _ = run_cmd("systemctl", &["daemon-reload"]).await;
+            match run_cmd("systemctl", &["daemon-reload"]).await {
+                Ok(out) if !out.status.success() => {
+                    eprintln!(
+                        "infmonctl: install: warning: systemctl daemon-reload failed; \
+                               the new unit file may not be recognized until a manual reload"
+                    );
+                }
+                Err(e) => {
+                    eprintln!("infmonctl: install: warning: daemon-reload: {e}");
+                }
+                _ => {}
+            }
             tracing::info!("installed systemd unit to {}", service_dst.display());
         }
     } else {
@@ -318,7 +357,15 @@ async fn run_status(cli: &Cli) -> i32 {
     )
     .await
     {
-        Ok(out) => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        Ok(out) => {
+            let raw = String::from_utf8_lossy(&out.stdout);
+            let parts: Vec<&str> = raw.trim().lines().collect();
+            if parts.len() == 2 {
+                format!("{}/{}", parts[0].trim(), parts[1].trim())
+            } else {
+                raw.trim().to_string()
+            }
+        }
         Err(_) => "unknown".to_string(),
     };
 
@@ -363,9 +410,9 @@ async fn run_status(cli: &Cli) -> i32 {
         }
     }
 
-    if systemd_active && frontend_responsive {
+    if status.systemd_active && status.frontend_responsive {
         EXIT_SUCCESS
-    } else if systemd_active {
+    } else if status.systemd_active {
         // Service running but frontend not responsive
         EXIT_DEGRADED
     } else {
