@@ -30,7 +30,10 @@ fn main() {
         .unwrap_or(false);
 
     if !has_vapi {
-        // Try direct library check
+        // Fallback: direct library check. Hardcoded to aarch64 because InFMon
+        // exclusively targets NVIDIA BF3 (aarch64 DPU). The pkg-config path
+        // above handles the general case; this is a last resort for build
+        // environments where pkg-config is not configured.
         let lib_path = PathBuf::from("/usr/lib/aarch64-linux-gnu/libvapiclient.so");
         if !lib_path.exists() {
             println!("cargo:warning=libvapiclient not found — skipping VAPI FFI build");
@@ -54,5 +57,8 @@ fn main() {
     println!("cargo:rustc-link-lib=dylib=svm");
     println!("cargo:rustc-cfg=feature=\"vapi\"");
     println!("cargo:rerun-if-changed=src/vapi_ffi/infmon_vapi_client.c");
-    println!("cargo:rerun-if-changed={}", generated_dir.join("infmon.api.vapi.h").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        generated_dir.join("infmon.api.vapi.h").display()
+    );
 }

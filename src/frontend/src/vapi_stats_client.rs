@@ -38,7 +38,9 @@ pub struct VapiStatsClient {
     handle: *mut c_void,
 }
 
-// SAFETY: The VAPI handle is only used from a single thread (the poller).
+// SAFETY: VapiStatsClient wraps a raw VAPI handle that is not inherently
+// thread-safe. We guarantee safety by confining all usage to the single
+// poller thread — no concurrent access occurs.
 unsafe impl Send for VapiStatsClient {}
 
 impl VapiStatsClient {
@@ -144,6 +146,9 @@ impl VapiStatsClient {
             let first = &entries[0];
             let mut key_arena = Vec::new();
             let mut slots = Vec::new();
+
+            // Table-level metadata (generation, epoch, counters) comes from the
+            // first entry in the dump — all entries share the same snapshot context.
 
             for e in &entries {
                 let key_offset = key_arena.len() as u32;

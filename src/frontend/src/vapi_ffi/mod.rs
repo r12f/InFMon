@@ -25,13 +25,16 @@ pub struct infmon_ffi_flow_entry_t {
     pub key_data: *const u8,
 }
 
+// Compile-time check: ensure the FFI struct layout matches the C side.
+// 10 × u64 (80) + 1 × u16 (2) + 6 padding + 1 × pointer (8) = 96 on 64-bit.
+const _: () = assert!(std::mem::size_of::<infmon_ffi_flow_entry_t>() == 96);
+
 /// Callback type for flow entries.
 pub type infmon_ffi_entry_cb =
     Option<unsafe extern "C" fn(entry: *const infmon_ffi_flow_entry_t, ctx: *mut c_void) -> c_int>;
 
 /// Callback type for flow rule list.
-pub type infmon_ffi_list_cb =
-    Option<unsafe extern "C" fn(hi: u64, lo: u64, ctx: *mut c_void)>;
+pub type infmon_ffi_list_cb = Option<unsafe extern "C" fn(hi: u64, lo: u64, ctx: *mut c_void)>;
 
 extern "C" {
     pub fn infmon_vapi_connect(name: *const c_char) -> *mut c_void;

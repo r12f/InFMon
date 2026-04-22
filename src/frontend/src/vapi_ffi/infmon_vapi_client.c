@@ -64,6 +64,10 @@ infmon_snapshot_inline_details_cb(vapi_ctx_t vapi_ctx, void *callback_ctx, vapi_
         return VAPI_OK;
     }
 
+    /* If a previous callback already flagged an error, skip remaining entries. */
+    if (dctx->error)
+        return VAPI_OK;
+
     infmon_ffi_flow_entry_t entry;
     memset(&entry, 0, sizeof(entry));
     entry.flow_rule_id_hi = reply->flow_rule_id.hi;

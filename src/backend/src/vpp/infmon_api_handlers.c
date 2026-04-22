@@ -429,13 +429,20 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
         infmon_api_snapshot_and_clear(&infmon_vpp_api_ctx, id, &snap_reply);
 
     if (result != INFMON_API_OK || !snap_reply.retired_table) {
-        /* No entries — dump completes with zero details messages. */
+        /* Send an error reply so the client does not hang. */
+        REPLY_MACRO2_ZERO (VL_API_INFMON_SNAPSHOT_INLINE_DETAILS, ({
+            rmp->retval = clib_host_to_net_i32(-1);
+        }));
         return;
     }
 
     infmon_counter_table_t *tbl = snap_reply.retired_table;
     infmon_stats_descriptor_t *desc = &snap_reply.descriptor;
 
+    /*
+     * RCU safety: the retired table is pinned until infmon_api_snap_release()
+     * is called below, so it is safe to iterate for the lifetime of this handler.
+     */
     /* Walk all slots; emit a details message for each occupied one. */
     for (uint32_t i = 0; i < tbl->num_slots; i++) {
         infmon_slot_t *slot = &tbl->slots[i];

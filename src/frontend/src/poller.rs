@@ -332,7 +332,7 @@ fn run_loop(
     let mut tick_id: u64 = 0;
     let mut prev_mono: u64 = 0;
     let mut backoff = Duration::from_millis(100);
-    let max_backoff = Duration::from_secs(30);
+    let max_backoff = Duration::from_secs(5);
 
     while !stop.load(std::sync::atomic::Ordering::Acquire) {
         let tick_start = monotonic_ns();
