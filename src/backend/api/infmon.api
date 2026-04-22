@@ -17,47 +17,39 @@
 
 option version = "1.0.0";
 
-/* ── Enumerations ──────────────────────────────────────────────────── */
+/* ── Enumerations ──────────────────────────────────────────────────
+ *
+ * API enum types use an `infmon_api_` prefix (and `INFMON_API_` for
+ * values) to avoid symbol collisions with the identically-named C
+ * enums in include/infmon/*.h.  Numeric values are kept in sync so a
+ * simple cast converts between API and native enums.
+ */
 
 /** Flow-rule key field types — mirrors infmon_field_t. */
-enum infmon_field_type : u8
+enum infmon_api_field_type : u8
 {
-    INFMON_FIELD_SRC_IP = 0,
-    INFMON_FIELD_DST_IP = 1,
-    INFMON_FIELD_IP_PROTO = 2,
-    INFMON_FIELD_DSCP = 3,
-    INFMON_FIELD_MIRROR_SRC_IP = 4,
-    INFMON_FIELD_SRC_PORT = 5,
-    INFMON_FIELD_DST_PORT = 6,
+    INFMON_API_FIELD_SRC_IP = 0,
+    INFMON_API_FIELD_DST_IP = 1,
+    INFMON_API_FIELD_IP_PROTO = 2,
+    INFMON_API_FIELD_DSCP = 3,
+    INFMON_API_FIELD_MIRROR_SRC_IP = 4,
+    INFMON_API_FIELD_SRC_PORT = 5,
+    INFMON_API_FIELD_DST_PORT = 6,
 };
 
 /** Eviction policy — mirrors infmon_eviction_policy_t. */
-enum infmon_eviction_policy : u8
+enum infmon_api_eviction_policy : u8
 {
-    INFMON_EVICTION_LRU_DROP = 0,
+    INFMON_API_EVICTION_LRU_DROP = 0,
 };
 
-/** Error codes for flow_rule operations. */
-enum infmon_flow_rule_error : i32
-{
-    INFMON_FLOW_RULE_OK = 0,
-    INFMON_FLOW_RULE_ERR_NAME_EXISTS = -1,
-    INFMON_FLOW_RULE_ERR_NOT_FOUND = -2,
-    INFMON_FLOW_RULE_ERR_INVALID_SPEC = -3,
-    INFMON_FLOW_RULE_ERR_BUDGET_EXCEEDED = -4,
-    INFMON_FLOW_RULE_ERR_SET_FULL = -5,
-    INFMON_FLOW_RULE_ERR_INTERNAL = -6,
-};
-
-/** Error codes for snapshot_and_clear. */
-enum infmon_snap_error : i32
-{
-    INFMON_SNAP_OK = 0,
-    INFMON_SNAP_ALLOC_FAILED = -1,
-    INFMON_SNAP_TOO_MANY_RETIRED = -2,
-    INFMON_SNAP_INVALID_INDEX = -3,
-    INFMON_SNAP_NULL_TABLE = -4,
-};
+/*
+ * Error enums (infmon_flow_rule_error_t, infmon_snap_error_t) are NOT
+ * declared here — they are only used as i32 retval in reply messages.
+ * The native C enums in include/infmon/*.h are cast to i32 in the
+ * handler code directly.  This avoids packed-enum sizeof mismatches
+ * and symbol collisions.
+ */
 
 /* ── Type definitions ──────────────────────────────────────────────── */
 
@@ -96,9 +88,9 @@ typedef infmon_flow_rule_details
     string name[32];       /* NUL-terminated, max 31 chars + NUL */
     u32 field_count;
     /** Fixed-size: max 8 fields per rule (includes headroom). Bump array + version if more needed. */
-    vl_api_infmon_field_type_t fields[8];
+    vl_api_infmon_api_field_type_t fields[8];
     u32 max_keys;
-    vl_api_infmon_eviction_policy_t eviction_policy;
+    vl_api_infmon_api_eviction_policy_t eviction_policy;
     u32 key_width;
 };
 
@@ -127,9 +119,9 @@ define infmon_flow_rule_add
     u32 context;
     string name[32];
     u32 field_count;
-    vl_api_infmon_field_type_t fields[8];
+    vl_api_infmon_api_field_type_t fields[8];
     u32 max_keys;
-    vl_api_infmon_eviction_policy_t eviction_policy;
+    vl_api_infmon_api_eviction_policy_t eviction_policy;
 };
 
 /**

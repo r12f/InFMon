@@ -196,6 +196,7 @@ if(ENABLE_VPP_PLUGIN)
 
     add_library(infmon_plugin MODULE
         src/vpp/infmon_nodes.c
+        src/vpp/infmon_api_handlers.c
     )
     set_target_properties(infmon_plugin PROPERTIES
         PREFIX ""                              # produce infmon_plugin.so, not libinfmon_plugin.so
@@ -215,6 +216,7 @@ if(ENABLE_VPP_PLUGIN)
         infmon_counter_table
         infmon_snapshot
         infmon_stats_segment
+        infmon_api_handler
     )
     foreach(_var VPP_LIB_VLIB VPP_LIB_VNET VPP_LIB_VLIBMEMORY VPP_LIB_VPPINFRA)
         if(${_var})
