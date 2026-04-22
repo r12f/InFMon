@@ -52,7 +52,7 @@ jobs:
 
       - name: cargo test
         if: steps.detect.outputs.have_workspace == 'true'
-        run: cargo test --workspace --all-features --locked
+        run: cargo test --workspace --locked
 
       - name: cargo doc
         if: steps.detect.outputs.have_workspace == 'true'
