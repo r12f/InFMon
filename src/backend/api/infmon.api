@@ -202,6 +202,52 @@ define infmon_snapshot_and_clear_reply
     vl_api_infmon_table_descriptor_t descriptor;
 };
 
+/* ── W10d′: infmon_snapshot_inline ────────────────────────────────── */
+
+/**
+ * Atomic table swap + inline data return.  Performs snapshot_and_clear
+ * on one flow_rule, then streams back one infmon_snapshot_inline_details
+ * per occupied slot containing the actual key bytes and counters.
+ *
+ * This avoids the need for the caller to mmap the stats segment —
+ * all data is returned via the API.
+ *
+ * Flow:
+ *   client → infmon_snapshot_inline_dump (flow_rule_id)
+ *   server → infmon_snapshot_inline_details  × N  (one per occupied slot)
+ *
+ * If retval != 0 in the first details message, no further messages follow.
+ * An empty table produces zero details messages.
+ */
+define infmon_snapshot_inline_dump
+{
+    u32 client_index;
+    u32 context;
+    vl_api_infmon_flow_rule_id_t flow_rule_id;
+};
+
+/**
+ * One flow entry from a snapshot.
+ * key_data is variable-length: key_len bytes of the raw flow key.
+ */
+define infmon_snapshot_inline_details
+{
+    u32 context;
+    /* Table-level metadata (same in every details message of a batch). */
+    vl_api_infmon_flow_rule_id_t flow_rule_id;
+    u64 generation;
+    u64 epoch_ns;
+    u64 insert_failed;
+    u64 table_full;
+    /* Per-slot data. */
+    u64 key_hash;
+    u64 packets;
+    u64 bytes;
+    u64 last_update;
+    u16 key_len;
+    u8  key_data[key_len];
+};
+
 /* ── W10e: infmon_status ─────────────────────────────────────────── */
 
 /**
