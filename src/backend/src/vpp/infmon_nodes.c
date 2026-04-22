@@ -508,6 +508,12 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
     if (!infmon_cli_rule_set)
         infmon_cli_rule_set = infmon_flow_rule_set_create(INFMON_FLOW_RULE_MAX_KEYS_BUDGET);
 
+    if (!infmon_cli_rule_set) {
+        vec_free(name_vec);
+        vec_free(fields_str);
+        return clib_error_return(0, "failed to create rule set");
+    }
+
     infmon_flow_rule_result_t rc = infmon_flow_rule_add(infmon_cli_rule_set, &spec);
     if (rc != INFMON_FLOW_RULE_OK) {
         vec_free(name_vec);
