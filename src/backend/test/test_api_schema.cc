@@ -183,11 +183,9 @@ TEST_F(ApiSchemaTest, W10b_FlowRuleDel)
 
 TEST_F(ApiSchemaTest, W10c_FlowRuleList)
 {
-    expect_contains("define infmon_flow_rule_list", "Missing infmon_flow_rule_list message");
+    expect_contains("define infmon_flow_rule_list_dump", "Missing infmon_flow_rule_list_dump message");
     expect_contains("define infmon_flow_rule_list_details",
                     "Missing infmon_flow_rule_list_details message");
-    expect_contains("define infmon_flow_rule_list_reply",
-                    "Missing infmon_flow_rule_list_reply terminal message");
 }
 
 TEST_F(ApiSchemaTest, W10c_FlowRuleGet)
@@ -207,9 +205,8 @@ TEST_F(ApiSchemaTest, W10d_SnapshotAndClear)
 
 TEST_F(ApiSchemaTest, W10e_Status)
 {
-    expect_contains("define infmon_status", "Missing infmon_status message");
+    expect_contains("define infmon_status_dump", "Missing infmon_status_dump message");
     expect_contains("define infmon_status_details", "Missing infmon_status_details message");
-    expect_contains("define infmon_status_reply", "Missing infmon_status_reply terminal message");
 }
 
 /* ── Message field checks ─────────────────────────────────────────── */
@@ -237,9 +234,7 @@ TEST_F(ApiSchemaTest, RepliesHaveRetval)
                    "flow_rule_get_reply must have retval");
     expect_matches("infmon_snapshot_and_clear_reply[\\s\\S]*?retval",
                    "snapshot_and_clear_reply must have retval");
-    expect_matches("infmon_flow_rule_list_reply[\\s\\S]*?retval",
-                   "flow_rule_list_reply must have retval");
-    expect_matches("infmon_status_reply[\\s\\S]*?retval", "status_reply must have retval");
+    /* dump/details messages don't have a terminal _reply with retval */
 }
 
 /* ── All 6 messages present ───────────────────────────────────────── */
@@ -247,8 +242,8 @@ TEST_F(ApiSchemaTest, RepliesHaveRetval)
 TEST_F(ApiSchemaTest, AllSixMessagesPresent)
 {
     const std::vector<std::string> required_messages = {
-        "infmon_flow_rule_add", "infmon_flow_rule_del",      "infmon_flow_rule_list",
-        "infmon_flow_rule_get", "infmon_snapshot_and_clear", "infmon_status",
+        "infmon_flow_rule_add", "infmon_flow_rule_del",      "infmon_flow_rule_list_dump",
+        "infmon_flow_rule_get", "infmon_snapshot_and_clear", "infmon_status_dump",
     };
 
     for (const auto &msg : required_messages) {
@@ -264,14 +259,12 @@ TEST_F(ApiSchemaTest, NoDuplicateMessageDefinitions)
         "define infmon_flow_rule_add\n",
         "define infmon_flow_rule_add_reply\n",
         "define infmon_flow_rule_del\n",
-        "define infmon_flow_rule_list\n",
+        "define infmon_flow_rule_list_dump\n",
         "define infmon_flow_rule_list_details\n",
-        "define infmon_flow_rule_list_reply\n",
         "define infmon_snapshot_and_clear\n",
         "define infmon_snapshot_and_clear_reply\n",
-        "define infmon_status\n",
+        "define infmon_status_dump\n",
         "define infmon_status_details\n",
-        "define infmon_status_reply\n",
     };
     for (const auto &pat : critical) {
         EXPECT_EQ(count_occurrences(pat), 1) << "Expected exactly 1 occurrence of '" << pat

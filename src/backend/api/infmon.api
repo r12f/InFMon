@@ -160,7 +160,7 @@ autoreply define infmon_flow_rule_del
  * Enumerate all active flow_rules.
  * Returns one infmon_flow_rule_list_details per flow_rule.
  */
-define infmon_flow_rule_list
+define infmon_flow_rule_list_dump
 {
     u32 client_index;
     u32 context;
@@ -171,13 +171,6 @@ define infmon_flow_rule_list_details
 {
     u32 context;
     vl_api_infmon_flow_rule_details_t flow_rule;
-};
-
-/** Terminal reply for flow_rule_list — signals end of stream. */
-define infmon_flow_rule_list_reply
-{
-    u32 context;
-    i32 retval;
 };
 
 /**
@@ -224,7 +217,7 @@ define infmon_snapshot_and_clear_reply
  * Returns all workers in a single infmon_status_details message
  * via a variable-length array (workers[worker_count]).
  */
-define infmon_status
+define infmon_status_dump
 {
     u32 client_index;
     u32 context;
@@ -235,11 +228,4 @@ define infmon_status_details
     u32 context;
     u32 worker_count;
     vl_api_infmon_worker_status_t workers[worker_count];
-};
-
-/** Terminal reply for infmon_status — signals end of stream. */
-define infmon_status_reply
-{
-    u32 context;
-    i32 retval;
 };
