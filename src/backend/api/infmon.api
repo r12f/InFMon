@@ -95,8 +95,8 @@ typedef infmon_flow_rule_details
     u32 flow_rule_index;
     string name[32];       /* NUL-terminated, max 31 chars + NUL */
     u32 field_count;
-    /** Fixed-size: max 7 fields per rule. Bump array + version if more needed. */
-    vl_api_infmon_field_type_t fields[7];
+    /** Fixed-size: max 8 fields per rule (includes headroom). Bump array + version if more needed. */
+    vl_api_infmon_field_type_t fields[8];
     u32 max_keys;
     vl_api_infmon_eviction_policy_t eviction_policy;
     u32 key_width;
@@ -127,7 +127,7 @@ define infmon_flow_rule_add
     u32 context;
     string name[32];
     u32 field_count;
-    vl_api_infmon_field_type_t fields[7];
+    vl_api_infmon_field_type_t fields[8];
     u32 max_keys;
     vl_api_infmon_eviction_policy_t eviction_policy;
 };
