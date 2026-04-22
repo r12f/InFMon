@@ -78,42 +78,31 @@ TEST_F(ApiSchemaTest, HasVersionOption)
 
 TEST_F(ApiSchemaTest, HasFieldTypeEnum)
 {
-    expect_contains("enum infmon_field_type", "Missing infmon_field_type enum");
-    expect_contains("INFMON_FIELD_SRC_IP", "Missing SRC_IP field");
-    expect_contains("INFMON_FIELD_DST_IP", "Missing DST_IP field");
-    expect_contains("INFMON_FIELD_IP_PROTO", "Missing IP_PROTO field");
-    expect_contains("INFMON_FIELD_DSCP", "Missing DSCP field");
-    expect_contains("INFMON_FIELD_MIRROR_SRC_IP", "Missing MIRROR_SRC_IP field");
-    expect_contains("INFMON_FIELD_SRC_PORT", "Missing SRC_PORT field");
-    expect_contains("INFMON_FIELD_DST_PORT", "Missing DST_PORT field");
+    expect_contains("enum infmon_api_field_type", "Missing infmon_api_field_type enum");
+    expect_contains("INFMON_API_FIELD_SRC_IP", "Missing SRC_IP field");
+    expect_contains("INFMON_API_FIELD_DST_IP", "Missing DST_IP field");
+    expect_contains("INFMON_API_FIELD_IP_PROTO", "Missing IP_PROTO field");
+    expect_contains("INFMON_API_FIELD_DSCP", "Missing DSCP field");
+    expect_contains("INFMON_API_FIELD_MIRROR_SRC_IP", "Missing MIRROR_SRC_IP field");
+    expect_contains("INFMON_API_FIELD_SRC_PORT", "Missing SRC_PORT field");
+    expect_contains("INFMON_API_FIELD_DST_PORT", "Missing DST_PORT field");
 }
 
 TEST_F(ApiSchemaTest, HasEvictionPolicyEnum)
 {
-    expect_contains("enum infmon_eviction_policy", "Missing eviction_policy enum");
-    expect_contains("INFMON_EVICTION_LRU_DROP", "Missing LRU_DROP policy");
+    expect_contains("enum infmon_api_eviction_policy", "Missing eviction_policy enum");
+    expect_contains("INFMON_API_EVICTION_LRU_DROP", "Missing LRU_DROP policy");
 }
 
-TEST_F(ApiSchemaTest, HasFlowRuleErrorEnum)
+TEST_F(ApiSchemaTest, ErrorEnumsNotInApi)
 {
-    expect_contains("enum infmon_flow_rule_error", "Missing flow_rule_error enum");
-    expect_contains("INFMON_FLOW_RULE_OK", "Missing OK code");
-    expect_contains("INFMON_FLOW_RULE_ERR_NAME_EXISTS", "Missing NAME_EXISTS");
-    expect_contains("INFMON_FLOW_RULE_ERR_NOT_FOUND", "Missing NOT_FOUND");
-    expect_contains("INFMON_FLOW_RULE_ERR_INVALID_SPEC", "Missing INVALID_SPEC");
-    expect_contains("INFMON_FLOW_RULE_ERR_BUDGET_EXCEEDED", "Missing BUDGET_EXCEEDED");
-    expect_contains("INFMON_FLOW_RULE_ERR_SET_FULL", "Missing SET_FULL");
-    expect_contains("INFMON_FLOW_RULE_ERR_INTERNAL", "Missing INTERNAL");
-}
-
-TEST_F(ApiSchemaTest, HasSnapErrorEnum)
-{
-    expect_contains("enum infmon_snap_error", "Missing snap_error enum");
-    expect_contains("INFMON_SNAP_OK", "Missing SNAP_OK");
-    expect_contains("INFMON_SNAP_ALLOC_FAILED", "Missing SNAP_ALLOC_FAILED");
-    expect_contains("INFMON_SNAP_TOO_MANY_RETIRED", "Missing SNAP_TOO_MANY_RETIRED");
-    expect_contains("INFMON_SNAP_INVALID_INDEX", "Missing SNAP_INVALID_INDEX");
-    expect_contains("INFMON_SNAP_NULL_TABLE", "Missing SNAP_NULL_TABLE");
+    // Error enums (flow_rule_error, snap_error) are deliberately NOT
+    // declared in the .api file.  They are only used as i32 retval in
+    // reply messages.  Verify they are absent.
+    EXPECT_EQ(api.find("enum infmon_api_flow_rule_error"), std::string::npos)
+        << "flow_rule_error enum should NOT be in .api";
+    EXPECT_EQ(api.find("enum infmon_api_snap_error"), std::string::npos)
+        << "snap_error enum should NOT be in .api";
 }
 
 /* ── Type definitions ─────────────────────────────────────────────── */
