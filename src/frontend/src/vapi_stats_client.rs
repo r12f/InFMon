@@ -104,8 +104,8 @@ impl VapiStatsClient {
                 };
 
                 entries.push(CollectedEntry {
-                    flow_rule_id_hi: e.flow_rule_id_hi,
-                    flow_rule_id_lo: e.flow_rule_id_lo,
+                    _flow_rule_id_hi: e.flow_rule_id_hi,
+                    _flow_rule_id_lo: e.flow_rule_id_lo,
                     generation: e.generation,
                     epoch_ns: e.epoch_ns,
                     insert_failed: e.insert_failed,
@@ -188,8 +188,8 @@ impl Drop for VapiStatsClient {
 
 /// Internal struct for collecting entries from the FFI callback.
 struct CollectedEntry {
-    flow_rule_id_hi: u64,
-    flow_rule_id_lo: u64,
+    _flow_rule_id_hi: u64,
+    _flow_rule_id_lo: u64,
     generation: u64,
     epoch_ns: u64,
     insert_failed: u64,

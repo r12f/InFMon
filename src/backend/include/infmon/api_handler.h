@@ -62,8 +62,9 @@ typedef struct {
  */
 typedef struct {
     infmon_api_result_t result;
-    infmon_stats_descriptor_t descriptor;            /**< Populated on success. */
-    infmon_counter_table_t *retired_table; /**< Direct pointer to the retired table (VPP-internal). */
+    infmon_stats_descriptor_t descriptor; /**< Populated on success. */
+    infmon_counter_table_t
+        *retired_table; /**< Direct pointer to the retired table (VPP-internal). */
 } infmon_api_snap_reply_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */

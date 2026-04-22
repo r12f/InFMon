@@ -33,7 +33,7 @@ typedef struct {
     uint64_t bytes;
     uint64_t last_update;
     uint16_t key_len;
-    const uint8_t *key_data;  /* points into caller-owned buffer */
+    const uint8_t *key_data; /* points into caller-owned buffer */
 } infmon_ffi_flow_entry_t;
 
 /**
@@ -52,16 +52,13 @@ typedef struct {
 
 /* VAPI callback for each details message. */
 static vapi_error_e
-infmon_snapshot_inline_details_cb(vapi_ctx_t vapi_ctx,
-                                  void *callback_ctx,
-                                  vapi_error_e rv,
-                                  bool is_last,
-                                  vapi_payload_infmon_snapshot_inline_details *reply)
+infmon_snapshot_inline_details_cb(vapi_ctx_t vapi_ctx, void *callback_ctx, vapi_error_e rv,
+                                  bool is_last, vapi_payload_infmon_snapshot_inline_details *reply)
 {
-    (void)vapi_ctx;
-    (void)is_last;
+    (void) vapi_ctx;
+    (void) is_last;
 
-    infmon_dump_ctx_t *dctx = (infmon_dump_ctx_t *)callback_ctx;
+    infmon_dump_ctx_t *dctx = (infmon_dump_ctx_t *) callback_ctx;
     if (rv != VAPI_OK || !reply) {
         /* End of dump or error — just return. */
         return VAPI_OK;
@@ -104,17 +101,15 @@ void *infmon_vapi_connect(const char *name)
     if (rv != VAPI_OK)
         return NULL;
 
-    rv = vapi_connect(ctx, name, NULL,
-                      256,   /* max outstanding requests */
-                      128,   /* response queue depth */
-                      VAPI_MODE_BLOCKING,
-                      true); /* is_nonblocking = true for the read path */
+    rv = vapi_connect(ctx, name, NULL, 256,      /* max outstanding requests */
+                      128,                       /* response queue depth */
+                      VAPI_MODE_BLOCKING, true); /* is_nonblocking = true for the read path */
     if (rv != VAPI_OK) {
         vapi_ctx_free(ctx);
         return NULL;
     }
 
-    return (void *)ctx;
+    return (void *) ctx;
 }
 
 /**
@@ -124,7 +119,7 @@ void infmon_vapi_disconnect(void *handle)
 {
     if (!handle)
         return;
-    vapi_ctx_t ctx = (vapi_ctx_t)handle;
+    vapi_ctx_t ctx = (vapi_ctx_t) handle;
     vapi_disconnect(ctx);
     vapi_ctx_free(ctx);
 }
@@ -134,19 +129,15 @@ void infmon_vapi_disconnect(void *handle)
  * Calls `cb` for each flow entry.
  * Returns 0 on success, -1 on error.
  */
-int infmon_vapi_snapshot_inline(void *handle,
-                                 uint64_t flow_rule_id_hi,
-                                 uint64_t flow_rule_id_lo,
-                                 infmon_ffi_entry_cb cb,
-                                 void *cb_ctx)
+int infmon_vapi_snapshot_inline(void *handle, uint64_t flow_rule_id_hi, uint64_t flow_rule_id_lo,
+                                infmon_ffi_entry_cb cb, void *cb_ctx)
 {
     if (!handle)
         return -1;
 
-    vapi_ctx_t ctx = (vapi_ctx_t)handle;
+    vapi_ctx_t ctx = (vapi_ctx_t) handle;
 
-    vapi_msg_infmon_snapshot_inline_dump *msg =
-        vapi_alloc_infmon_snapshot_inline_dump(ctx);
+    vapi_msg_infmon_snapshot_inline_dump *msg = vapi_alloc_infmon_snapshot_inline_dump(ctx);
     if (!msg)
         return -1;
 
@@ -159,8 +150,8 @@ int infmon_vapi_snapshot_inline(void *handle,
         .error = 0,
     };
 
-    vapi_error_e rv = vapi_infmon_snapshot_inline_dump(
-        ctx, msg, infmon_snapshot_inline_details_cb, &dctx);
+    vapi_error_e rv =
+        vapi_infmon_snapshot_inline_dump(ctx, msg, infmon_snapshot_inline_details_cb, &dctx);
 
     if (rv != VAPI_OK)
         return -1;
@@ -178,37 +169,32 @@ typedef struct {
     void *ctx;
 } infmon_list_ctx_t;
 
-static vapi_error_e
-infmon_flow_rule_list_cb(vapi_ctx_t vapi_ctx,
-                          void *callback_ctx,
-                          vapi_error_e rv,
-                          bool is_last,
-                          vapi_payload_infmon_flow_rule_list_details *reply)
+static vapi_error_e infmon_flow_rule_list_cb(vapi_ctx_t vapi_ctx, void *callback_ctx,
+                                             vapi_error_e rv, bool is_last,
+                                             vapi_payload_infmon_flow_rule_list_details *reply)
 {
-    (void)vapi_ctx;
-    (void)is_last;
+    (void) vapi_ctx;
+    (void) is_last;
 
     if (rv != VAPI_OK || !reply)
         return VAPI_OK;
 
-    infmon_list_ctx_t *lctx = (infmon_list_ctx_t *)callback_ctx;
+    infmon_list_ctx_t *lctx = (infmon_list_ctx_t *) callback_ctx;
     if (lctx->cb)
         lctx->cb(reply->flow_rule.flow_rule_id.hi, reply->flow_rule.flow_rule_id.lo, lctx->ctx);
 
     return VAPI_OK;
 }
 
-int infmon_vapi_list_flow_rules(void *handle,
-                                 void (*cb)(uint64_t hi, uint64_t lo, void *ctx),
-                                 void *ctx)
+int infmon_vapi_list_flow_rules(void *handle, void (*cb)(uint64_t hi, uint64_t lo, void *ctx),
+                                void *ctx)
 {
     if (!handle)
         return -1;
 
-    vapi_ctx_t vctx = (vapi_ctx_t)handle;
+    vapi_ctx_t vctx = (vapi_ctx_t) handle;
 
-    vapi_msg_infmon_flow_rule_list_dump *msg =
-        vapi_alloc_infmon_flow_rule_list_dump(vctx);
+    vapi_msg_infmon_flow_rule_list_dump *msg = vapi_alloc_infmon_flow_rule_list_dump(vctx);
     if (!msg)
         return -1;
 
@@ -217,8 +203,7 @@ int infmon_vapi_list_flow_rules(void *handle,
         .ctx = ctx,
     };
 
-    vapi_error_e rv = vapi_infmon_flow_rule_list_dump(
-        vctx, msg, infmon_flow_rule_list_cb, &lctx);
+    vapi_error_e rv = vapi_infmon_flow_rule_list_dump(vctx, msg, infmon_flow_rule_list_cb, &lctx);
 
     return (rv == VAPI_OK) ? 0 : -1;
 }
