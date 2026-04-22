@@ -108,6 +108,10 @@ after ERSPAN decapsulation per Spec 003 — with one named exception
 A flow-rule MUST list at least one field. There is no implicit field; if
 you want a flow-rule keyed only on `dscp`, configure it that way.
 
+> **Tip:** When using `src_port` or `dst_port` on traffic that includes
+> non-L4 protocols (e.g. ICMP), pair them with `ip_proto` to avoid
+> collapsing all non-L4 flows into a single port=0 bucket.
+
 `mirror_src_ip` is the documented exception to the "inner only" rule: it
 travels with the parser record (Spec 003 §4.5) so flow-rules can attribute
 flows to the device that mirrored them. All other outer fields remain
