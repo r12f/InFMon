@@ -305,8 +305,6 @@ fn vpp_stats_socket_reachable(path: &Path) -> bool {
     if fd < 0 {
         return false;
     }
-    // Safety: we own the fd
-    let _guard = unsafe { std::fs::File::from_raw_fd(fd) }; // auto-close on drop
 
     let path_bytes = path.as_os_str().as_encoded_bytes();
 
@@ -314,6 +312,8 @@ fn vpp_stats_socket_reachable(path: &Path) -> bool {
     addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
 
     if path_bytes.len() >= std::mem::size_of_val(&addr.sun_path) {
+        // Safety: we own the fd, close it before returning
+        let _ = unsafe { std::fs::File::from_raw_fd(fd) };
         return false; // sun_path overflow
     }
     // Copy path bytes into sun_path
@@ -333,6 +333,10 @@ fn vpp_stats_socket_reachable(path: &Path) -> bool {
             len as libc::socklen_t,
         )
     };
+    // Safety: take ownership of fd after connect() to ensure cleanup.
+    // Deferring from_raw_fd until after connect avoids fragility if the
+    // guard were accidentally dropped/moved before the connect call.
+    let _ = unsafe { std::fs::File::from_raw_fd(fd) }; // auto-close on drop
     rc == 0
 }
 

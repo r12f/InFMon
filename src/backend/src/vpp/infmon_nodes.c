@@ -447,8 +447,11 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
             ;
         else if (unformat(input, "max-keys %u", &max_keys))
             ;
-        else
+        else {
+            vec_free(name_vec);
+            vec_free(fields_str);
             return clib_error_return(0, "unknown input '%U'", format_unformat_error, input);
+        }
     }
 
     if (!name_vec) {
@@ -469,7 +472,8 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
     spec.eviction_policy = INFMON_EVICTION_LRU_DROP;
 
     /* Tokenize comma-separated fields */
-    char *tok = strtok((char *) fields_str, ",");
+    char *saveptr = NULL;
+    char *tok = strtok_r((char *) fields_str, ",", &saveptr);
     while (tok && spec.field_count < INFMON_FLOW_RULE_FIELDS_MAX) {
         if (strcmp(tok, "src_ip") == 0)
             spec.fields[spec.field_count++] = INFMON_FIELD_SRC_IP;
@@ -490,7 +494,7 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
             vec_free(fields_str);
             return clib_error_return(0, "unknown field '%s'", tok);
         }
-        tok = strtok(NULL, ",");
+        tok = strtok_r(NULL, ",", &saveptr);
     }
 
     vec_free(fields_str);
@@ -514,9 +518,11 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
     uint32_t n = infmon_flow_rule_count(infmon_cli_rule_set);
     const infmon_flow_rule_t *added = infmon_flow_rule_get(infmon_cli_rule_set, n - 1);
     if (added) {
-        infmon_counter_table_t *ct = infmon_counter_table_create(added->max_keys, added->key_width);
-        if (ct && (n - 1) < INFMON_MAX_ACTIVE_FLOW_RULES)
-            __atomic_store_n(&infmon_plugin_main.tables[n - 1], ct, __ATOMIC_RELEASE);
+        if ((n - 1) < INFMON_MAX_ACTIVE_FLOW_RULES) {
+            infmon_counter_table_t *ct = infmon_counter_table_create(added->max_keys, added->key_width);
+            if (ct)
+                __atomic_store_n(&infmon_plugin_main.tables[n - 1], ct, __ATOMIC_RELEASE);
+        }
     }
 
     infmon_publish_rules();
