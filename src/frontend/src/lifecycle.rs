@@ -309,12 +309,13 @@ fn vpp_stats_socket_reachable(path: &Path) -> bool {
     let _guard = unsafe { std::fs::File::from_raw_fd(fd) }; // auto-close on drop
 
     let path_bytes = path.as_os_str().as_encoded_bytes();
-    if path_bytes.len() >= 108 {
-        return false; // sun_path overflow
-    }
 
     let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
     addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
+
+    if path_bytes.len() >= std::mem::size_of_val(&addr.sun_path) {
+        return false; // sun_path overflow
+    }
     // Copy path bytes into sun_path
     unsafe {
         std::ptr::copy_nonoverlapping(

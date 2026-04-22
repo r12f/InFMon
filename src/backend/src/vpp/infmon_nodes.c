@@ -15,40 +15,42 @@
 
 #ifdef INFMON_VPP_BUILD
 
-#include <vlib/vlib.h>
 #include <vlib/unix/plugin.h>
-#include <vnet/pg/pg.h>
-#include <vnet/vnet.h>
+#include <vlib/vlib.h>
 #include <vnet/buffer.h>
 #include <vnet/feature/feature.h>
+#include <vnet/pg/pg.h>
+#include <vnet/vnet.h>
 
-#include "infmon/graph_node.h"
 #include "infmon/counter_table.h"
-
-/* Suppress -Wpedantic for VPP VLIB_REGISTER_NODE flexible array initializers */
-#pragma GCC diagnostic ignored "-Wpedantic"
+#include "infmon/graph_node.h"
 
 /* ── VPP plugin registration ─────────────────────────────────────── */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 VLIB_PLUGIN_REGISTER() = {
     .version = "0.1.0",
     .description = "InFMon — Infrastructure Flow Monitor",
 };
+#pragma GCC diagnostic pop
 
 /* ── Feature arc registration ────────────────────────────────────── */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 VNET_FEATURE_INIT(infmon_erspan_decap_feat, static) = {
     .arc_name = "device-input",
     .node_name = "infmon-erspan-decap",
     .runs_before = VNET_FEATURES("ethernet-input"),
 };
+#pragma GCC diagnostic pop
 
 /* ── Feature enable/disable CLI ──────────────────────────────────── */
 
-static clib_error_t *
-infmon_enable_disable_command_fn(CLIB_UNUSED(vlib_main_t *vm),
-                                 unformat_input_t *input,
-                                 CLIB_UNUSED(vlib_cli_command_t *cmd))
+static clib_error_t *infmon_enable_disable_command_fn(CLIB_UNUSED(vlib_main_t *vm),
+                                                      unformat_input_t *input,
+                                                      CLIB_UNUSED(vlib_cli_command_t *cmd))
 {
     u32 sw_if_index = ~0;
     int enable = 1;
@@ -58,27 +60,27 @@ infmon_enable_disable_command_fn(CLIB_UNUSED(vlib_main_t *vm),
             enable = 1;
         else if (unformat(input, "disable"))
             enable = 0;
-        else if (unformat(input, "%U", unformat_vnet_sw_interface,
-                          vnet_get_main(), &sw_if_index))
+        else if (unformat(input, "%U", unformat_vnet_sw_interface, vnet_get_main(), &sw_if_index))
             ;
         else
-            return clib_error_return(0, "unknown input '%U'",
-                                     format_unformat_error, input);
+            return clib_error_return(0, "unknown input '%U'", format_unformat_error, input);
     }
 
-    if (sw_if_index == (u32)~0)
+    if (sw_if_index == (u32) ~0)
         return clib_error_return(0, "please specify an interface");
 
-    vnet_feature_enable_disable("device-input", "infmon-erspan-decap",
-                                sw_if_index, enable, 0, 0);
+    vnet_feature_enable_disable("device-input", "infmon-erspan-decap", sw_if_index, enable, 0, 0);
     return 0;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 VLIB_CLI_COMMAND(infmon_enable_disable_command, static) = {
     .path = "infmon enable",
     .short_help = "infmon enable <interface> [disable]",
     .function = infmon_enable_disable_command_fn,
 };
+#pragma GCC diagnostic pop
 
 /* ── Per-worker thread-local scratch ─────────────────────────────── */
 
@@ -205,6 +207,18 @@ static uword infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *n
             to_next_match++;
             n_left_match--;
         } else {
+            /* Map parse error to node error counter */
+            infmon_node_error_t err;
+            if (rc == INFMON_PARSE_ERR_GRE_BAD_PROTO || rc == INFMON_PARSE_ERR_ERSPAN_BAD_VERSION)
+                err = INFMON_NODE_ERR_ERSPAN_UNKNOWN_PROTO;
+            else if (rc == INFMON_PARSE_ERR_ERSPAN_TRUNCATED ||
+                     rc == INFMON_PARSE_ERR_OUTER_TRUNCATED)
+                err = INFMON_NODE_ERR_ERSPAN_TRUNCATED;
+            else
+                err = INFMON_NODE_ERR_INNER_PARSE_FAILED;
+
+            node->errors[err]++;
+
             /* Non-ERSPAN: pass through to normal pipeline */
             to_next_pass[0] = bi;
             to_next_pass++;
@@ -228,13 +242,15 @@ static uword infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *n
     return frame->n_vectors;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 VLIB_REGISTER_NODE(infmon_erspan_decap_node) = {
     .function = infmon_erspan_decap_node_fn,
     .name = "infmon-erspan-decap",
     .vector_size = sizeof(u32),
     .format_trace = format_infmon_erspan_decap_trace,
     .type = VLIB_NODE_TYPE_INTERNAL,
-    .n_errors = INFMON_NODE_ERR__COUNT,         /* shared enum; unused counters read zero */
+    .n_errors = INFMON_NODE_ERR__COUNT, /* shared enum; unused counters read zero */
     .error_strings = (char **) infmon_node_error_strings, /* per-node subsets deferred to v2 */
     .n_next_nodes = INFMON_ERSPAN_DECAP_NEXT__COUNT,
     .next_nodes =
@@ -244,6 +260,7 @@ VLIB_REGISTER_NODE(infmon_erspan_decap_node) = {
             [INFMON_ERSPAN_DECAP_NEXT_PASSTHROUGH] = "ethernet-input",
         },
 };
+#pragma GCC diagnostic pop
 
 /* ════════════════════════════════════════════════════════════════════
  *  Node 2: infmon-flow-match
@@ -310,6 +327,8 @@ static uword infmon_flow_match_node_fn(vlib_main_t *vm, vlib_node_runtime_t *nod
     return frame->n_vectors;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 VLIB_REGISTER_NODE(infmon_flow_match_node) = {
     .function = infmon_flow_match_node_fn,
     .name = "infmon-flow-match",
@@ -324,6 +343,7 @@ VLIB_REGISTER_NODE(infmon_flow_match_node) = {
             [INFMON_FLOW_MATCH_NEXT_DROP] = "drop",
         },
 };
+#pragma GCC diagnostic pop
 
 /* ════════════════════════════════════════════════════════════════════
  *  Node 3: infmon-counter
@@ -374,6 +394,8 @@ static uword infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node, 
     return frame->n_vectors;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 VLIB_REGISTER_NODE(infmon_counter_node) = {
     .function = infmon_counter_node_fn,
     .name = "infmon-counter",
@@ -387,6 +409,7 @@ VLIB_REGISTER_NODE(infmon_counter_node) = {
             [INFMON_COUNTER_NEXT_DROP] = "drop",
         },
 };
+#pragma GCC diagnostic pop
 
 /* ════════════════════════════════════════════════════════════════════
  *  CLI: infmon flow-rule add <name> fields <f1,f2,...> [max-keys N]
@@ -409,10 +432,9 @@ static void infmon_publish_rules(void)
     __atomic_store_n(&pm->flow_rule_set, &infmon_cli_rule_set_ref, __ATOMIC_RELEASE);
 }
 
-static clib_error_t *
-infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm),
-                                unformat_input_t *input,
-                                CLIB_UNUSED(vlib_cli_command_t *cmd))
+static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm),
+                                                     unformat_input_t *input,
+                                                     CLIB_UNUSED(vlib_cli_command_t *cmd))
 {
     u8 *name_vec = 0;
     u8 *fields_str = 0;
@@ -429,15 +451,20 @@ infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm),
             return clib_error_return(0, "unknown input '%U'", format_unformat_error, input);
     }
 
-    if (!name_vec)
+    if (!name_vec) {
+        vec_free(fields_str);
         return clib_error_return(0, "name required");
-    if (!fields_str)
+    }
+    if (!fields_str) {
+        vec_free(name_vec);
         return clib_error_return(0, "fields required");
+    }
 
     /* Parse field names */
     infmon_flow_rule_t spec;
     memset(&spec, 0, sizeof(spec));
     strncpy(spec.name, (char *) name_vec, INFMON_FLOW_RULE_NAME_MAX);
+    spec.name[INFMON_FLOW_RULE_NAME_MAX - 1] = '\0';
     spec.max_keys = max_keys;
     spec.eviction_policy = INFMON_EVICTION_LRU_DROP;
 
@@ -487,35 +514,36 @@ infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm),
     uint32_t n = infmon_flow_rule_count(infmon_cli_rule_set);
     const infmon_flow_rule_t *added = infmon_flow_rule_get(infmon_cli_rule_set, n - 1);
     if (added) {
-        infmon_counter_table_t *ct = infmon_counter_table_create(
-            added->max_keys, added->key_width);
-        if (ct)
+        infmon_counter_table_t *ct = infmon_counter_table_create(added->max_keys, added->key_width);
+        if (ct && (n - 1) < INFMON_MAX_ACTIVE_FLOW_RULES)
             __atomic_store_n(&infmon_plugin_main.tables[n - 1], ct, __ATOMIC_RELEASE);
     }
 
     infmon_publish_rules();
 
-    vlib_cli_output(vm, "Added flow rule '%s' (index %u, key_width %u)",
-                    (char *) name_vec, n - 1, added ? added->key_width : 0);
+    vlib_cli_output(vm, "Added flow rule '%s' (index %u, key_width %u)", (char *) name_vec, n - 1,
+                    added ? added->key_width : 0);
     vec_free(name_vec);
     return 0;
 }
 
 /* NOLINTNEXTLINE(clang-diagnostic-pedantic) */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 VLIB_CLI_COMMAND(infmon_flow_rule_add_command, static) = {
     .path = "infmon flow-rule add",
     .short_help = "infmon flow-rule add name <name> fields <f1,f2,...> [max-keys N]",
     .function = infmon_flow_rule_add_command_fn,
 };
+#pragma GCC diagnostic pop
 
 /* ════════════════════════════════════════════════════════════════════
  *  CLI: infmon flow-rule show
  * ════════════════════════════════════════════════════════════════════ */
 
-static clib_error_t *
-infmon_flow_rule_show_command_fn(vlib_main_t *vm,
-                                 CLIB_UNUSED(unformat_input_t *input),
-                                 CLIB_UNUSED(vlib_cli_command_t *cmd))
+static clib_error_t *infmon_flow_rule_show_command_fn(vlib_main_t *vm,
+                                                      CLIB_UNUSED(unformat_input_t *input),
+                                                      CLIB_UNUSED(vlib_cli_command_t *cmd))
 {
     if (!infmon_cli_rule_set) {
         vlib_cli_output(vm, "No flow rules configured (plugin)");
@@ -527,17 +555,20 @@ infmon_flow_rule_show_command_fn(vlib_main_t *vm,
     for (uint32_t i = 0; i < n; i++) {
         const infmon_flow_rule_t *r = infmon_flow_rule_get(infmon_cli_rule_set, i);
         if (r)
-            vlib_cli_output(vm, "  [%u] %s  fields=%u key_width=%u max_keys=%u",
-                            i, r->name, r->field_count, r->key_width, r->max_keys);
+            vlib_cli_output(vm, "  [%u] %s  fields=%u key_width=%u max_keys=%u", i, r->name,
+                            r->field_count, r->key_width, r->max_keys);
     }
     return 0;
 }
 
 /* NOLINTNEXTLINE(clang-diagnostic-pedantic) */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 VLIB_CLI_COMMAND(infmon_flow_rule_show_command, static) = {
     .path = "infmon flow-rule show",
     .short_help = "infmon flow-rule show",
     .function = infmon_flow_rule_show_command_fn,
 };
+#pragma GCC diagnostic pop
 
 #endif /* INFMON_VPP_BUILD */

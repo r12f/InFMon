@@ -183,7 +183,8 @@ TEST_F(ApiSchemaTest, W10b_FlowRuleDel)
 
 TEST_F(ApiSchemaTest, W10c_FlowRuleList)
 {
-    expect_contains("define infmon_flow_rule_list_dump", "Missing infmon_flow_rule_list_dump message");
+    expect_contains("define infmon_flow_rule_list_dump",
+                    "Missing infmon_flow_rule_list_dump message");
     expect_contains("define infmon_flow_rule_list_details",
                     "Missing infmon_flow_rule_list_details message");
 }
