@@ -11,8 +11,8 @@
 /* ── Field metadata tables ───────────────────────────────────────── */
 
 static const uint32_t field_widths[INFMON_FIELD__COUNT] = {
-    [INFMON_FIELD_SRC_IP] = 16, [INFMON_FIELD_DST_IP] = 16,        [INFMON_FIELD_IP_PROTO] = 1,
-    [INFMON_FIELD_DSCP] = 1,    [INFMON_FIELD_MIRROR_SRC_IP] = 16, [INFMON_FIELD_SRC_PORT] = 2,
+    [INFMON_FIELD_SRC_IP] = 16,  [INFMON_FIELD_DST_IP] = 16,        [INFMON_FIELD_IP_PROTO] = 1,
+    [INFMON_FIELD_DSCP] = 1,     [INFMON_FIELD_MIRROR_SRC_IP] = 16, [INFMON_FIELD_SRC_PORT] = 2,
     [INFMON_FIELD_DST_PORT] = 2,
 };
 
@@ -184,13 +184,13 @@ void infmon_flow_rule_encode_key(const infmon_flow_rule_t *rule, const infmon_fl
             off += 16;
             break;
         case INFMON_FIELD_SRC_PORT:
-            key_buf[off]     = (uint8_t)(fields->src_port >> 8);
-            key_buf[off + 1] = (uint8_t)(fields->src_port & 0xFF);
+            key_buf[off] = (uint8_t) (fields->src_port >> 8);
+            key_buf[off + 1] = (uint8_t) (fields->src_port & 0xFF);
             off += 2;
             break;
         case INFMON_FIELD_DST_PORT:
-            key_buf[off]     = (uint8_t)(fields->dst_port >> 8);
-            key_buf[off + 1] = (uint8_t)(fields->dst_port & 0xFF);
+            key_buf[off] = (uint8_t) (fields->dst_port >> 8);
+            key_buf[off + 1] = (uint8_t) (fields->dst_port & 0xFF);
             off += 2;
             break;
         default:

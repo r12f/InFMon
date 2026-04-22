@@ -85,7 +85,7 @@ typedef struct {
     uint8_t dst_ip[16];        /* IPv4-mapped-IPv6, network byte order */
     uint8_t mirror_src_ip[16]; /* IPv4-mapped-IPv6, network byte order */
     uint8_t ip_proto;
-    uint8_t dscp; /* 0..63, upper 2 bits zero */
+    uint8_t dscp;      /* 0..63, upper 2 bits zero */
     uint16_t src_port; /* host byte order */
     uint16_t dst_port; /* host byte order */
 } infmon_flow_fields_t;
