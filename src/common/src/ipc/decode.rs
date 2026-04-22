@@ -49,6 +49,19 @@ pub fn decode_key(fields: &[FieldId], key_bytes: &[u8]) -> Result<Vec<FieldValue
                 values.push(FieldValue::Dscp(key_bytes[offset]));
                 offset += 1;
             }
+            FieldId::SrcPort | FieldId::DstPort => {
+                if offset + 2 > key_bytes.len() {
+                    return Err(IpcError::StatsFormat(format!(
+                        "key too short for {:?} at offset {}: need 2 bytes, have {}",
+                        field,
+                        offset,
+                        key_bytes.len() - offset
+                    )));
+                }
+                let port = u16::from_be_bytes([key_bytes[offset], key_bytes[offset + 1]]);
+                values.push(FieldValue::Port(port));
+                offset += 2;
+            }
         }
     }
 

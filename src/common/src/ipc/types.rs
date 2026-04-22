@@ -40,6 +40,8 @@ pub enum FieldId {
     IpProto = 2,
     Dscp = 3,
     MirrorSrcIp = 4,
+    SrcPort = 5,
+    DstPort = 6,
 }
 
 /// A decoded field value from raw key bytes
@@ -48,6 +50,7 @@ pub enum FieldValue {
     Ip(IpAddr),
     Proto(u8),
     Dscp(u8),
+    Port(u16),
 }
 
 /// Per-flow counters

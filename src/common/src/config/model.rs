@@ -101,6 +101,10 @@ pub enum Field {
     Dscp,
     /// Mirror source IP address (16 bytes — IPv6-sized)
     MirrorSrcIp,
+    /// Source L4 port (2 bytes, network byte order in key)
+    SrcPort,
+    /// Destination L4 port (2 bytes, network byte order in key)
+    DstPort,
 }
 
 impl Field {
@@ -109,6 +113,7 @@ impl Field {
         match self {
             Field::SrcIp | Field::DstIp | Field::MirrorSrcIp => 16,
             Field::IpProto | Field::Dscp => 1,
+            Field::SrcPort | Field::DstPort => 2,
         }
     }
 }

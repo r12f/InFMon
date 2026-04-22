@@ -89,7 +89,7 @@ matches both flow-rules updates one flow under each. This is the
 single mental model the rest of this spec (and Specs 004, 006, 007)
 relies on.
 
-## 3. Field set v1 (L3, inner + mirror metadata)
+## 3. Field set v1 (L3/L4, inner + mirror metadata)
 
 All v1 fields are extracted from the **inner** packet headers — i.e.
 after ERSPAN decapsulation per Spec 003 — with one named exception
@@ -102,9 +102,15 @@ after ERSPAN decapsulation per Spec 003 — with one named exception
 | `ip_proto`       | 1 B                     | inner IPv4.protocol / IPv6.next_header (after extension headers) | 0–255         |
 | `dscp`           | 1 B (low 6 bits used)   | inner IPv4.tos / IPv6.tc, extracted as `(tos >> 2) & 0x3F` (resp. `(tc >> 2) & 0x3F`) | upper 2 bits zero |
 | `mirror_src_ip`  | 16 B (v4 mapped to v6)  | **outer** GRE/ERSPAN source IP, surfaced by Spec 003 as `mirror_src_ip` | The **only** outer-header field allowed in a flow-rule key. Identifies the mirroring device. Same v4-mapped-v6 layout rule. **Opt-in**, but **included in the recommended default flow-rule** so flows are attributed per mirroring source out of the box. Omit it only when an operator deliberately wants to fold mirrored copies from multiple devices into a single flow. |
+| `src_port`       | 2 B                     | inner TCP/UDP/SCTP source port | Network byte order in key. Zero for non-L4 protocols (ICMP, etc.). |
+| `dst_port`       | 2 B                     | inner TCP/UDP/SCTP destination port | Network byte order in key. Zero for non-L4 protocols. |
 
 A flow-rule MUST list at least one field. There is no implicit field; if
 you want a flow-rule keyed only on `dscp`, configure it that way.
+
+> **Tip:** When using `src_port` or `dst_port` on traffic that includes
+> non-L4 protocols (e.g. ICMP), pair them with `ip_proto` to avoid
+> collapsing all non-L4 flows into a single port=0 bucket.
 
 `mirror_src_ip` is the documented exception to the "inner only" rule: it
 travels with the parser record (Spec 003 §4.5) so flow-rules can attribute
@@ -142,6 +148,7 @@ Canonical encodings (v1):
 - `mirror_src_ip`: 16 bytes, network byte order, IPv4 mapped as in §3.
 - `ip_proto`: 1 byte.
 - `dscp`: 1 byte, value in `0..=63`, upper bits zeroed.
+- `src_port`, `dst_port`: 2 bytes each, network (big-endian) byte order.
 
 Total key width is fixed per flow-rule and computable from the field list
 alone. Implementations MUST reject configurations whose key width
@@ -314,9 +321,10 @@ foreclose them.
 
 ### 9.1 L4 fields
 
-`src_port`, `dst_port`, `tcp_flags`. These plug into the field-set
-table (§3) with no schema change. The 64-byte key-width cap (§4) leaves
-room: the v1 maximum 5-tuple-ish key is 16+16+1+1 = 34 bytes.
+`tcp_flags`. This plugs into the field-set table (§3) with no schema
+change. `src_port` and `dst_port` have been promoted to v1 (see §3).
+The 64-byte key-width cap (§4) leaves room: the current maximum
+7-field key is 16+16+16+1+1+2+2 = 54 bytes.
 
 ### 9.2 RoCEv2-specific fields
 

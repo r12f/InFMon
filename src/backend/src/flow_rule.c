@@ -11,8 +11,9 @@
 /* ── Field metadata tables ───────────────────────────────────────── */
 
 static const uint32_t field_widths[INFMON_FIELD__COUNT] = {
-    [INFMON_FIELD_SRC_IP] = 16, [INFMON_FIELD_DST_IP] = 16,        [INFMON_FIELD_IP_PROTO] = 1,
-    [INFMON_FIELD_DSCP] = 1,    [INFMON_FIELD_MIRROR_SRC_IP] = 16,
+    [INFMON_FIELD_SRC_IP] = 16,  [INFMON_FIELD_DST_IP] = 16,        [INFMON_FIELD_IP_PROTO] = 1,
+    [INFMON_FIELD_DSCP] = 1,     [INFMON_FIELD_MIRROR_SRC_IP] = 16, [INFMON_FIELD_SRC_PORT] = 2,
+    [INFMON_FIELD_DST_PORT] = 2,
 };
 
 static const char *field_names[INFMON_FIELD__COUNT] = {
@@ -21,6 +22,8 @@ static const char *field_names[INFMON_FIELD__COUNT] = {
     [INFMON_FIELD_IP_PROTO] = "ip_proto",
     [INFMON_FIELD_DSCP] = "dscp",
     [INFMON_FIELD_MIRROR_SRC_IP] = "mirror_src_ip",
+    [INFMON_FIELD_SRC_PORT] = "src_port",
+    [INFMON_FIELD_DST_PORT] = "dst_port",
 };
 
 static const char *eviction_names[INFMON_EVICTION__COUNT] = {
@@ -179,6 +182,16 @@ void infmon_flow_rule_encode_key(const infmon_flow_rule_t *rule, const infmon_fl
         case INFMON_FIELD_MIRROR_SRC_IP:
             memcpy(key_buf + off, fields->mirror_src_ip, 16);
             off += 16;
+            break;
+        case INFMON_FIELD_SRC_PORT:
+            key_buf[off] = (uint8_t) (fields->src_port >> 8);
+            key_buf[off + 1] = (uint8_t) (fields->src_port & 0xFF);
+            off += 2;
+            break;
+        case INFMON_FIELD_DST_PORT:
+            key_buf[off] = (uint8_t) (fields->dst_port >> 8);
+            key_buf[off + 1] = (uint8_t) (fields->dst_port & 0xFF);
+            off += 2;
             break;
         default:
             break;

@@ -228,6 +228,8 @@ fn field_to_field_id(f: &Field) -> Option<FieldId> {
         Field::IpProto => Some(FieldId::IpProto),
         Field::Dscp => Some(FieldId::Dscp),
         Field::MirrorSrcIp => Some(FieldId::MirrorSrcIp),
+        Field::SrcPort => Some(FieldId::SrcPort),
+        Field::DstPort => Some(FieldId::DstPort),
     }
 }
 

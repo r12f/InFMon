@@ -84,6 +84,8 @@ TEST_F(ApiSchemaTest, HasFieldTypeEnum)
     expect_contains("INFMON_FIELD_IP_PROTO", "Missing IP_PROTO field");
     expect_contains("INFMON_FIELD_DSCP", "Missing DSCP field");
     expect_contains("INFMON_FIELD_MIRROR_SRC_IP", "Missing MIRROR_SRC_IP field");
+    expect_contains("INFMON_FIELD_SRC_PORT", "Missing SRC_PORT field");
+    expect_contains("INFMON_FIELD_DST_PORT", "Missing DST_PORT field");
 }
 
 TEST_F(ApiSchemaTest, HasEvictionPolicyEnum)

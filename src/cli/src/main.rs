@@ -507,6 +507,12 @@ async fn run_flow_rule(cmd: &FlowRuleCommands, cli: &Cli) -> i32 {
                                     }
                                     "mirror_src_ip" => fields
                                         .push(infmon_common::config::model::Field::MirrorSrcIp),
+                                    "src_port" => {
+                                        fields.push(infmon_common::config::model::Field::SrcPort)
+                                    }
+                                    "dst_port" => {
+                                        fields.push(infmon_common::config::model::Field::DstPort)
+                                    }
                                     other => {
                                         eprintln!("infmonctl: unknown field: {other}");
                                         return EXIT_USAGE;
@@ -864,6 +870,8 @@ fn field_id_to_field(
         FieldId::IpProto => Field::IpProto,
         FieldId::Dscp => Field::Dscp,
         FieldId::MirrorSrcIp => Field::MirrorSrcIp,
+        FieldId::SrcPort => Field::SrcPort,
+        FieldId::DstPort => Field::DstPort,
     }
 }
 

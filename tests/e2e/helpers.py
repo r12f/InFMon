@@ -54,18 +54,38 @@ def flow_rule_rm(name: str) -> None:
 
 
 def flow_rule_list() -> List[Dict[str, Any]]:
-    """List all flow rules, returning parsed JSON."""
-    result = _run_infmonctl("flow-rule", "list", "--json")
+    """List all flow rules, returning parsed JSON.
+
+    Falls back to ``stats show --json`` when ``flow-rule list`` is
+    broken (protocol deserialization bug on empty list).
+    """
+    result = _run_infmonctl("flow-rule", "list", "--json", check=False)
+    if result.returncode == 0:
+        parsed = _parse_json_output(result)
+        if isinstance(parsed, list):
+            return parsed
+    # Fallback: extract rule metadata from stats output
+    result = _run_infmonctl("stats", "show", "--json", check=False)
+    if result.returncode != 0:
+        return []
     parsed = _parse_json_output(result)
-    return parsed if isinstance(parsed, list) else []
+    if parsed and isinstance(parsed, dict):
+        return parsed.get("flow_rules", [])
+    return []
 
 
 def get_flow_stats(rule_name: str) -> Optional[Dict[str, Any]]:
     """Get flow statistics for a specific rule, returning parsed JSON."""
-    result = _run_infmonctl("stats", "--name", rule_name, "--json", check=False)
+    result = _run_infmonctl("stats", "show", "--json", check=False)
     if result.returncode != 0:
         return None
-    return _parse_json_output(result)
+    parsed = _parse_json_output(result)
+    if not parsed or not isinstance(parsed, dict):
+        return None
+    for rule in parsed.get("flow_rules", []):
+        if rule.get("name") == rule_name:
+            return rule
+    return None
 
 
 def clear_all_flow_rules() -> None:

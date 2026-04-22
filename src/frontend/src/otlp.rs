@@ -1242,6 +1242,12 @@ fn build_flow_attributes(
                 (FieldId::Dscp, FieldValue::Dscp(d)) => {
                     attrs.push(kv_int("flow.dscp", *d as i64));
                 }
+                (FieldId::SrcPort, FieldValue::Port(p)) => {
+                    attrs.push(kv_int("flow.src_port", *p as i64));
+                }
+                (FieldId::DstPort, FieldValue::Port(p)) => {
+                    attrs.push(kv_int("flow.dst_port", *p as i64));
+                }
                 _ => {} // field/value type mismatch — skip
             }
         }
