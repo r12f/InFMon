@@ -14,8 +14,13 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use infmon_common::ipc::stats_client::InFMonStatsClient;
 use infmon_common::ipc::types::FlowStatsSnapshot;
+
+#[cfg(feature = "vapi")]
+use crate::vapi_stats_client::VapiStatsClient;
+
+#[cfg(not(feature = "vapi"))]
+use infmon_common::ipc::stats_client::InFMonStatsClient;
 
 /// Sender half that exporter threads receive snapshots through.
 pub type SnapshotSender = std::sync::mpsc::SyncSender<Arc<FlowStatsSnapshot>>;
@@ -123,6 +128,7 @@ fn wall_clock_ns() -> u64 {
 }
 
 /// Try to open the stats client, returning None on failure.
+#[cfg(not(feature = "vapi"))]
 fn try_connect(path: &Path) -> Option<InFMonStatsClient> {
     match InFMonStatsClient::open(path) {
         Ok(c) => {
@@ -135,6 +141,21 @@ fn try_connect(path: &Path) -> Option<InFMonStatsClient> {
                 path.display(),
                 e
             );
+            None
+        }
+    }
+}
+
+/// Try to connect to VPP API for stats.
+#[cfg(feature = "vapi")]
+fn try_connect_vapi() -> Option<VapiStatsClient> {
+    match VapiStatsClient::connect("infmon-frontend") {
+        Ok(c) => {
+            tracing::info!("connected to VPP API for stats");
+            Some(c)
+        }
+        Err(e) => {
+            tracing::warn!("failed to connect to VPP API: {}", e);
             None
         }
     }
@@ -229,6 +250,7 @@ fn decode_snapshot(
 }
 
 /// Main poller loop.
+#[cfg(not(feature = "vapi"))]
 fn run_loop(
     config: &PollerConfig,
     senders: &[SnapshotSender],
@@ -254,8 +276,6 @@ fn run_loop(
                 continue;
             }
             backoff = Duration::from_millis(100);
-            // Reset prev_mono so the first tick after reconnect doesn't
-            // include the entire disconnect duration in interval_ns.
             prev_mono = 0;
         }
 
@@ -291,6 +311,75 @@ fn run_loop(
         }
 
         // Sleep until next tick, accounting for time spent in this tick.
+        let elapsed = Duration::from_nanos(monotonic_ns().saturating_sub(tick_start));
+        if let Some(remaining) = config.interval.checked_sub(elapsed) {
+            sleep_interruptible(remaining, stop);
+        }
+    }
+
+    tracing::info!("poller stopped after {} ticks", tick_id);
+}
+
+/// Main poller loop (VAPI variant).
+#[cfg(feature = "vapi")]
+fn run_loop(
+    config: &PollerConfig,
+    senders: &[SnapshotSender],
+    stop: &std::sync::atomic::AtomicBool,
+) {
+    let _ = &config.stats_socket; // unused in VAPI mode
+    let mut client: Option<VapiStatsClient> = None;
+    let mut tick_id: u64 = 0;
+    let mut prev_mono: u64 = 0;
+    let mut backoff = Duration::from_millis(100);
+    let max_backoff = Duration::from_secs(30);
+
+    while !stop.load(std::sync::atomic::Ordering::Acquire) {
+        let tick_start = monotonic_ns();
+
+        // Ensure connected.
+        if client.is_none() {
+            client = try_connect_vapi();
+            if client.is_none() {
+                tracing::debug!("reconnect backoff: {:?}", backoff);
+                sleep_interruptible(backoff, stop);
+                backoff = (backoff * 2).min(max_backoff);
+                continue;
+            }
+            backoff = Duration::from_millis(100);
+            prev_mono = 0;
+        }
+
+        // Perform snapshot via VAPI.
+        if let Some(c) = client.as_ref() {
+            match c.snapshot_and_clear() {
+                Ok(raw) => {
+                    tick_id += 1;
+                    let wall = wall_clock_ns();
+                    let mono = monotonic_ns();
+                    let snapshot = decode_snapshot(raw, tick_id, wall, mono, prev_mono);
+                    prev_mono = mono;
+
+                    let snap = Arc::new(snapshot);
+
+                    for (i, tx) in senders.iter().enumerate() {
+                        if tx.try_send(snap.clone()).is_err() {
+                            tracing::warn!(
+                                "exporter {} channel full, dropping snapshot (tick {})",
+                                i,
+                                tick_id
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("snapshot_and_clear (VAPI) failed: {} — disconnecting", e);
+                    client = None;
+                    continue;
+                }
+            }
+        }
+
         let elapsed = Duration::from_nanos(monotonic_ns().saturating_sub(tick_start));
         if let Some(remaining) = config.interval.checked_sub(elapsed) {
             sleep_interruptible(remaining, stop);

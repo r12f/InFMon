@@ -8,6 +8,7 @@
 | 0.2     | 2026-04-18 | Riff (r12f)   | Unify config path to `/etc/infmon/config.yaml` (YAML); rename `timeout_ms` → `export_timeout` to align with spec 006. |
 | 0.3     | 2026-04-18 | Riff (r12f)   | Fix stats segment path: replace custom `/dev/shm/infmon-stats` with VPP's native stats segment socket (`/run/vpp/stats.sock`), converging with Spec 004. |
 | 0.4     | 2026-04-18 | Riff (r12f)   | Remove `frontend-` prefix from crate subfolder names; remove artificial `polling_interval_ms` restriction; remove `drop_oldest` overflow policy (v1 supports `drop_newest` only). |
+| 0.5     | 2026-04-22 | Riff (r12f)   | Replace shared-memory stats segment (§8.1) with VPP binary API (`infmon_snapshot_inline_dump`). Lock-free atomic pointer swap on data path. `InFMonStatsClient` → `VapiStatsClient`, `vpp_stats_socket` → `vpp_api_socket`. |
 
 - **Parent epic:** `DPU-4` (EPIC: InFMon — flow telemetry service on BF-3)
 - **Depends on:** [`000-overview`](000-overview.md), [`002-flow-tracking-model`](002-flow-tracking-model.md), [`004-backend-architecture`](004-backend-architecture.md)
@@ -180,7 +181,7 @@ frontend:
   polling_interval_ms: 1000           # default 1000; any positive value accepted
   backend_socket: "/run/infmon/backend.sock"
   control_socket: "/run/infmon/frontend.sock"
-  vpp_stats_socket: "/run/vpp/stats.sock"   # VPP's native stats segment socket
+  vpp_api_socket: "/run/vpp/api.sock"       # VPP binary API socket
 
 exporters:
   - type: "otlp"
@@ -333,48 +334,45 @@ a `permanent` status in `infmonctl exporter list`.
 
 The frontend talks to the backend over two channels:
 
-### 8.1 Stats segment (read-only, hot path)
+### 8.1 Stats via VPP binary API (hot path)
 
-A `mmap`'d shared-memory region (VPP's native stats segment, accessed via
-`frontend.vpp_stats_socket`, default `/run/vpp/stats.sock`) whose layout
-is owned by Spec 004.
-The frontend reads it on every tick to obtain flow data. The
-client crate (`ipc`) exposes:
+The frontend retrieves flow statistics from the backend by calling the
+`infmon_snapshot_inline_dump` VPP binary API message over the VPP API
+socket (`/run/vpp/api.sock`). This replaces the earlier shared-memory
+approach with a simpler, single-channel design.
+
+The dump uses a **lock-free atomic pointer swap** on the data path:
+the control plane allocates a new empty table, atomically swaps the
+table pointer (single `RELEASE` store — effectively zero data-path
+blocking), and enqueues the old table for RCU retirement (5 s grace
+period). The frontend then walks the retired table and receives one
+`infmon_snapshot_inline_details` message per occupied slot, with key
+bytes and counters inline.
+
+The client crate (`ipc`) exposes:
 
 ```rust
-pub struct InFMonStatsClient { /* ... */ }
+pub struct VapiStatsClient { /* ... */ }
 
-impl InFMonStatsClient {
-    pub fn open(path: &Path) -> Result<Self, IpcError>;
-    /// Equivalent to backend's snapshot_and_clear: returns all
-    /// flow-rules' flows as of the call, and clears the backend's
-    /// counters atomically (per Spec 004 §7.2).
-    pub fn snapshot_and_clear(&self) -> Result<RawSnapshot, IpcError>;
+impl VapiStatsClient {
+    pub fn connect(name: &str) -> Result<Self, VapiError>;
+    /// Calls infmon_snapshot_inline_dump for each flow rule,
+    /// collects inline details, and returns a RawSnapshot
+    /// compatible with the existing decode pipeline.
+    pub fn snapshot_and_clear(&self) -> Result<RawSnapshot, VapiError>;
+    /// List all flow rule IDs known to VPP.
+    pub fn list_flow_rules(&self) -> Result<Vec<FlowRuleId>, VapiError>;
 }
 ```
 
-Concurrency: the segment is single-reader by contract — only the
-poller thread calls `snapshot_and_clear`. To keep this from being
-just a gentleman's agreement (two `infmon-frontend` instances, or a
-restart that overlaps an old draining process, would otherwise both
-race on the destructive clear half and each see partial data), the
-frontend enforces single-writer-of-the-clear-side at startup:
+The underlying FFI calls a thin C wrapper around VAPI
+(`infmon_vapi_client.c`) that connects to VPP, sends the dump request,
+and invokes a callback per `_details` message.
 
-1. On `start`, the frontend acquires an advisory `flock(LOCK_EX |
-   LOCK_NB)` on `frontend.vpp_stats_socket` (or a sibling
-   `<vpp_stats_socket>.lock` file if the kernel rejects locks on the
-   socket node). Failure → refuse to start with `stats_segment_busy`
-   in the closed error set.
-2. The lock is held for the lifetime of the process and released on
-   exit (kernel does this automatically on FD close, including
-   abnormal termination).
-3. A PID file at `<control_socket>.pid` is also written for human
-   debugging, but the lock is the authoritative single-reader gate.
-
-Symptom of a violation (e.g. someone bypasses the lock with a custom
-binary): non-monotonic `tick_id` in observed exports and
-`frontend_backend_disconnects_total` jumps that don't correlate with
-backend restarts.
+Concurrency: single-reader by contract — only the poller thread calls
+`snapshot_and_clear`. The atomic swap ensures no data-path blocking;
+the 5 s RCU grace period guarantees the retired table remains valid
+while the handler walks it.
 
 The CLI's read path uses the *control API* (§8.2) so it does not
 race the poller on the clear half of the operation.
@@ -414,7 +412,7 @@ socket EOFs, the frontend:
 
 1. Skips the current tick's snapshot (bumps
    `frontend_backend_disconnects_total`).
-2. Retries `InFMonStatsClient::open` with exponential backoff capped at 5 s.
+2. Retries `VapiStatsClient::connect` with exponential backoff capped at 5 s.
 3. Continues exporter ticks with empty snapshots so the per-frontend
    liveness signal (`frontend_tick_total`) keeps incrementing.
 
@@ -428,13 +426,13 @@ restart it explicitly via `systemctl restart infmon-frontend`.
 1. Parse `config.yaml`. Refuse to start on any validation error
    (closed error set, mirrors Spec 002 §7.2: `invalid_spec`,
    `name_exists`, …).
-2. Open `InFMonStatsClient` and `InFMonControlClient` to the backend. Refuse to
+2. Open `VapiStatsClient` and `InFMonControlClient` to the backend. Refuse to
    start if the backend is not reachable within `startup_timeout`
    (default `5s`). The asymmetry with §8.3 (where runtime
    disconnects are tolerated indefinitely) is intentional: at start
    we have no exporters spawned yet and no useful work to do, so
    failing fast surfaces a misconfigured `backend_socket` /
-   `vpp_stats_socket` to the operator immediately. Once we are running
+   `vpp_api_socket` to the operator immediately. Once we are running
    and have produced at least one tick, the cost of exiting (losing
    queued snapshots, restart storms under systemd `Restart=on-failure`)
    outweighs the diagnostic value, so we keep retrying instead.
@@ -572,7 +570,7 @@ project-wide policy.
 - **Dynamic exporter loading.** Replace the `inventory` registration
   with a `dlopen`-style loader. Trait stays the same; only
   registration changes.
-- **Aggregate fan-in across multiple backends.** Make `InFMonStatsClient`
+- **Aggregate fan-in across multiple backends.** Make `VapiStatsClient`
   multi-instance and merge per-flow-rule flows in the poller. Out of
   scope for v1 (single-DPU).
 - **Exporter chaining / filters.** A `transform` plugin kind that

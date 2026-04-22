@@ -323,6 +323,9 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
     desc->table_full = retired->table_full;
     desc->active = 1;
 
+    /* Expose the retired table pointer for inline callers. */
+    reply->retired_table = retired;
+
     return INFMON_API_OK;
 }
 
