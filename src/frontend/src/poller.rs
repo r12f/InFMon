@@ -9,7 +9,9 @@
 //! On disconnect the poller skips the tick and reconnects with
 //! exponential backoff.
 
-use std::path::{Path, PathBuf};
+#[cfg(not(feature = "vapi"))]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;

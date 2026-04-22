@@ -430,9 +430,8 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
 
     if (result != INFMON_API_OK || !snap_reply.retired_table) {
         /* Send an error reply so the client does not hang. */
-        REPLY_MACRO2_ZERO (VL_API_INFMON_SNAPSHOT_INLINE_DETAILS, ({
-            rmp->retval = clib_host_to_net_i32(-1);
-        }));
+        REPLY_MACRO2_ZERO(VL_API_INFMON_SNAPSHOT_INLINE_DETAILS,
+                          ({ rmp->retval = clib_host_to_net_i32(-1); }));
         return;
     }
 
