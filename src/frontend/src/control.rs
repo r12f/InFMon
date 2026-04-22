@@ -233,7 +233,7 @@ fn handle_flow_rule_rm(params: &FlowRuleRmParams, state: &ControlState) -> Respo
 fn handle_flow_rule_list(state: &ControlState) -> Response {
     let rules = state.flow_rules.read().unwrap_or_else(|e| e.into_inner());
     let data: Vec<FlowRuleData> = rules.iter().map(FlowRuleData::from).collect();
-    Response::ok(ResponseData::FlowRuleList(data))
+    Response::ok(ResponseData::FlowRuleList(FlowRuleListData { rules: data }))
 }
 
 fn handle_flow_rule_show(params: &FlowRuleShowParams, state: &ControlState) -> Response {

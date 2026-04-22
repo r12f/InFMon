@@ -144,7 +144,8 @@ impl InFMonControlClient {
     pub async fn flow_rule_list(&self) -> Result<Vec<FlowRuleDef>, CtlError> {
         let request = Request::FlowRuleList;
         match self.rpc_ok(&request).await? {
-            Some(ResponseData::FlowRuleList(rules)) => Ok(rules
+            Some(ResponseData::FlowRuleList(list)) => Ok(list
+                .rules
                 .into_iter()
                 .map(|r| FlowRuleDef {
                     name: r.name,
