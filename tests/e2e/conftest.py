@@ -8,9 +8,15 @@ import os
 import shutil
 import shlex
 import subprocess
+import sys
 import time
 
 import pytest
+
+# Ensure the e2e directory is on sys.path so bare imports (helpers,
+# replay_traffic) work regardless of the working directory pytest is
+# invoked from (e.g. repo root vs tests/e2e/).
+sys.path.insert(0, os.path.dirname(__file__))
 
 
 def pytest_configure(config):
