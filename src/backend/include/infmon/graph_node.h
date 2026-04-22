@@ -127,6 +127,7 @@ static inline void infmon_worker_counters_init(infmon_worker_counters_t *wc, uin
 typedef enum {
     INFMON_ERSPAN_DECAP_NEXT_FLOW_MATCH = 0,
     INFMON_ERSPAN_DECAP_NEXT_DROP,
+    INFMON_ERSPAN_DECAP_NEXT_PASSTHROUGH,
     INFMON_ERSPAN_DECAP_NEXT__COUNT,
 } infmon_erspan_decap_next_t;
 
