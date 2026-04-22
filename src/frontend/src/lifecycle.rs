@@ -325,9 +325,8 @@ fn vpp_stats_socket_reachable(path: &Path) -> bool {
         );
     }
 
-    let len = unsafe {
-        &addr.sun_path as *const _ as usize - &addr as *const _ as usize
-    } + path_bytes.len() + 1;
+    let len =
+        (&addr.sun_path as *const _ as usize - &addr as *const _ as usize) + path_bytes.len() + 1;
     let rc = unsafe {
         libc::connect(
             fd,

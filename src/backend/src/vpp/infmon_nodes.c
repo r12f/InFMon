@@ -510,7 +510,6 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
 
     if (!infmon_cli_rule_set) {
         vec_free(name_vec);
-        vec_free(fields_str);
         return clib_error_return(0, "failed to create rule set");
     }
 
@@ -525,7 +524,8 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
     const infmon_flow_rule_t *added = infmon_flow_rule_get(infmon_cli_rule_set, n - 1);
     if (added) {
         if ((n - 1) < INFMON_MAX_ACTIVE_FLOW_RULES) {
-            infmon_counter_table_t *ct = infmon_counter_table_create(added->max_keys, added->key_width);
+            infmon_counter_table_t *ct =
+                infmon_counter_table_create(added->max_keys, added->key_width);
             if (ct)
                 __atomic_store_n(&infmon_plugin_main.tables[n - 1], ct, __ATOMIC_RELEASE);
         }
