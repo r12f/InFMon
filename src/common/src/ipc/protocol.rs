@@ -63,9 +63,14 @@ pub struct ErrorData {
 #[serde(tag = "type")]
 pub enum ResponseData {
     FlowRuleId(FlowRuleIdData),
-    FlowRuleList(Vec<FlowRuleData>),
+    FlowRuleList(FlowRuleListData),
     FlowRuleDetail(FlowRuleDetailData),
     StatsShow(StatsShowData),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FlowRuleListData {
+    pub rules: Vec<FlowRuleData>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -162,5 +167,18 @@ impl Response {
                 message: message.into(),
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flow_rule_list_roundtrip() {
+        let req = Request::FlowRuleList;
+        let json = serde_json::to_string(&req).unwrap();
+        eprintln!("Serialized FlowRuleList: {json}");
+        let _back: Request = serde_json::from_str(&json).unwrap();
     }
 }

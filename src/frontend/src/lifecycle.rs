@@ -5,8 +5,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use infmon_common::ipc::stats_client::InFMonStatsClient;
-
 use crate::control::{self, ControlHandle, ControlState};
 use crate::exporter::{
     self, find_factory, snapshot_channel, validate_registrations, ExporterConfig, ExporterHandle,
@@ -83,36 +81,31 @@ impl Frontend {
         let frontend_cfg = config.frontend.clone().unwrap_or_default();
         let exporter_entries = config.exporters.clone().unwrap_or_default();
 
-        // Fail-fast: check backend reachability via stats socket
+        // Fail-fast: check backend reachability via stats socket.
+        // VPP's stats socket uses SOCK_SEQPACKET, so we verify it exists
+        // and is connectable using a raw Unix seqpacket socket.
         let stats_socket = PathBuf::from(&frontend_cfg.vpp_stats_socket);
         let startup_timeout =
             parse_duration(&frontend_cfg.startup_timeout).unwrap_or(Duration::from_secs(5));
 
-        // Try to connect to stats socket within startup_timeout.
-        // The client is intentionally opened and dropped — we only need to
-        // verify that the stats segment is mmappable, not hold it open.
-        // The poller will open its own long-lived connection.
         let start_time = std::time::Instant::now();
         let mut connected = false;
         while start_time.elapsed() < startup_timeout {
-            match InFMonStatsClient::open(&stats_socket) {
-                Ok(_client) => {
-                    tracing::info!(
-                        "backend stats segment reachable at {}",
-                        stats_socket.display()
-                    );
-                    connected = true;
-                    break;
-                }
-                Err(e) => {
-                    tracing::debug!("backend not yet reachable: {e}");
-                    std::thread::sleep(Duration::from_millis(200));
-                }
+            if vpp_stats_socket_reachable(&stats_socket) {
+                tracing::info!(
+                    "backend stats socket reachable at {}",
+                    stats_socket.display()
+                );
+                connected = true;
+                break;
+            } else {
+                tracing::debug!("backend not yet reachable at {}", stats_socket.display());
+                std::thread::sleep(Duration::from_millis(200));
             }
         }
         if !connected {
             return Err(LifecycleError::BackendUnreachable(format!(
-                "stats segment at {} not reachable within {:?}",
+                "stats socket at {} not reachable within {:?}",
                 stats_socket.display(),
                 startup_timeout
             )));
@@ -300,6 +293,46 @@ pub fn parse_duration(s: &str) -> Option<Duration> {
         );
         None
     }
+}
+
+/// Check if the VPP stats socket is reachable by attempting a
+/// SOCK_SEQPACKET connection (VPP uses seqpacket, not stream).
+fn vpp_stats_socket_reachable(path: &Path) -> bool {
+    use std::os::unix::io::FromRawFd;
+
+    // socket(AF_UNIX, SOCK_SEQPACKET, 0)
+    let fd = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET, 0) };
+    if fd < 0 {
+        return false;
+    }
+    // Safety: we own the fd
+    let _guard = unsafe { std::fs::File::from_raw_fd(fd) }; // auto-close on drop
+
+    let path_bytes = path.as_os_str().as_encoded_bytes();
+    if path_bytes.len() >= 108 {
+        return false; // sun_path overflow
+    }
+
+    let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+    addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
+    // Copy path bytes into sun_path
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            path_bytes.as_ptr(),
+            addr.sun_path.as_mut_ptr() as *mut u8,
+            path_bytes.len(),
+        );
+    }
+
+    let len = std::mem::size_of::<libc::sa_family_t>() + path_bytes.len() + 1;
+    let rc = unsafe {
+        libc::connect(
+            fd,
+            &addr as *const libc::sockaddr_un as *const libc::sockaddr,
+            len as libc::socklen_t,
+        )
+    };
+    rc == 0
 }
 
 #[cfg(test)]
