@@ -92,12 +92,14 @@ def test_packet_replay(scenario: str, infmon_env: dict) -> None:
 
         # The dst_ip is the RX side IP (without prefix length)
         dst_ip = infmon_env["rx_ip"].split("/")[0]
+        dst_ip6 = infmon_env.get("rx_ip6", "").split("/")[0] or ""
 
         replay(
             pcap_path=pcap_path,
             dst_ip=dst_ip,
             iface=tx_iface,
             remote_host=tx_host if tx_mode == "remote" else "",
+            dst_ip6=dst_ip6,
         )
 
         # 4. Pull flow counters

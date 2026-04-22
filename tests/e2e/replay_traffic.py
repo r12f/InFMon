@@ -20,10 +20,13 @@ import tempfile
 from scapy.all import IP, IPv6, rdpcap, wrpcap
 
 
-def rewrite_dst_ip(packets, dst_ip: str):
+def rewrite_dst_ip(packets, dst_ip: str, dst_ip6: str = ""):
     """Rewrite destination IP in all packets.
 
-    Handles both IPv4 and IPv6 based on the dst_ip format.
+    For IPv4 packets, uses *dst_ip*.  For IPv6 packets, uses *dst_ip6*
+    if provided; otherwise leaves the IPv6 dst unchanged (the outer
+    tunnel address is usually not routed anyway).
+
     Returns a new list of modified packets.
     """
     rewritten = []
@@ -35,8 +38,10 @@ def rewrite_dst_ip(packets, dst_ip: str):
             # Force full checksum recalculation for all layers
             pkt = pkt.__class__(bytes(pkt))
         elif pkt.haslayer(IPv6):
-            pkt[IPv6].dst = dst_ip
-            pkt = pkt.__class__(bytes(pkt))
+            if dst_ip6:
+                pkt[IPv6].dst = dst_ip6
+                pkt = pkt.__class__(bytes(pkt))
+            # else: leave dst unchanged
         rewritten.append(pkt)
     return rewritten
 
@@ -47,22 +52,24 @@ def replay(
     iface: str,
     count: int = 1,
     remote_host: str = "",
+    dst_ip6: str = "",
 ) -> None:
     """Read a pcap, rewrite dst IP, and replay via tcpreplay.
 
     Args:
         pcap_path: Path to the input pcap file.
-        dst_ip: Destination IP to rewrite to.
+        dst_ip: Destination IPv4 to rewrite to.
         iface: Network interface for replay.
         count: Number of times to replay (default: 1).
         remote_host: If set, replay on this host via SSH.
+        dst_ip6: Destination IPv6 to rewrite to (optional).
     """
     with tempfile.NamedTemporaryFile(suffix=".pcap", delete=False) as tmp:
         tmp_path = tmp.name
 
     try:
         packets = rdpcap(pcap_path)
-        rewritten = rewrite_dst_ip(packets, dst_ip)
+        rewritten = rewrite_dst_ip(packets, dst_ip, dst_ip6=dst_ip6)
         wrpcap(tmp_path, rewritten)
 
         loop_arg = f"--loop={count}" if count > 1 else ""

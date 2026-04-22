@@ -24,6 +24,8 @@ typedef enum {
     INFMON_FIELD_IP_PROTO,
     INFMON_FIELD_DSCP,
     INFMON_FIELD_MIRROR_SRC_IP,
+    INFMON_FIELD_SRC_PORT,
+    INFMON_FIELD_DST_PORT,
     INFMON_FIELD__COUNT,
 } infmon_field_t;
 
@@ -84,6 +86,8 @@ typedef struct {
     uint8_t mirror_src_ip[16]; /* IPv4-mapped-IPv6, network byte order */
     uint8_t ip_proto;
     uint8_t dscp; /* 0..63, upper 2 bits zero */
+    uint16_t src_port; /* host byte order */
+    uint16_t dst_port; /* host byte order */
 } infmon_flow_fields_t;
 
 /* ── Flow rule set (opaque) ──────────────────────────────────────── */
