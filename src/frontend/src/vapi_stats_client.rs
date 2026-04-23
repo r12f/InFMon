@@ -224,6 +224,11 @@ fn merge_worker_entries(entries: &[CollectedEntry]) -> Vec<CollectedEntry> {
             if e.last_update > m.last_update {
                 m.last_update = e.last_update;
             }
+            // generation is identical across workers for the same flow rule
+            // (set at rule-add time), so no merge needed.
+            if e.epoch_ns > m.epoch_ns {
+                m.epoch_ns = e.epoch_ns;
+            }
             m.insert_failed = m.insert_failed.saturating_add(e.insert_failed);
             m.table_full = m.table_full.saturating_add(e.table_full);
         } else {
