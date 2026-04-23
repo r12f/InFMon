@@ -282,6 +282,7 @@ fn handle_flow_rule_add(params: &FlowRuleAddParams, state: &ControlState) -> Res
             format!("{:016x}-{:016x}", seq, 0u64)
         }
     };
+
     #[cfg(not(feature = "vapi"))]
     let id_str = {
         rules.push(rule);

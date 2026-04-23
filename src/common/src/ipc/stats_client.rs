@@ -30,4 +30,3 @@ pub struct RawSlot {
     pub flags: u16,
     pub last_update: u64,
 }
-

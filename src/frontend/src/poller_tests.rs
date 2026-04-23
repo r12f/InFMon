@@ -45,7 +45,7 @@ fn poller_sends_snapshots_on_real_segment() {
     // Without VPP, VapiStatsClient::connect fails and the poller
     // enters reconnect backoff.
     let dir = tempfile::TempDir::new().unwrap();
-    let sock = dir.path().join("stats.sock");
+    let sock = dir.path().join("api.sock");
     std::fs::write(&sock, b"").unwrap();
 
     let config = PollerConfig {
@@ -77,7 +77,7 @@ fn backpressure_drops_snapshots() {
     // Channel with capacity 1. If poller ticks faster than we consume,
     // it should drop snapshots without blocking.
     let dir = tempfile::TempDir::new().unwrap();
-    let sock = dir.path().join("stats.sock");
+    let sock = dir.path().join("api.sock");
     std::fs::write(&sock, b"").unwrap();
 
     let config = PollerConfig {

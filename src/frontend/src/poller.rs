@@ -93,7 +93,7 @@ pub fn spawn(config: PollerConfig, senders: Vec<SnapshotSender>) -> PollerHandle
 // ── internals ──────────────────────────────────────────────────────
 
 /// Read monotonic clock in nanoseconds.
-#[allow(dead_code)]
+#[cfg(feature = "vapi")]
 fn monotonic_ns() -> u64 {
     let mut ts = libc::timespec {
         tv_sec: 0,
@@ -111,7 +111,7 @@ fn monotonic_ns() -> u64 {
 }
 
 /// Read wall-clock (CLOCK_REALTIME) in nanoseconds.
-#[allow(dead_code)]
+#[cfg(feature = "vapi")]
 fn wall_clock_ns() -> u64 {
     let mut ts = libc::timespec {
         tv_sec: 0,
@@ -126,8 +126,8 @@ fn wall_clock_ns() -> u64 {
     ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }
 
-#[cfg(feature = "vapi")]
 /// Try to connect to VPP API for stats.
+#[cfg(feature = "vapi")]
 fn try_connect_vapi() -> Option<VapiStatsClient> {
     match VapiStatsClient::connect("infmon-frontend") {
         Ok(c) => {
@@ -142,7 +142,7 @@ fn try_connect_vapi() -> Option<VapiStatsClient> {
 }
 
 /// Decode a `RawSnapshot` into a `FlowStatsSnapshot`.
-#[allow(dead_code)]
+#[cfg(feature = "vapi")]
 fn decode_snapshot(
     raw: infmon_common::ipc::stats_client::RawSnapshot,
     tick_id: u64,
@@ -230,8 +230,8 @@ fn decode_snapshot(
     }
 }
 
-#[cfg(feature = "vapi")]
 /// Main poller loop.
+#[cfg(feature = "vapi")]
 fn run_loop(
     config: &PollerConfig,
     senders: &[SnapshotSender],
@@ -242,6 +242,9 @@ fn run_loop(
     let mut prev_mono: u64 = 0;
     let mut backoff = Duration::from_millis(100);
     let max_backoff = Duration::from_secs(5);
+    // Shorter than the old 30s ceiling — VAPI reconnects are lightweight
+    // (just a Unix-socket connect + app-attach handshake), so we can retry
+    // more aggressively without hammering VPP.
 
     while !stop.load(std::sync::atomic::Ordering::Acquire) {
         let tick_start = monotonic_ns();
@@ -298,8 +301,8 @@ fn run_loop(
     tracing::info!("poller stopped after {} ticks", tick_id);
 }
 
-#[cfg(not(feature = "vapi"))]
 /// Main poller loop (stub — VAPI not available at build time).
+#[cfg(not(feature = "vapi"))]
 fn run_loop(
     _config: &PollerConfig,
     _senders: &[SnapshotSender],
@@ -307,13 +310,12 @@ fn run_loop(
 ) {
     tracing::warn!("VAPI not available — poller will idle");
     while !stop.load(std::sync::atomic::Ordering::Acquire) {
-        thread::sleep(Duration::from_secs(1));
+        sleep_interruptible(Duration::from_secs(1), stop);
     }
 }
 
 /// Sleep for `dur`, but wake early if `stop` is set.
 /// Checks every 50 ms.
-#[allow(dead_code)]
 fn sleep_interruptible(dur: Duration, stop: &std::sync::atomic::AtomicBool) {
     let check = Duration::from_millis(50);
     let mut remaining = dur;
