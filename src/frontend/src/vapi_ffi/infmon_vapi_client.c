@@ -233,6 +233,8 @@ int infmon_vapi_flow_rule_add(void *handle, const char *name, const uint8_t *fie
         return -1;
 
     /* Fill payload */
+    if (strlen(name) >= sizeof(msg->payload.name))
+        return -1;
     memset(msg->payload.name, 0, sizeof(msg->payload.name));
     strncpy((char *) msg->payload.name, name, sizeof(msg->payload.name) - 1);
 
