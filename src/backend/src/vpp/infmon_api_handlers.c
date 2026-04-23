@@ -429,9 +429,14 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
         infmon_api_snapshot_and_clear(&infmon_vpp_api_ctx, id, &snap_reply);
 
     if (result != INFMON_API_OK || !snap_reply.retired_table) {
-        /* Send an error reply so the client does not hang. */
-        REPLY_MACRO2_ZERO(VL_API_INFMON_SNAPSHOT_INLINE_DETAILS,
-                          ({ rmp->retval = clib_host_to_net_i32(-1); }));
+        /* Send an empty details message so the client does not hang.
+         * Dump handlers cannot use REPLY_MACRO — send a bare message. */
+        vl_api_infmon_snapshot_inline_details_t *rmp = vl_msg_api_alloc_zero(sizeof(*rmp));
+        rmp->_vl_msg_id = htons(VL_API_INFMON_SNAPSHOT_INLINE_DETAILS + infmon_msg_id_base);
+        rmp->context = mp->context;
+        rmp->flow_rule_id.hi = mp->flow_rule_id.hi;
+        rmp->flow_rule_id.lo = mp->flow_rule_id.lo;
+        vl_api_send_msg(rp, (u8 *) rmp);
         return;
     }
 
