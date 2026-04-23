@@ -1,7 +1,7 @@
 //! Poller thread: drives the 1 Hz tick loop.
 //!
-//! The poller connects to VPP via the binary API (VAPI) and on each tick:
-//! 1. Calls `infmon_snapshot_inline_dump` to read and clear counters.
+//! The poller owns the `VapiStatsClient` and on each tick:
+//! 1. Reads and clears the counters via `snapshot_and_clear` (VAPI).
 //! 2. Decodes the raw snapshot into a [`FlowStatsSnapshot`].
 //! 3. Wraps it in `Arc` and fans it out to exporter channels.
 //! 4. Drops the snapshot — nothing is retained across ticks.
@@ -126,7 +126,7 @@ fn wall_clock_ns() -> u64 {
     ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }
 
-/// Try to connect to VPP API for stats.
+/// Try to connect to VPP API for stats, returning None on failure.
 #[cfg(feature = "vapi")]
 fn try_connect_vapi() -> Option<VapiStatsClient> {
     match VapiStatsClient::connect("infmon-frontend") {

@@ -4,9 +4,6 @@ pub mod lifecycle;
 pub mod logging;
 pub mod otlp;
 pub mod poller;
-#[cfg(feature = "vapi")]
 pub mod vapi_control_client;
-#[cfg(feature = "vapi")]
 pub mod vapi_ffi;
-#[cfg(feature = "vapi")]
 pub mod vapi_stats_client;
