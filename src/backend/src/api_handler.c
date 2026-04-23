@@ -318,7 +318,7 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
     if (snap_reply.result != INFMON_SNAP_OK)
         return reply->result;
 
-    /* Build the descriptor from the first retired table. */
+    /* Build the descriptor by aggregating across all retired worker tables. */
     infmon_counter_table_t *retired = snap_reply.retired_tables[0];
     infmon_stats_descriptor_t *desc = &reply->descriptor;
 
@@ -334,8 +334,18 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
     desc->key_arena_offset = infmon_stats_offset_of(seg_base, retired->key_arena);
     desc->key_arena_capacity = retired->key_arena_capacity;
     desc->key_arena_used = retired->key_arena_used;
-    desc->insert_failed = retired->insert_failed;
-    desc->table_full = retired->table_full;
+
+    /* Aggregate insert_failed and table_full across all workers. */
+    uint64_t total_insert_failed = 0;
+    uint64_t total_table_full = 0;
+    for (uint32_t w = 0; w < snap_reply.num_retired; w++) {
+        if (snap_reply.retired_tables[w]) {
+            total_insert_failed += snap_reply.retired_tables[w]->insert_failed;
+            total_table_full |= snap_reply.retired_tables[w]->table_full;
+        }
+    }
+    desc->insert_failed = total_insert_failed;
+    desc->table_full = total_table_full;
     desc->active = 1;
 
     /* Expose the retired tables for inline callers. */

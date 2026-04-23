@@ -442,3 +442,59 @@ TEST_F(SnapshotTest, MultipleFlowRules)
     /* Retired table has the old data */
     ASSERT_EQ(reply.retired_tables[0]->occupied_count, 1u);
 }
+
+/* ── Multi-worker tests ─────────────────────────────────────────── */
+
+static constexpr uint32_t TEST_MULTI_WORKERS = 4;
+
+TEST_F(SnapshotTest, MultiWorkerBasicSwap)
+{
+    /* Install tables for all workers at flow-rule index 0 */
+    for (uint32_t w = 0; w < TEST_MULTI_WORKERS; w++) {
+        tables[w][0] = infmon_counter_table_create(1024, MAX_KEY_WIDTH);
+        ASSERT_NE(tables[w][0], nullptr);
+    }
+
+    /* Insert different data into each worker's table */
+    for (uint32_t w = 0; w < TEST_MULTI_WORKERS; w++) {
+        uint8_t key[8];
+        uint64_t hash = 0xAA00 + w;
+        memcpy(key, &hash, sizeof(key));
+        ASSERT_TRUE(infmon_counter_table_update(tables[w][0], hash, key, 8, (w + 1) * 100, 1));
+    }
+
+    infmon_snap_reply_t reply{};
+    do_snapshot(0, TEST_MULTI_WORKERS, &reply);
+    ASSERT_EQ(reply.result, INFMON_SNAP_OK);
+
+    /* Each worker gets a fresh empty table */
+    for (uint32_t w = 0; w < TEST_MULTI_WORKERS; w++) {
+        ASSERT_NE(tables[w][0], nullptr);
+        ASSERT_EQ(tables[w][0]->occupied_count, 0u);
+        ASSERT_EQ(tables[w][0]->generation, 1u);
+    }
+
+    /* Retired tables bundle all workers */
+    ASSERT_EQ(reply.num_retired, TEST_MULTI_WORKERS);
+    for (uint32_t w = 0; w < TEST_MULTI_WORKERS; w++) {
+        ASSERT_NE(reply.retired_tables[w], nullptr);
+        ASSERT_EQ(reply.retired_tables[w]->occupied_count, 1u);
+    }
+}
+
+TEST_F(SnapshotTest, MultiWorkerRetiredCountMatchesWorkers)
+{
+    /* Set up 2 workers */
+    constexpr uint32_t nw = 2;
+    for (uint32_t w = 0; w < nw; w++) {
+        tables[w][0] = infmon_counter_table_create(256, MAX_KEY_WIDTH);
+        ASSERT_NE(tables[w][0], nullptr);
+    }
+
+    infmon_snap_reply_t reply{};
+    do_snapshot(0, nw, &reply);
+    ASSERT_EQ(reply.result, INFMON_SNAP_OK);
+    ASSERT_EQ(reply.num_retired, nw);
+    for (uint32_t w = 0; w < nw; w++)
+        ASSERT_NE(reply.retired_tables[w], nullptr);
+}

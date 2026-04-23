@@ -100,11 +100,13 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
         return;
     }
 
-    /* Allocate new tables for all workers */
+    /* Allocate new tables for all workers, saving old pointers to avoid TOCTOU */
     infmon_counter_table_t *new_tables[INFMON_MAX_WORKERS] = {0};
+    infmon_counter_table_t *old_tables[INFMON_MAX_WORKERS] = {0};
     for (uint32_t w = 0; w < nw; w++) {
         infmon_counter_table_t *old_w =
             __atomic_load_n(&tables_flat[w * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
+        old_tables[w] = old_w;
         if (!old_w)
             continue;
         new_tables[w] = infmon_counter_table_create(old_w->num_slots, max_key_width);
@@ -126,24 +128,20 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
     /* Bump global epoch for this swap */
     uint64_t swap_epoch = ++mgr->global_epoch;
 
-    /* Swap each worker's table */
-    infmon_counter_table_t *old_tables[INFMON_MAX_WORKERS] = {0};
+    /* Swap each worker's table (reusing old pointers from allocation pass) */
     uint64_t gen = 0;
     for (uint32_t w = 0; w < nw; w++) {
-        infmon_counter_table_t *old_w =
-            __atomic_load_n(&tables_flat[w * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
-        if (!old_w || !new_tables[w])
+        if (!old_tables[w] || !new_tables[w])
             continue;
 
-        uint64_t new_gen = old_w->generation + 1;
+        uint64_t new_gen = old_tables[w]->generation + 1;
         new_tables[w]->generation = new_gen;
         new_tables[w]->epoch_ns = now;
         if (w == 0)
-            gen = old_w->generation;
+            gen = old_tables[w]->generation;
 
         __atomic_store_n(&tables_flat[w * tables_stride + flow_rule_index], new_tables[w],
                          __ATOMIC_RELEASE);
-        old_tables[w] = old_w;
     }
 
     /* Enqueue one retired entry with all per-worker tables */
