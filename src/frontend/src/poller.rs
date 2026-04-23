@@ -181,7 +181,7 @@ fn decode_snapshot(
                 last_update: u64,
             }
 
-            let mut merged: HashMap<Vec<u8>, MergedSlot> = HashMap::new();
+            let mut merged: HashMap<Vec<u8>, MergedSlot> = HashMap::with_capacity(desc.slots.len());
 
             for slot in &desc.slots {
                 if slot.key_len == 0 {
@@ -208,6 +208,9 @@ fn decode_snapshot(
                     });
             }
 
+            // Note: HashMap::into_iter() yields entries in arbitrary order.
+            // Downstream consumers do not depend on flow ordering (snapshots
+            // are keyed by flow key, not position), so this is acceptable.
             let flows = merged
                 .into_iter()
                 .filter_map(|(key_bytes, m)| {
