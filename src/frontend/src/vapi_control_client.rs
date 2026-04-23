@@ -50,7 +50,7 @@ impl VapiControlClient {
         eviction_policy: EvictionPolicy,
     ) -> Result<FlowRuleId, VapiError> {
         let c_name =
-            CString::new(name).map_err(|_| VapiError::SnapshotFailed("invalid name".into()))?;
+            CString::new(name).map_err(|_| VapiError::FlowRuleFailed("invalid name".into()))?;
 
         // Convert Field enums to u8 values matching the backend's infmon_field_t
         let field_bytes: Vec<u8> = fields.iter().map(|f| field_to_u8(*f)).collect();
@@ -77,7 +77,7 @@ impl VapiControlClient {
         };
 
         if rv != 0 {
-            return Err(VapiError::SnapshotFailed(format!(
+            return Err(VapiError::FlowRuleFailed(format!(
                 "flow_rule_add failed (rv={rv})"
             )));
         }
@@ -93,7 +93,7 @@ impl VapiControlClient {
         let rv = unsafe { vapi_ffi::infmon_vapi_flow_rule_del(self.handle, id.hi, id.lo) };
 
         if rv != 0 {
-            return Err(VapiError::SnapshotFailed(format!(
+            return Err(VapiError::FlowRuleFailed(format!(
                 "flow_rule_del failed (rv={rv})"
             )));
         }

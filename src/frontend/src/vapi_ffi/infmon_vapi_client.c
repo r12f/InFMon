@@ -237,7 +237,9 @@ int infmon_vapi_flow_rule_add(void *handle, const char *name, const uint8_t *fie
     strncpy((char *) msg->payload.name, name, sizeof(msg->payload.name) - 1);
 
     msg->payload.field_count = htonl(field_count);
-    for (uint32_t i = 0; i < field_count && i < 8; i++)
+    if (field_count > 8)
+        return -1;
+    for (uint32_t i = 0; i < field_count; i++)
         msg->payload.fields[i] = fields[i];
 
     msg->payload.max_keys = htonl(max_keys);

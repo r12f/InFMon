@@ -261,13 +261,8 @@ fn handle_flow_rule_add(params: &FlowRuleAddParams, state: &ControlState) -> Res
                     );
                     let id_str = format!("{:016x}-{:016x}", id.hi, id.lo);
                     // Store name → ID mapping for later deletion
-                    if let Ok(mut map) = state
-                        .rule_id_map
-                        .lock()
-                        .or_else(|e| Ok::<_, ()>(e.into_inner()))
-                    {
-                        map.insert(rule.name.clone(), id);
-                    }
+                    let mut map = state.rule_id_map.lock().unwrap_or_else(|e| e.into_inner());
+                    map.insert(rule.name.clone(), id);
                     rules.push(rule);
                     id_str
                 }
