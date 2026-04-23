@@ -22,10 +22,15 @@ pub struct VapiControlClient {
     handle: *mut c_void,
 }
 
-// SAFETY: VapiControlClient wraps a raw VAPI handle. We guarantee
-// safety by confining all usage to the single control thread — the
-// handle is accessed only through &self methods called from the
-// control server's serialised request loop.
+// SAFETY: VapiControlClient wraps a raw VAPI handle. The handle
+// is not thread-affine — VAPI's shared-memory transport is
+// process-global and any thread may call into it provided calls
+// are serialised. We implement Send (not Sync) so the handle can
+// move between threads. When wrapped in Mutex<VapiControlClient>,
+// Sync is auto-derived because VapiControlClient: Send. This is
+// sound: the Mutex serialises all access, satisfying VAPI's
+// single-caller requirement regardless of which thread holds the
+// lock.
 unsafe impl Send for VapiControlClient {}
 
 impl VapiControlClient {
@@ -123,6 +128,9 @@ fn field_to_u8(f: Field) -> u8 {
         Field::MirrorSrcIp => 4,
         Field::SrcPort => 5,
         Field::DstPort => 6,
-        _ => 0, // Default to SrcIp for unknown fields
+        // Field is #[non_exhaustive]; panic on unknown variants so
+        // new additions surface as a compile-test failure rather than
+        // silently mapping to SrcIp.
+        _ => panic!("unsupported Field variant for VAPI mapping"),
     }
 }

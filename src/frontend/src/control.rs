@@ -319,12 +319,6 @@ fn handle_flow_rule_rm(params: &FlowRuleRmParams, state: &ControlState) -> Respo
                         rule_id.hi,
                         rule_id.lo
                     );
-                    // Remove from ID map
-                    state
-                        .rule_id_map
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .remove(&params.name);
                 }
                 None => {
                     // Rule not in ID map — may not have been added via VAPI
@@ -343,6 +337,19 @@ fn handle_flow_rule_rm(params: &FlowRuleRmParams, state: &ControlState) -> Respo
     if rules.len() == before {
         return Response::err(3, format!("flow rule '{}' not found", params.name));
     }
+
+    // Remove from ID map after successful local removal to keep
+    // rule_id_map and flow_rules consistent (avoids divergence if
+    // the write lock above were poisoned).
+    #[cfg(feature = "vapi")]
+    {
+        state
+            .rule_id_map
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&params.name);
+    }
+
     Response::ok_empty()
 }
 

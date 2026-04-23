@@ -233,14 +233,18 @@ int infmon_vapi_flow_rule_add(void *handle, const char *name, const uint8_t *fie
         return -1;
 
     /* Fill payload */
-    if (strlen(name) >= sizeof(msg->payload.name))
+    if (strlen(name) >= sizeof(msg->payload.name)) {
+        vapi_msg_free(ctx, msg);
         return -1;
+    }
     memset(msg->payload.name, 0, sizeof(msg->payload.name));
     strncpy((char *) msg->payload.name, name, sizeof(msg->payload.name) - 1);
 
     msg->payload.field_count = htonl(field_count);
-    if (field_count > 8)
+    if (field_count > 8) {
+        vapi_msg_free(ctx, msg);
         return -1;
+    }
     for (uint32_t i = 0; i < field_count; i++)
         msg->payload.fields[i] = fields[i];
 
@@ -252,7 +256,11 @@ int infmon_vapi_flow_rule_add(void *handle, const char *name, const uint8_t *fie
     if (rv != VAPI_OK)
         return -1;
 
-    /* The reply is written back into msg by the VAPI blocking call */
+    /* The reply is written back into msg by the VAPI blocking call.
+     * VAPI's blocking API allocates max(request, reply) and consumes the
+     * buffer internally on both success and failure, so no manual free is
+     * needed after vapi_infmon_flow_rule_add() returns. The cast below is
+     * safe because VAPI guarantees the buffer is large enough for the reply. */
     vapi_msg_infmon_flow_rule_add_reply *rmp = (vapi_msg_infmon_flow_rule_add_reply *) msg;
     int32_t retval = ntohl(rmp->payload.retval);
 
