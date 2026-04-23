@@ -304,6 +304,7 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
 
     /* Delegate to the snapshot manager. */
     infmon_snap_reply_t snap_reply;
+    memset(&snap_reply, 0, sizeof(snap_reply));
     const infmon_flow_rule_t *rule = infmon_flow_rule_get(ctx->rule_set, idx);
     if (!rule) {
         reply->result = INFMON_API_ERR_INTERNAL;

@@ -110,6 +110,7 @@ static void infmon_vpp_api_ctx_ensure(void)
     infmon_stats_registry_init(&stats_reg, 0);
 
     infmon_api_ctx_init(&infmon_vpp_api_ctx, rs, &stats_reg);
+    /* worker_count includes the main thread (thread 0) + all worker threads. */
     infmon_vpp_api_ctx.worker_count = vlib_num_workers() + 1;
 
     /* Also set plugin_main num_workers */

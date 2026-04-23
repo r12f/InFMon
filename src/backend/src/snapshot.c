@@ -130,6 +130,7 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
 
     /* Swap each worker's table (reusing old pointers from allocation pass) */
     uint64_t gen = 0;
+    bool gen_set = false;
     for (uint32_t w = 0; w < nw; w++) {
         if (!old_tables[w] || !new_tables[w])
             continue;
@@ -137,8 +138,10 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
         uint64_t new_gen = old_tables[w]->generation + 1;
         new_tables[w]->generation = new_gen;
         new_tables[w]->epoch_ns = now;
-        if (w == 0)
+        if (!gen_set) {
             gen = old_tables[w]->generation;
+            gen_set = true;
+        }
 
         __atomic_store_n(&tables_flat[w * tables_stride + flow_rule_index], new_tables[w],
                          __ATOMIC_RELEASE);
