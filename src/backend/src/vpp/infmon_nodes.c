@@ -531,6 +531,11 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
     const infmon_flow_rule_t *added = infmon_flow_rule_get(infmon_cli_rule_set, n - 1);
     if (added) {
         if ((n - 1) < INFMON_MAX_ACTIVE_FLOW_RULES) {
+            /* NOTE: num_workers is latched from vlib_num_workers()+1 during
+             * infmon_vpp_api_ctx_ensure, which runs post-worker-init.  CLI commands
+             * also execute after workers are active.  If num_workers is 0 (e.g.
+             * startup-config before workers launch — not currently supported),
+             * fall back to 1 so the main thread always gets a table. */
             uint32_t nw = infmon_plugin_main.num_workers > 0 ? infmon_plugin_main.num_workers : 1;
             for (uint32_t w = 0; w < nw; w++) {
                 infmon_counter_table_t *ct =
