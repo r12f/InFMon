@@ -143,16 +143,21 @@ impl VapiStatsClient {
                 continue;
             }
 
-            // Build a RawDescriptor from the collected entries.
-            // We assemble a key_arena by concatenating all key bytes.
+            // Merge entries that share the same flow key across workers.
+            // With per-worker counter tables, the same key can appear once per
+            // worker. We merge: sum packets/bytes, max last_update.
+            // `first` captures snapshot-level metadata (generation, epoch_ns,
+            // insert_failed, table_full) from entries[0] — these fields are
+            // identical across workers for the same flow rule, so any entry
+            // would do.
             let first = &entries[0];
+            let merged = merge_worker_entries(&entries);
+
+            // Build a RawDescriptor from the merged entries.
             let mut key_arena = Vec::new();
             let mut slots = Vec::new();
 
-            // Table-level metadata (generation, epoch, counters) comes from the
-            // first entry in the dump — all entries share the same snapshot context.
-
-            for e in &entries {
+            for e in &merged {
                 let key_offset = key_arena.len() as u32;
                 key_arena.extend_from_slice(&e.key_bytes);
                 slots.push(RawSlot {
@@ -173,6 +178,9 @@ impl VapiStatsClient {
                 epoch_ns: first.epoch_ns,
                 slots,
                 key_arena,
+                // insert_failed / table_full are table-level snapshot
+                // counters, identical across entries from the same worker.
+                // Use first entry's value (same as any other entry's).
                 insert_failed: first.insert_failed,
                 table_full: first.table_full,
             });
@@ -193,6 +201,55 @@ impl Drop for VapiStatsClient {
     }
 }
 
+/// Merge entries from multiple workers that share the same flow key.
+///
+/// Identity: `(key_hash, key_bytes)`. For matching entries we sum
+/// `packets` and `bytes`, and take `max(last_update)`.
+fn merge_worker_entries(entries: &[CollectedEntry]) -> Vec<CollectedEntry> {
+    use std::collections::HashMap;
+
+    // Map from (key_hash, key_bytes) → index into `merged`.
+    let mut index_map: HashMap<(u64, &[u8]), usize> = HashMap::with_capacity(entries.len());
+    let mut merged: Vec<CollectedEntry> = Vec::with_capacity(entries.len());
+
+    for e in entries {
+        let identity = (e.key_hash, e.key_bytes.as_slice());
+        if let Some(&idx) = index_map.get(&identity) {
+            let m = &mut merged[idx];
+            m.packets = m.packets.saturating_add(e.packets);
+            m.bytes = m.bytes.saturating_add(e.bytes);
+            if e.last_update > m.last_update {
+                m.last_update = e.last_update;
+            }
+            // generation is identical across workers for the same flow rule
+            // (set at rule-add time), so no merge needed.
+            if e.epoch_ns > m.epoch_ns {
+                m.epoch_ns = e.epoch_ns;
+            }
+            // insert_failed and table_full are table-level counters, identical
+            // across all entries from the same worker — no per-key merge needed.
+        } else {
+            let idx = merged.len();
+            index_map.insert(identity, idx);
+            merged.push(CollectedEntry {
+                _flow_rule_id_hi: e._flow_rule_id_hi,
+                _flow_rule_id_lo: e._flow_rule_id_lo,
+                generation: e.generation,
+                epoch_ns: e.epoch_ns,
+                insert_failed: e.insert_failed,
+                table_full: e.table_full,
+                key_hash: e.key_hash,
+                packets: e.packets,
+                bytes: e.bytes,
+                last_update: e.last_update,
+                key_bytes: e.key_bytes.clone(),
+            });
+        }
+    }
+
+    merged
+}
+
 /// Internal struct for collecting entries from the FFI callback.
 struct CollectedEntry {
     _flow_rule_id_hi: u64,
@@ -206,4 +263,113 @@ struct CollectedEntry {
     bytes: u64,
     last_update: u64,
     key_bytes: Vec<u8>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_entry(
+        key: &[u8],
+        key_hash: u64,
+        packets: u64,
+        bytes: u64,
+        last_update: u64,
+    ) -> CollectedEntry {
+        CollectedEntry {
+            _flow_rule_id_hi: 1,
+            _flow_rule_id_lo: 2,
+            generation: 1,
+            epoch_ns: 0,
+            insert_failed: 0,
+            table_full: 0,
+            key_hash,
+            packets,
+            bytes,
+            last_update,
+            key_bytes: key.to_vec(),
+        }
+    }
+
+    #[test]
+    fn merge_no_duplicates() {
+        let entries = vec![
+            make_entry(&[1, 2, 3, 4], 0xAABB, 100, 5000, 1000),
+            make_entry(&[5, 6, 7, 8], 0xCCDD, 200, 8000, 2000),
+        ];
+        let merged = merge_worker_entries(&entries);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].packets, 100);
+        assert_eq!(merged[1].packets, 200);
+    }
+
+    #[test]
+    fn merge_two_workers_same_key() {
+        let entries = vec![
+            make_entry(&[1, 2, 3, 4], 0xAABB, 100, 5000, 1000),
+            make_entry(&[1, 2, 3, 4], 0xAABB, 50, 2500, 2000),
+        ];
+        let merged = merge_worker_entries(&entries);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].packets, 150);
+        assert_eq!(merged[0].bytes, 7500);
+        assert_eq!(merged[0].last_update, 2000);
+    }
+
+    #[test]
+    fn merge_three_workers_same_key() {
+        let entries = vec![
+            make_entry(&[10], 0x11, 10, 100, 500),
+            make_entry(&[10], 0x11, 20, 200, 300),
+            make_entry(&[10], 0x11, 30, 300, 800),
+        ];
+        let merged = merge_worker_entries(&entries);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].packets, 60);
+        assert_eq!(merged[0].bytes, 600);
+        assert_eq!(merged[0].last_update, 800);
+    }
+
+    #[test]
+    fn merge_mixed_unique_and_duplicate() {
+        let entries = vec![
+            make_entry(&[1], 0xAA, 10, 100, 100),
+            make_entry(&[2], 0xBB, 20, 200, 200),
+            make_entry(&[1], 0xAA, 30, 300, 300), // dup of first
+        ];
+        let merged = merge_worker_entries(&entries);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].packets, 40); // 10 + 30
+        assert_eq!(merged[0].bytes, 400);
+        assert_eq!(merged[0].last_update, 300);
+        assert_eq!(merged[1].packets, 20);
+    }
+
+    #[test]
+    fn merge_same_hash_different_key_not_merged() {
+        // Hash collision: same hash but different key bytes
+        let entries = vec![
+            make_entry(&[1, 2], 0xAAAA, 10, 100, 100),
+            make_entry(&[3, 4], 0xAAAA, 20, 200, 200),
+        ];
+        let merged = merge_worker_entries(&entries);
+        assert_eq!(merged.len(), 2);
+    }
+
+    #[test]
+    fn merge_empty() {
+        let merged = merge_worker_entries(&[]);
+        assert!(merged.is_empty());
+    }
+
+    #[test]
+    fn merge_saturating_add() {
+        let entries = vec![
+            make_entry(&[1], 0xAA, u64::MAX - 10, u64::MAX, 100),
+            make_entry(&[1], 0xAA, 20, 500, 200),
+        ];
+        let merged = merge_worker_entries(&entries);
+        assert_eq!(merged[0].packets, u64::MAX); // saturating
+        assert_eq!(merged[0].bytes, u64::MAX);
+    }
 }
