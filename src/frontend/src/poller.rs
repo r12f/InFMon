@@ -93,7 +93,7 @@ pub fn spawn(config: PollerConfig, senders: Vec<SnapshotSender>) -> PollerHandle
 // ── internals ──────────────────────────────────────────────────────
 
 /// Read monotonic clock in nanoseconds.
-#[cfg(feature = "vapi")]
+#[cfg(any(feature = "vapi", test))]
 fn monotonic_ns() -> u64 {
     let mut ts = libc::timespec {
         tv_sec: 0,
@@ -111,7 +111,7 @@ fn monotonic_ns() -> u64 {
 }
 
 /// Read wall-clock (CLOCK_REALTIME) in nanoseconds.
-#[cfg(feature = "vapi")]
+#[cfg(any(feature = "vapi", test))]
 fn wall_clock_ns() -> u64 {
     let mut ts = libc::timespec {
         tv_sec: 0,
@@ -142,7 +142,7 @@ fn try_connect_vapi() -> Option<VapiStatsClient> {
 }
 
 /// Decode a `RawSnapshot` into a `FlowStatsSnapshot`.
-#[cfg(feature = "vapi")]
+#[cfg(any(feature = "vapi", test))]
 fn decode_snapshot(
     raw: infmon_common::ipc::stats_client::RawSnapshot,
     tick_id: u64,
