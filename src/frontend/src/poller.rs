@@ -169,19 +169,52 @@ fn decode_snapshot(
             // keys are decoded with an empty schema.
             let fields: Vec<FieldId> = Vec::new();
 
-            let flows = desc
-                .slots
+            // Per-worker merge: the backend streams slots from all per-worker
+            // retired tables for this flow rule. The same key may appear in
+            // multiple workers' tables. We merge by raw key bytes: sum
+            // packets/bytes and take max(last_update).
+            use std::collections::HashMap;
+
+            struct MergedSlot {
+                packets: u64,
+                bytes: u64,
+                last_update: u64,
+            }
+
+            let mut merged: HashMap<Vec<u8>, MergedSlot> = HashMap::with_capacity(desc.slots.len());
+
+            for slot in &desc.slots {
+                if slot.key_len == 0 {
+                    continue;
+                }
+                let start = slot.key_offset as usize;
+                let end = start + slot.key_len as usize;
+                if end > desc.key_arena.len() {
+                    tracing::warn!("slot key extends past arena, skipping");
+                    continue;
+                }
+                let key_bytes = desc.key_arena[start..end].to_vec();
+                merged
+                    .entry(key_bytes)
+                    .and_modify(|m| {
+                        m.packets = m.packets.saturating_add(slot.packets);
+                        m.bytes = m.bytes.saturating_add(slot.bytes);
+                        m.last_update = m.last_update.max(slot.last_update);
+                    })
+                    .or_insert(MergedSlot {
+                        packets: slot.packets,
+                        bytes: slot.bytes,
+                        last_update: slot.last_update,
+                    });
+            }
+
+            // Note: HashMap::into_iter() yields entries in arbitrary order.
+            // Downstream consumers do not depend on flow ordering (snapshots
+            // are keyed by flow key, not position), so this is acceptable.
+            let flows = merged
                 .into_iter()
-                .filter(|slot| slot.key_len > 0)
-                .filter_map(|slot| {
-                    let start = slot.key_offset as usize;
-                    let end = start + slot.key_len as usize;
-                    if end > desc.key_arena.len() {
-                        tracing::warn!("slot key extends past arena, skipping");
-                        return None;
-                    }
-                    let key_bytes = &desc.key_arena[start..end];
-                    let key = match decode_key(&fields, key_bytes) {
+                .filter_map(|(key_bytes, m)| {
+                    let key = match decode_key(&fields, &key_bytes) {
                         Ok(k) => k,
                         Err(e) => {
                             tracing::warn!("failed to decode flow key: {}", e);
@@ -191,12 +224,12 @@ fn decode_snapshot(
                     Some(FlowStats {
                         key,
                         counters: FlowCounters {
-                            packets: slot.packets,
-                            bytes: slot.bytes,
+                            packets: m.packets,
+                            bytes: m.bytes,
                             // TODO: first_seen_ns is not available in the raw
                             // slot data. Wire it in once the backend tracks it.
                             first_seen_ns: 0,
-                            last_seen_ns: slot.last_update,
+                            last_seen_ns: m.last_update,
                         },
                     })
                 })

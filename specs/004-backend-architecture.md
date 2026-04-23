@@ -111,7 +111,10 @@ place where the data path could plausibly block.
 
 ### 5.1 Layout
 
-For each `flow_rule` the plugin owns one **counter table**:
+For each `(worker, flow_rule)` pair the plugin owns one **counter table**
+(i.e. `tables[worker_id][flow_rule_index]`). Each VPP worker thread writes
+exclusively to its own table, eliminating all cross-core CAS on the data
+path. The per-worker layout is:
 
 - A bounded-size open-addressing hash table with **linear probing** sized
   at plugin init from a CLI argument (`max_keys_per_flow_rule`, default
@@ -244,16 +247,15 @@ This is the export primitive. Frontends call it once per export interval
 **Contract:**
 
 1. Caller invokes `infmon_snapshot_and_clear(flow_rule_id)`.
-2. Plugin allocates a new, empty counter table (`generation = G+1`) for
-   this `flow_rule_id`. Allocation happens off the worker thread; the
-   table is zeroed by a control thread before installation.
-3. Plugin atomically swaps the table pointer published in the
-   `infmon-counter` node's per-flow_rule context. The control thread
-   issues `__atomic_store_n(..., RELEASE)` on the pointer; workers MUST
-   load it with `__atomic_load_n(..., ACQUIRE)` (once per frame, not
-   per packet — see §8). The release/acquire pair guarantees the new
-   table's contents are visible when the new pointer is observed; the
-   bounded-staleness window is exactly one frame (≤ `VLIB_FRAME_SIZE`
+2. Plugin allocates a **new, empty counter table** (`generation = G+1`) for
+   each worker for this `flow_rule_id`. Allocation happens off the worker
+   thread; each table is zeroed by a control thread before installation.
+3. Plugin atomically swaps **every worker's table pointer** for this
+   flow_rule (one `__atomic_store_n(..., RELEASE)` per worker). Workers MUST
+   load their own pointer with `__atomic_load_n(..., ACQUIRE)` (once per
+   frame, not per packet — see §8). The release/acquire pair guarantees
+   the new table's contents are visible when the new pointer is observed;
+   the bounded-staleness window is exactly one frame (≤ `VLIB_FRAME_SIZE`
    packets) on each worker, after which every subsequent packet counts
    into `G+1`. No worker thread stalls, no lock is taken, no packet is
    dropped.
@@ -405,9 +407,12 @@ the frontend reports them as gauges so operators can wire alerts.
    plugin will require operators to bump `statseg { size }` and will
    refuse to start otherwise; whether to ship a recommended value as a
    tunable in spec 005 is open.
-3. **Per-CPU sharded tables.** A sharded design (one sub-table per
-   worker, merged at snapshot) avoids cross-core CAS entirely but
-   complicates §7.2. Defer to v2 unless the §10 targets miss.
+3. **Per-CPU sharded tables.** ~~Deferred to v2.~~ **Resolved** — the
+   implementation uses per-worker tables (`tables[worker_id][flow_rule_index]`).
+   Each VPP worker writes exclusively to its own table, eliminating
+   cross-core CAS on the data path. At snapshot time all per-worker tables
+   for a flow rule are swapped and retired together; the frontend merges
+   duplicate keys across workers (sum packets/bytes, max last_update).
 
 ## 13. Acceptance
 
