@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use infmon_common::ipc::types::FlowStatsSnapshot;
 
+#[cfg(feature = "vapi")]
 use crate::vapi_stats_client::VapiStatsClient;
 
 /// Sender half that exporter threads receive snapshots through.
