@@ -39,11 +39,11 @@ fn poller_stops_immediately() {
 }
 
 #[test]
-#[ignore = "requires a real VPP stats segment; InFMonStatsClient::open fails on empty files"]
+#[ignore = "requires a real VPP instance; VapiStatsClient::connect fails without VPP"]
 fn poller_sends_snapshots_on_real_segment() {
-    // This test needs a real VPP shared-memory stats segment.
-    // An empty file is not a valid segment, so InFMonStatsClient::open
-    // will fail and the poller enters reconnect backoff.
+    // This test needs a real VPP instance running.
+    // Without VPP, VapiStatsClient::connect fails and the poller
+    // enters reconnect backoff.
     let dir = tempfile::TempDir::new().unwrap();
     let sock = dir.path().join("stats.sock");
     std::fs::write(&sock, b"").unwrap();
@@ -72,7 +72,7 @@ fn poller_sends_snapshots_on_real_segment() {
 }
 
 #[test]
-#[ignore = "requires a real VPP stats segment; InFMonStatsClient::open fails on empty files"]
+#[ignore = "requires a real VPP instance; VapiStatsClient::connect fails without VPP"]
 fn backpressure_drops_snapshots() {
     // Channel with capacity 1. If poller ticks faster than we consume,
     // it should drop snapshots without blocking.
@@ -107,7 +107,7 @@ fn monotonic_and_wall_clocks_work() {
 #[test]
 fn poller_config_default() {
     let cfg = PollerConfig::default();
-    assert_eq!(cfg.stats_socket, PathBuf::from("/run/vpp/stats.sock"));
+    assert_eq!(cfg.stats_socket, PathBuf::from("/run/vpp/api.sock"));
     assert_eq!(cfg.interval, Duration::from_millis(1000));
 }
 

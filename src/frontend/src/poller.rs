@@ -1,7 +1,7 @@
 //! Poller thread: drives the 1 Hz tick loop.
 //!
-//! The poller owns the [`InFMonStatsClient`] and on each tick:
-//! 1. Reads and clears the stats segment via `snapshot_and_clear`.
+//! The poller connects to VPP via the binary API (VAPI) and on each tick:
+//! 1. Calls `infmon_snapshot_inline_dump` to read and clear counters.
 //! 2. Decodes the raw snapshot into a [`FlowStatsSnapshot`].
 //! 3. Wraps it in `Arc` and fans it out to exporter channels.
 //! 4. Drops the snapshot — nothing is retained across ticks.
@@ -9,8 +9,6 @@
 //! On disconnect the poller skips the tick and reconnects with
 //! exponential backoff.
 
-#[cfg(not(feature = "vapi"))]
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
@@ -21,16 +19,13 @@ use infmon_common::ipc::types::FlowStatsSnapshot;
 #[cfg(feature = "vapi")]
 use crate::vapi_stats_client::VapiStatsClient;
 
-#[cfg(not(feature = "vapi"))]
-use infmon_common::ipc::stats_client::InFMonStatsClient;
-
 /// Sender half that exporter threads receive snapshots through.
 pub type SnapshotSender = std::sync::mpsc::SyncSender<Arc<FlowStatsSnapshot>>;
 
 /// Configuration for the poller thread.
 #[derive(Debug, Clone)]
 pub struct PollerConfig {
-    /// Path to the VPP stats segment socket.
+    /// Path to the VPP API socket.
     pub stats_socket: PathBuf,
     /// Polling interval (default: 1000 ms).
     pub interval: Duration,
@@ -39,7 +34,7 @@ pub struct PollerConfig {
 impl Default for PollerConfig {
     fn default() -> Self {
         Self {
-            stats_socket: PathBuf::from("/run/vpp/stats.sock"),
+            stats_socket: PathBuf::from("/run/vpp/api.sock"),
             interval: Duration::from_millis(1000),
         }
     }
@@ -98,6 +93,7 @@ pub fn spawn(config: PollerConfig, senders: Vec<SnapshotSender>) -> PollerHandle
 // ── internals ──────────────────────────────────────────────────────
 
 /// Read monotonic clock in nanoseconds.
+#[allow(dead_code)]
 fn monotonic_ns() -> u64 {
     let mut ts = libc::timespec {
         tv_sec: 0,
@@ -115,6 +111,7 @@ fn monotonic_ns() -> u64 {
 }
 
 /// Read wall-clock (CLOCK_REALTIME) in nanoseconds.
+#[allow(dead_code)]
 fn wall_clock_ns() -> u64 {
     let mut ts = libc::timespec {
         tv_sec: 0,
@@ -129,27 +126,8 @@ fn wall_clock_ns() -> u64 {
     ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
 }
 
-/// Try to open the stats client, returning None on failure.
-#[cfg(not(feature = "vapi"))]
-fn try_connect(path: &Path) -> Option<InFMonStatsClient> {
-    match InFMonStatsClient::open(path) {
-        Ok(c) => {
-            tracing::info!("connected to stats segment at {}", path.display());
-            Some(c)
-        }
-        Err(e) => {
-            tracing::warn!(
-                "failed to connect to stats segment at {}: {}",
-                path.display(),
-                e
-            );
-            None
-        }
-    }
-}
-
-/// Try to connect to VPP API for stats.
 #[cfg(feature = "vapi")]
+/// Try to connect to VPP API for stats.
 fn try_connect_vapi() -> Option<VapiStatsClient> {
     match VapiStatsClient::connect("infmon-frontend") {
         Ok(c) => {
@@ -164,6 +142,7 @@ fn try_connect_vapi() -> Option<VapiStatsClient> {
 }
 
 /// Decode a `RawSnapshot` into a `FlowStatsSnapshot`.
+#[allow(dead_code)]
 fn decode_snapshot(
     raw: infmon_common::ipc::stats_client::RawSnapshot,
     tick_id: u64,
@@ -251,85 +230,13 @@ fn decode_snapshot(
     }
 }
 
-/// Main poller loop.
-#[cfg(not(feature = "vapi"))]
-fn run_loop(
-    config: &PollerConfig,
-    senders: &[SnapshotSender],
-    stop: &std::sync::atomic::AtomicBool,
-) {
-    let mut client: Option<InFMonStatsClient> = None;
-    let mut tick_id: u64 = 0;
-    let mut prev_mono: u64 = 0;
-    let mut backoff = Duration::from_millis(100);
-    let max_backoff = Duration::from_secs(30);
-
-    while !stop.load(std::sync::atomic::Ordering::Acquire) {
-        let tick_start = monotonic_ns();
-
-        // Ensure connected.
-        if client.is_none() {
-            client = try_connect(&config.stats_socket);
-            if client.is_none() {
-                // Exponential backoff on reconnection.
-                tracing::debug!("reconnect backoff: {:?}", backoff);
-                sleep_interruptible(backoff, stop);
-                backoff = (backoff * 2).min(max_backoff);
-                continue;
-            }
-            backoff = Duration::from_millis(100);
-            prev_mono = 0;
-        }
-
-        // Perform snapshot.
-        if let Some(c) = client.as_ref() {
-            match c.snapshot_and_clear() {
-                Ok(raw) => {
-                    tick_id += 1;
-                    let wall = wall_clock_ns();
-                    let mono = monotonic_ns();
-                    let snapshot = decode_snapshot(raw, tick_id, wall, mono, prev_mono);
-                    prev_mono = mono;
-
-                    let snap = Arc::new(snapshot);
-
-                    // Fan out to exporters.
-                    for (i, tx) in senders.iter().enumerate() {
-                        if tx.try_send(snap.clone()).is_err() {
-                            tracing::warn!(
-                                "exporter {} channel full, dropping snapshot (tick {})",
-                                i,
-                                tick_id
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("snapshot_and_clear failed: {} — disconnecting", e);
-                    client = None;
-                    continue;
-                }
-            }
-        }
-
-        // Sleep until next tick, accounting for time spent in this tick.
-        let elapsed = Duration::from_nanos(monotonic_ns().saturating_sub(tick_start));
-        if let Some(remaining) = config.interval.checked_sub(elapsed) {
-            sleep_interruptible(remaining, stop);
-        }
-    }
-
-    tracing::info!("poller stopped after {} ticks", tick_id);
-}
-
-/// Main poller loop (VAPI variant).
 #[cfg(feature = "vapi")]
+/// Main poller loop.
 fn run_loop(
     config: &PollerConfig,
     senders: &[SnapshotSender],
     stop: &std::sync::atomic::AtomicBool,
 ) {
-    let _ = &config.stats_socket; // unused in VAPI mode
     let mut client: Option<VapiStatsClient> = None;
     let mut tick_id: u64 = 0;
     let mut prev_mono: u64 = 0;
@@ -391,8 +298,22 @@ fn run_loop(
     tracing::info!("poller stopped after {} ticks", tick_id);
 }
 
+#[cfg(not(feature = "vapi"))]
+/// Main poller loop (stub — VAPI not available at build time).
+fn run_loop(
+    _config: &PollerConfig,
+    _senders: &[SnapshotSender],
+    stop: &std::sync::atomic::AtomicBool,
+) {
+    tracing::warn!("VAPI not available — poller will idle");
+    while !stop.load(std::sync::atomic::Ordering::Acquire) {
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+
 /// Sleep for `dur`, but wake early if `stop` is set.
 /// Checks every 50 ms.
+#[allow(dead_code)]
 fn sleep_interruptible(dur: Duration, stop: &std::sync::atomic::AtomicBool) {
     let check = Duration::from_millis(50);
     let mut remaining = dur;

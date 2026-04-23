@@ -2,7 +2,7 @@
 // Copyright 2026 Riff
 //
 // VPP VAPI-based stats client.
-// Replaces the shared-memory InFMonStatsClient with VPP binary API calls.
+// Stats client using VPP binary API calls.
 
 use std::ffi::CString;
 use std::os::raw::{c_int, c_void};

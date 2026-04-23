@@ -2,7 +2,7 @@
 // Copyright 2026 Riff
 //
 // Rust FFI bindings for the VAPI-based stats client.
-// Only compiled when cfg(feature = "vapi") is set by build.rs.
+// VAPI FFI bindings — compiled when libvapiclient and infmon.api.vapi.h are available.
 
 #![allow(non_camel_case_types)]
 

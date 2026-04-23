@@ -5,10 +5,6 @@ edition = "2021"
 description = "InFMon frontend — poller and exporter dispatch daemon"
 license = "Apache-2.0"
 
-[features]
-default = []
-vapi = []
-
 [[bin]]
 name = "infmon-frontend"
 path = "src/main.rs"
