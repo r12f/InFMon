@@ -126,6 +126,7 @@ fn wall_clock_ns() -> u64 {
 }
 
 /// Try to connect to VPP API for stats, returning None on failure.
+#[cfg(feature = "vapi")]
 fn try_connect_vapi() -> Option<VapiStatsClient> {
     match VapiStatsClient::connect("infmon-frontend") {
         Ok(c) => {
