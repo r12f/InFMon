@@ -7,6 +7,9 @@
 use std::path::PathBuf;
 
 fn main() {
+    // Declare `vapi` as a valid cfg so rustc doesn't warn about it.
+    // The feature is set dynamically below when VPP libs are detected.
+    println!("cargo:rustc-check-cfg=cfg(feature, values(\"vapi\"))");
     // Find the generated VAPI header.
     // In the build tree it lives under build/generated/.
     // The CMake build must have already run to generate infmon.api.vapi.h.

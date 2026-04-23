@@ -11,7 +11,7 @@ pub use control_client::{ExporterStatus, InFMonControlClient};
 #[cfg(feature = "control")]
 pub use error::CtlError;
 pub use error::IpcError;
-pub use stats_client::{InFMonStatsClient, RawDescriptor, RawSlot, RawSnapshot};
+pub use stats_client::{RawDescriptor, RawSlot, RawSnapshot};
 pub use types::{
     FieldId, FieldValue, FlowCounters, FlowRuleCounters, FlowRuleId, FlowRuleStats, FlowStats,
     FlowStatsSnapshot,

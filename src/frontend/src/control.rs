@@ -274,7 +274,7 @@ fn handle_flow_rule_add(params: &FlowRuleAddParams, state: &ControlState) -> Res
                 }
             }
         } else {
-            // No VAPI client — local-only mode (fallback)
+            // No VAPI client — local-only mode
             rules.push(rule);
             let seq = state
                 .next_rule_id
@@ -343,9 +343,7 @@ fn handle_flow_rule_rm(params: &FlowRuleRmParams, state: &ControlState) -> Respo
     let mut rules = state.flow_rules.write().unwrap_or_else(|e| e.into_inner());
     rules.retain(|r| r.name != params.name);
 
-    // Remove from ID map after successful local removal to keep
-    // rule_id_map and flow_rules consistent (avoids divergence if
-    // the write lock above were poisoned).
+    // Remove from ID map after successful local removal
     #[cfg(feature = "vapi")]
     {
         state
