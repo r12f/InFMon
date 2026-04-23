@@ -1,1 +1,8 @@
-{}
+{
+  "active_flows": 0,
+  "bytes": 0,
+  "drops": 0,
+  "evictions": 0,
+  "name": "erspan3_full",
+  "packets": 0
+}

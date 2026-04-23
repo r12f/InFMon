@@ -39,64 +39,6 @@ fn poller_stops_immediately() {
 }
 
 #[test]
-#[ignore = "requires a real VPP stats segment; InFMonStatsClient::open fails on empty files"]
-fn poller_sends_snapshots_on_real_segment() {
-    // This test needs a real VPP shared-memory stats segment.
-    // An empty file is not a valid segment, so InFMonStatsClient::open
-    // will fail and the poller enters reconnect backoff.
-    let dir = tempfile::TempDir::new().unwrap();
-    let sock = dir.path().join("stats.sock");
-    std::fs::write(&sock, b"").unwrap();
-
-    let config = PollerConfig {
-        stats_socket: sock,
-        interval: Duration::from_millis(50),
-    };
-    let (tx, rx) = mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(8);
-    let handle = spawn(config, vec![tx]);
-
-    // Wait for a few ticks.
-    thread::sleep(Duration::from_millis(200));
-    handle.stop();
-
-    // Should have received at least one snapshot.
-    let mut count = 0;
-    while let Ok(snap) = rx.try_recv() {
-        count += 1;
-        assert!(snap.tick_id > 0);
-        if snap.tick_id > 1 {
-            assert!(snap.interval_ns > 0);
-        }
-    }
-    assert!(count >= 1, "expected at least 1 snapshot, got {}", count);
-}
-
-#[test]
-#[ignore = "requires a real VPP stats segment; InFMonStatsClient::open fails on empty files"]
-fn backpressure_drops_snapshots() {
-    // Channel with capacity 1. If poller ticks faster than we consume,
-    // it should drop snapshots without blocking.
-    let dir = tempfile::TempDir::new().unwrap();
-    let sock = dir.path().join("stats.sock");
-    std::fs::write(&sock, b"").unwrap();
-
-    let config = PollerConfig {
-        stats_socket: sock,
-        interval: Duration::from_millis(20),
-    };
-    let (tx, rx) = mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(1);
-    let handle = spawn(config, vec![tx]);
-
-    // Don't consume — let the channel fill up.
-    thread::sleep(Duration::from_millis(200));
-    handle.stop();
-
-    // We should have exactly 1 in the channel (capacity) — others were dropped.
-    let snap = rx.try_recv().unwrap();
-    assert_eq!(snap.tick_id, 1);
-}
-
-#[test]
 fn monotonic_and_wall_clocks_work() {
     let m = monotonic_ns();
     let w = wall_clock_ns();
