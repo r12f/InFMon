@@ -178,14 +178,11 @@ impl VapiStatsClient {
                 epoch_ns: first.epoch_ns,
                 slots,
                 key_arena,
-                insert_failed: merged
-                    .iter()
-                    .map(|e| e.insert_failed)
-                    .fold(0u64, u64::saturating_add),
-                table_full: merged
-                    .iter()
-                    .map(|e| e.table_full)
-                    .fold(0u64, u64::saturating_add),
+                // insert_failed / table_full are table-level snapshot
+                // counters, identical across entries from the same worker.
+                // Use first entry's value (same as any other entry's).
+                insert_failed: first.insert_failed,
+                table_full: first.table_full,
             });
         }
 
@@ -229,8 +226,8 @@ fn merge_worker_entries(entries: &[CollectedEntry]) -> Vec<CollectedEntry> {
             if e.epoch_ns > m.epoch_ns {
                 m.epoch_ns = e.epoch_ns;
             }
-            m.insert_failed = m.insert_failed.saturating_add(e.insert_failed);
-            m.table_full = m.table_full.saturating_add(e.table_full);
+            // insert_failed and table_full are table-level counters, identical
+            // across all entries from the same worker — no per-key merge needed.
         } else {
             let idx = merged.len();
             index_map.insert(identity, idx);
