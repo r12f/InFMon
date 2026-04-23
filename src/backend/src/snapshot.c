@@ -86,7 +86,8 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
     uint32_t nw = num_workers > 0 ? num_workers : 1;
 
     /* Get the current table from worker 0 to check existence */
-    infmon_counter_table_t *old_table0 = __atomic_load_n(&tables_flat[0 * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
+    infmon_counter_table_t *old_table0 =
+        __atomic_load_n(&tables_flat[0 * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
 
     if (!old_table0) {
         reply->result = INFMON_SNAP_NULL_TABLE;
@@ -102,8 +103,10 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
     /* Allocate new tables for all workers */
     infmon_counter_table_t *new_tables[INFMON_MAX_WORKERS] = {0};
     for (uint32_t w = 0; w < nw; w++) {
-        infmon_counter_table_t *old_w = __atomic_load_n(&tables_flat[w * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
-        if (!old_w) continue;
+        infmon_counter_table_t *old_w =
+            __atomic_load_n(&tables_flat[w * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
+        if (!old_w)
+            continue;
         new_tables[w] = infmon_counter_table_create(old_w->num_slots, max_key_width);
         if (!new_tables[w]) {
             /* Cleanup already allocated */
@@ -127,15 +130,19 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
     infmon_counter_table_t *old_tables[INFMON_MAX_WORKERS] = {0};
     uint64_t gen = 0;
     for (uint32_t w = 0; w < nw; w++) {
-        infmon_counter_table_t *old_w = __atomic_load_n(&tables_flat[w * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
-        if (!old_w || !new_tables[w]) continue;
+        infmon_counter_table_t *old_w =
+            __atomic_load_n(&tables_flat[w * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
+        if (!old_w || !new_tables[w])
+            continue;
 
         uint64_t new_gen = old_w->generation + 1;
         new_tables[w]->generation = new_gen;
         new_tables[w]->epoch_ns = now;
-        if (w == 0) gen = old_w->generation;
+        if (w == 0)
+            gen = old_w->generation;
 
-        __atomic_store_n(&tables_flat[w * tables_stride + flow_rule_index], new_tables[w], __ATOMIC_RELEASE);
+        __atomic_store_n(&tables_flat[w * tables_stride + flow_rule_index], new_tables[w],
+                         __ATOMIC_RELEASE);
         old_tables[w] = old_w;
     }
 

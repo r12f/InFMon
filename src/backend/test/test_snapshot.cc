@@ -79,9 +79,8 @@ class SnapshotTest : public ::testing::Test
     /* Helper to call snapshot_and_clear with our 2D tables */
     void do_snapshot(uint32_t flow_rule_index, uint32_t num_workers, infmon_snap_reply_t *reply)
     {
-        infmon_snapshot_and_clear(&mgr, &tables[0][0], MAX_FLOW_RULES,
-                                  num_workers, flow_rule_index, MAX_FLOW_RULES,
-                                  MAX_KEY_WIDTH, reply);
+        infmon_snapshot_and_clear(&mgr, &tables[0][0], MAX_FLOW_RULES, num_workers, flow_rule_index,
+                                  MAX_FLOW_RULES, MAX_KEY_WIDTH, reply);
     }
 };
 
@@ -384,9 +383,8 @@ TEST_F(SnapshotTest, ZeroWorkers)
 
     install_table(0);
     infmon_snap_reply_t reply{};
-    infmon_snapshot_and_clear(&mgr0, &tables[0][0], MAX_FLOW_RULES,
-                              TEST_NUM_WORKERS, 0, MAX_FLOW_RULES,
-                              MAX_KEY_WIDTH, &reply);
+    infmon_snapshot_and_clear(&mgr0, &tables[0][0], MAX_FLOW_RULES, TEST_NUM_WORKERS, 0,
+                              MAX_FLOW_RULES, MAX_KEY_WIDTH, &reply);
     ASSERT_EQ(reply.result, INFMON_SNAP_OK);
 
     /* Should be freeable after grace period only */

@@ -62,10 +62,9 @@ typedef struct {
  */
 typedef struct {
     infmon_api_result_t result;
-    infmon_stats_descriptor_t descriptor; /**< Populated on success. */
-    infmon_counter_table_t
-        *retired_tables[INFMON_MAX_WORKERS]; /**< Per-worker retired tables. */
-    uint32_t num_retired;                    /**< Number of retired tables. */
+    infmon_stats_descriptor_t descriptor;                       /**< Populated on success. */
+    infmon_counter_table_t *retired_tables[INFMON_MAX_WORKERS]; /**< Per-worker retired tables. */
+    uint32_t num_retired;                                       /**< Number of retired tables. */
 } infmon_api_snap_reply_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */

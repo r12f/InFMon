@@ -47,11 +47,11 @@ typedef struct {
 
 typedef struct {
     infmon_counter_table_t *tables[INFMON_MAX_WORKERS]; /**< Retired tables, one per worker. */
-    uint32_t num_tables;           /**< Number of workers that had tables. */
-    uint64_t swap_epoch;           /**< Global epoch at time of swap. */
-    uint64_t swap_timestamp_ns;    /**< Wall-clock timestamp of swap. */
-    uint32_t flow_rule_index;      /**< Which flow_rule this belonged to. */
-    bool pending;                  /**< true if still awaiting retirement. */
+    uint32_t num_tables;                                /**< Number of workers that had tables. */
+    uint64_t swap_epoch;                                /**< Global epoch at time of swap. */
+    uint64_t swap_timestamp_ns;                         /**< Wall-clock timestamp of swap. */
+    uint32_t flow_rule_index;                           /**< Which flow_rule this belonged to. */
+    bool pending;                                       /**< true if still awaiting retirement. */
 } infmon_retired_table_t;
 
 /* ── Snapshot manager ────────────────────────────────────────────── */
@@ -98,8 +98,8 @@ typedef enum {
 typedef struct {
     infmon_snap_result_t result;
     infmon_counter_table_t *retired_tables[INFMON_MAX_WORKERS]; /**< Per-worker retired tables. */
-    uint32_t num_retired;              /**< Number of retired tables (= num_workers). */
-    uint64_t retired_generation;       /**< Generation of the retired tables. */
+    uint32_t num_retired;        /**< Number of retired tables (= num_workers). */
+    uint64_t retired_generation; /**< Generation of the retired tables. */
 } infmon_snap_reply_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */

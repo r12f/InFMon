@@ -310,9 +310,8 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
         return INFMON_API_ERR_INTERNAL;
     }
     infmon_snapshot_and_clear(ctx->snap_mgr, &ctx->tables[0][0], INFMON_FLOW_RULE_SET_MAX,
-                              ctx->worker_count > 0 ? ctx->worker_count : 1,
-                              idx, INFMON_FLOW_RULE_SET_MAX,
-                              rule->key_width, &snap_reply);
+                              ctx->worker_count > 0 ? ctx->worker_count : 1, idx,
+                              INFMON_FLOW_RULE_SET_MAX, rule->key_width, &snap_reply);
 
     reply->result = map_snap_result(snap_reply.result);
 
