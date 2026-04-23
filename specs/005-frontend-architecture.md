@@ -342,12 +342,18 @@ socket (`/run/vpp/api.sock`). This replaces the earlier shared-memory
 approach with a simpler, single-channel design.
 
 The dump uses a **lock-free atomic pointer swap** on the data path:
-the control plane allocates a new empty table, atomically swaps the
-table pointer (single `RELEASE` store — effectively zero data-path
-blocking), and enqueues the old table for RCU retirement (5 s grace
-period). The frontend then walks the retired table and receives one
+the control plane allocates a new empty table per worker, atomically
+swaps each worker's table pointer (one `RELEASE` store per worker —
+effectively zero data-path blocking), and enqueues the old per-worker
+tables for RCU retirement (5 s grace period). The frontend then walks
+all per-worker retired tables and receives one
 `infmon_snapshot_inline_details` message per occupied slot, with key
 bytes and counters inline.
+
+Because each VPP worker maintains its own counter table, the same flow
+key may appear in multiple workers' tables. The poller's `decode_snapshot`
+merges these duplicates by raw key bytes: packets and bytes are summed,
+and `last_update` takes the maximum across workers.
 
 The client crate (`ipc`) exposes:
 

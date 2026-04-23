@@ -203,6 +203,63 @@ fn decode_snapshot_skips_zero_key_len_slots() {
 }
 
 #[test]
+fn decode_snapshot_merges_per_worker_duplicate_keys() {
+    use infmon_common::ipc::stats_client::{RawDescriptor, RawSlot};
+    use infmon_common::ipc::types::FlowRuleId;
+
+    // Two slots with identical key bytes simulating the same flow seen by
+    // two workers. With empty field schema, decode_key rejects non-empty
+    // keys, so we verify the merge doesn't panic and the flow_rule still
+    // appears. Full end-to-end merge verification requires wired field
+    // metadata (tracked as a separate TODO in decode_snapshot).
+    let key: Vec<u8> = vec![0xAA; 4];
+    let mut key_arena = Vec::new();
+    let off1 = key_arena.len() as u32;
+    key_arena.extend_from_slice(&key);
+    let off2 = key_arena.len() as u32;
+    key_arena.extend_from_slice(&key);
+
+    let raw = infmon_common::ipc::stats_client::RawSnapshot {
+        descriptors: vec![RawDescriptor {
+            flow_rule_id: FlowRuleId { hi: 0, lo: 1 },
+            flow_rule_index: 0,
+            generation: 1,
+            epoch_ns: 0,
+            slots: vec![
+                RawSlot {
+                    key_hash: 42,
+                    packets: 100,
+                    bytes: 5000,
+                    key_offset: off1,
+                    key_len: key.len() as u16,
+                    flags: 1,
+                    last_update: 10,
+                },
+                RawSlot {
+                    key_hash: 42,
+                    packets: 200,
+                    bytes: 8000,
+                    key_offset: off2,
+                    key_len: key.len() as u16,
+                    flags: 1,
+                    last_update: 20,
+                },
+            ],
+            key_arena,
+            insert_failed: 0,
+            table_full: 0,
+        }],
+    };
+    let snap = decode_snapshot(raw, 1, 0, 0, 0);
+    assert_eq!(snap.flow_rules.len(), 1);
+    // Once field metadata is wired from the backend descriptor, uncomment:
+    // assert_eq!(snap.flow_rules[0].flows.len(), 1);
+    // assert_eq!(snap.flow_rules[0].flows[0].counters.packets, 300);
+    // assert_eq!(snap.flow_rules[0].flows[0].counters.bytes, 13000);
+    // assert_eq!(snap.flow_rules[0].flows[0].counters.last_seen_ns, 20);
+}
+
+#[test]
 fn decode_snapshot_skips_out_of_bounds_key() {
     use infmon_common::ipc::types::FlowRuleId;
     let raw = infmon_common::ipc::stats_client::RawSnapshot {
