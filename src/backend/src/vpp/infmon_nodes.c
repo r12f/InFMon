@@ -355,10 +355,17 @@ static uword infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node, 
     u32 n_left = frame->n_vectors;
     u32 *from = vlib_frame_vector_args(frame);
 
-    /* Load table pointers with ACQUIRE once per frame (§8) */
+    /* Load table pointers with ACQUIRE once per frame (§8) — per-worker */
+    u32 worker_id = vlib_get_thread_index();
+    if (PREDICT_FALSE(worker_id >= INFMON_MAX_WORKERS)) {
+        vlib_node_increment_counter(vm, node->node_index, INFMON_COUNTER_ERROR_DROP,
+                                    frame->n_vectors);
+        vlib_buffer_free(vm, vlib_frame_vector_args(frame), frame->n_vectors);
+        return frame->n_vectors;
+    }
     infmon_counter_table_t *tables[INFMON_MAX_ACTIVE_FLOW_RULES];
     for (uint32_t i = 0; i < INFMON_MAX_ACTIVE_FLOW_RULES; i++)
-        tables[i] = __atomic_load_n(&pm->tables[i], __ATOMIC_ACQUIRE);
+        tables[i] = __atomic_load_n(&pm->tables[worker_id][i], __ATOMIC_ACQUIRE);
 
     /* Bump tick once per frame */
     uint64_t tick = __atomic_fetch_add(&pm->tick, 1, __ATOMIC_RELAXED);
@@ -519,15 +526,33 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
         return clib_error_return(0, "flow_rule_add failed: %d", (int) rc);
     }
 
-    /* Find the rule index to allocate a counter table */
+    /* Find the rule index to allocate per-worker counter tables */
     uint32_t n = infmon_flow_rule_count(infmon_cli_rule_set);
     const infmon_flow_rule_t *added = infmon_flow_rule_get(infmon_cli_rule_set, n - 1);
     if (added) {
         if ((n - 1) < INFMON_MAX_ACTIVE_FLOW_RULES) {
-            infmon_counter_table_t *ct =
-                infmon_counter_table_create(added->max_keys, added->key_width);
-            if (ct)
-                __atomic_store_n(&infmon_plugin_main.tables[n - 1], ct, __ATOMIC_RELEASE);
+            /* NOTE: num_workers is latched from vlib_num_workers()+1 during
+             * infmon_vpp_api_ctx_ensure, which runs post-worker-init.  CLI commands
+             * also execute after workers are active.  If num_workers is 0 (e.g.
+             * startup-config before workers launch — not currently supported),
+             * fall back to 1 so the main thread always gets a table. */
+            uint32_t nw = infmon_plugin_main.num_workers > 0 ? infmon_plugin_main.num_workers : 1;
+            for (uint32_t w = 0; w < nw; w++) {
+                infmon_counter_table_t *ct =
+                    infmon_counter_table_create(added->max_keys, added->key_width);
+                if (ct) {
+                    __atomic_store_n(&infmon_plugin_main.tables[w][n - 1], ct, __ATOMIC_RELEASE);
+                } else {
+                    /* Allocation failed — roll back tables created for workers 0..w-1 */
+                    for (uint32_t rw = 0; rw < w; rw++) {
+                        infmon_counter_table_t *prev = __atomic_exchange_n(
+                            &infmon_plugin_main.tables[rw][n - 1], NULL, __ATOMIC_RELEASE);
+                        if (prev)
+                            infmon_counter_table_destroy(prev);
+                    }
+                    break;
+                }
+            }
         }
     }
 

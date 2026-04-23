@@ -83,9 +83,13 @@ static void infmon_vpp_publish_rules(void)
 
     __atomic_store_n(&pm->flow_rule_set, &infmon_vpp_rule_set_ref, __ATOMIC_RELEASE);
 
-    /* Sync counter-table pointers */
-    for (uint32_t i = 0; i < INFMON_MAX_ACTIVE_FLOW_RULES; i++)
-        __atomic_store_n(&pm->tables[i], ctx->tables[i], __ATOMIC_RELEASE);
+    /* Sync per-worker counter-table pointers */
+    uint32_t nw = ctx->worker_count > 0 ? ctx->worker_count : 1;
+    for (uint32_t w = 0; w < nw; w++)
+        for (uint32_t i = 0; i < INFMON_MAX_ACTIVE_FLOW_RULES; i++)
+            __atomic_store_n(&pm->tables[w][i],
+                             (i < INFMON_FLOW_RULE_SET_MAX) ? ctx->tables[w][i] : NULL,
+                             __ATOMIC_RELEASE);
 }
 
 /**
@@ -106,6 +110,11 @@ static void infmon_vpp_api_ctx_ensure(void)
     infmon_stats_registry_init(&stats_reg, 0);
 
     infmon_api_ctx_init(&infmon_vpp_api_ctx, rs, &stats_reg);
+    /* worker_count includes the main thread (thread 0) + all worker threads. */
+    infmon_vpp_api_ctx.worker_count = vlib_num_workers() + 1;
+
+    /* Also set plugin_main num_workers */
+    infmon_plugin_main.num_workers = vlib_num_workers() + 1;
 
     /* Create a snapshot manager. */
     static infmon_snapshot_mgr_t snap_mgr;
@@ -428,7 +437,7 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
     infmon_api_result_t result =
         infmon_api_snapshot_and_clear(&infmon_vpp_api_ctx, id, &snap_reply);
 
-    if (result != INFMON_API_OK || !snap_reply.retired_table) {
+    if (result != INFMON_API_OK || snap_reply.num_retired == 0) {
         /* Send an empty details message so the client does not hang.
          * Dump handlers cannot use REPLY_MACRO — send a bare message. */
         vl_api_infmon_snapshot_inline_details_t *rmp = vl_msg_api_alloc_zero(sizeof(*rmp));
@@ -440,48 +449,56 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
         return;
     }
 
-    infmon_counter_table_t *tbl = snap_reply.retired_table;
     infmon_stats_descriptor_t *desc = &snap_reply.descriptor;
 
     /*
-     * RCU safety: the retired table is pinned until infmon_api_snap_release()
+     * RCU safety: the retired tables are pinned until infmon_api_snap_release()
      * is called below, so it is safe to iterate for the lifetime of this handler.
+     *
+     * Stream slots from ALL per-worker retired tables.  The frontend merges
+     * entries that share the same key across workers.
      */
-    /* Walk all slots; emit a details message for each occupied one. */
-    for (uint32_t i = 0; i < tbl->num_slots; i++) {
-        infmon_slot_t *slot = &tbl->slots[i];
-        if (slot->flags != INFMON_SLOT_OCCUPIED)
+    for (uint32_t w = 0; w < snap_reply.num_retired; w++) {
+        infmon_counter_table_t *tbl = snap_reply.retired_tables[w];
+        if (!tbl)
             continue;
 
-        const uint8_t *key = infmon_counter_table_key(tbl, slot);
-        uint16_t key_len = key ? slot->key_len : 0;
+        /* Walk all slots; emit a details message for each occupied one. */
+        for (uint32_t i = 0; i < tbl->num_slots; i++) {
+            infmon_slot_t *slot = &tbl->slots[i];
+            if (slot->flags != INFMON_SLOT_OCCUPIED)
+                continue;
 
-        u32 msg_size = sizeof(vl_api_infmon_snapshot_inline_details_t) + key_len;
-        vl_api_infmon_snapshot_inline_details_t *rmp = vl_msg_api_alloc(msg_size);
-        clib_memset(rmp, 0, msg_size);
+            const uint8_t *key = infmon_counter_table_key(tbl, slot);
+            uint16_t key_len = key ? slot->key_len : 0;
 
-        rmp->_vl_msg_id = htons(VL_API_INFMON_SNAPSHOT_INLINE_DETAILS + infmon_msg_id_base);
-        rmp->context = mp->context;
+            u32 msg_size = sizeof(vl_api_infmon_snapshot_inline_details_t) + key_len;
+            vl_api_infmon_snapshot_inline_details_t *rmp = vl_msg_api_alloc(msg_size);
+            clib_memset(rmp, 0, msg_size);
 
-        /* Table metadata. */
-        rmp->flow_rule_id.hi = clib_host_to_net_u64(desc->flow_rule_id.hi);
-        rmp->flow_rule_id.lo = clib_host_to_net_u64(desc->flow_rule_id.lo);
-        rmp->generation = clib_host_to_net_u64(desc->generation);
-        rmp->epoch_ns = clib_host_to_net_u64(desc->epoch_ns);
-        rmp->insert_failed = clib_host_to_net_u64(desc->insert_failed);
-        rmp->table_full = clib_host_to_net_u64(desc->table_full);
+            rmp->_vl_msg_id = htons(VL_API_INFMON_SNAPSHOT_INLINE_DETAILS + infmon_msg_id_base);
+            rmp->context = mp->context;
 
-        /* Slot data. */
-        rmp->key_hash = clib_host_to_net_u64(slot->key_hash);
-        rmp->packets = clib_host_to_net_u64(slot->packets);
-        rmp->bytes = clib_host_to_net_u64(slot->bytes);
-        rmp->last_update = clib_host_to_net_u64(slot->last_update);
-        rmp->key_len = clib_host_to_net_u16(key_len);
-        if (key && key_len > 0)
-            clib_memcpy(rmp->key_data, key, key_len);
+            /* Table metadata. */
+            rmp->flow_rule_id.hi = clib_host_to_net_u64(desc->flow_rule_id.hi);
+            rmp->flow_rule_id.lo = clib_host_to_net_u64(desc->flow_rule_id.lo);
+            rmp->generation = clib_host_to_net_u64(desc->generation);
+            rmp->epoch_ns = clib_host_to_net_u64(desc->epoch_ns);
+            rmp->insert_failed = clib_host_to_net_u64(desc->insert_failed);
+            rmp->table_full = clib_host_to_net_u64(desc->table_full);
 
-        vl_api_send_msg(rp, (u8 *) rmp);
-    }
+            /* Slot data. */
+            rmp->key_hash = clib_host_to_net_u64(slot->key_hash);
+            rmp->packets = clib_host_to_net_u64(slot->packets);
+            rmp->bytes = clib_host_to_net_u64(slot->bytes);
+            rmp->last_update = clib_host_to_net_u64(slot->last_update);
+            rmp->key_len = clib_host_to_net_u16(key_len);
+            if (key && key_len > 0)
+                clib_memcpy(rmp->key_data, key, key_len);
+
+            vl_api_send_msg(rp, (u8 *) rmp);
+        }
+    } /* end per-worker loop */
 }
 
 /* ── Handler: status_dump ────────────────────────────────────────── */

@@ -44,9 +44,13 @@ void infmon_snapshot_mgr_destroy(infmon_snapshot_mgr_t *mgr)
 
     /* Free any retired tables still pending */
     for (uint32_t i = 0; i < INFMON_MAX_RETIRED; i++) {
-        if (mgr->retired[i].pending && mgr->retired[i].table) {
-            infmon_counter_table_destroy(mgr->retired[i].table);
-            mgr->retired[i].table = NULL;
+        if (mgr->retired[i].pending) {
+            for (uint32_t w = 0; w < mgr->retired[i].num_tables; w++) {
+                if (mgr->retired[i].tables[w]) {
+                    infmon_counter_table_destroy(mgr->retired[i].tables[w]);
+                    mgr->retired[i].tables[w] = NULL;
+                }
+            }
             mgr->retired[i].pending = false;
         }
     }
@@ -66,7 +70,8 @@ bool infmon_all_workers_past(const infmon_snapshot_mgr_t *mgr, uint64_t epoch)
 
 /* ── Snapshot and clear ──────────────────────────────────────────── */
 
-void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_t **tables,
+void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_t **tables_flat,
+                               uint32_t tables_stride, uint32_t num_workers,
                                uint32_t flow_rule_index, uint32_t max_flow_rules,
                                uint32_t max_key_width, infmon_snap_reply_t *reply)
 {
@@ -78,10 +83,13 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
         return;
     }
 
-    /* Get the current table */
-    infmon_counter_table_t *old_table = __atomic_load_n(&tables[flow_rule_index], __ATOMIC_ACQUIRE);
+    uint32_t nw = num_workers > 0 ? num_workers : 1;
 
-    if (!old_table) {
+    /* Get the current table from worker 0 to check existence */
+    infmon_counter_table_t *old_table0 =
+        __atomic_load_n(&tables_flat[0 * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
+
+    if (!old_table0) {
         reply->result = INFMON_SNAP_NULL_TABLE;
         return;
     }
@@ -92,38 +100,60 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
         return;
     }
 
-    /* Allocate new empty table with same dimensions */
-    infmon_counter_table_t *new_table =
-        infmon_counter_table_create(old_table->num_slots, max_key_width);
-
-    if (!new_table) {
-        reply->result = INFMON_SNAP_ALLOC_FAILED;
-        return;
+    /* Allocate new tables for all workers, saving old pointers to avoid TOCTOU */
+    infmon_counter_table_t *new_tables[INFMON_MAX_WORKERS] = {0};
+    infmon_counter_table_t *old_tables[INFMON_MAX_WORKERS] = {0};
+    for (uint32_t w = 0; w < nw; w++) {
+        infmon_counter_table_t *old_w =
+            __atomic_load_n(&tables_flat[w * tables_stride + flow_rule_index], __ATOMIC_ACQUIRE);
+        old_tables[w] = old_w;
+        if (!old_w)
+            continue;
+        new_tables[w] = infmon_counter_table_create(old_w->num_slots, max_key_width);
+        if (!new_tables[w]) {
+            /* Cleanup already allocated */
+            for (uint32_t cw = 0; cw < w; cw++) {
+                if (new_tables[cw]) {
+                    infmon_counter_table_destroy(new_tables[cw]);
+                }
+            }
+            reply->result = INFMON_SNAP_ALLOC_FAILED;
+            return;
+        }
     }
 
-    /* Set new table metadata */
-    uint64_t new_gen = old_table->generation + 1;
-    new_table->generation = new_gen;
-
-    /* Capture wall-clock once for both new table and retired entry. */
+    /* Capture wall-clock once for all swaps */
     uint64_t now = mgr->clock_ns();
-    new_table->epoch_ns = now;
 
-    /* Bump global epoch for this swap.
-     * NOT thread-safe: caller must serialize (single control thread). */
+    /* Bump global epoch for this swap */
     uint64_t swap_epoch = ++mgr->global_epoch;
 
-    /*
-     * Atomic pointer swap: RELEASE ensures the new table's contents
-     * (zeroed slots, metadata) are visible before any worker observes
-     * the new pointer.  Workers load with ACQUIRE once per frame.
-     */
-    __atomic_store_n(&tables[flow_rule_index], new_table, __ATOMIC_RELEASE);
+    /* Swap each worker's table (reusing old pointers from allocation pass) */
+    uint64_t gen = 0;
+    bool gen_set = false;
+    for (uint32_t w = 0; w < nw; w++) {
+        if (!old_tables[w] || !new_tables[w])
+            continue;
 
-    /* Enqueue old table for retirement */
+        uint64_t new_gen = old_tables[w]->generation + 1;
+        new_tables[w]->generation = new_gen;
+        new_tables[w]->epoch_ns = now;
+        if (!gen_set) {
+            gen = old_tables[w]->generation;
+            gen_set = true;
+        }
+
+        __atomic_store_n(&tables_flat[w * tables_stride + flow_rule_index], new_tables[w],
+                         __ATOMIC_RELEASE);
+    }
+
+    /* Enqueue one retired entry with all per-worker tables */
     for (uint32_t i = 0; i < INFMON_MAX_RETIRED; i++) {
         if (!mgr->retired[i].pending) {
-            mgr->retired[i].table = old_table;
+            memset(&mgr->retired[i], 0, sizeof(mgr->retired[i]));
+            for (uint32_t w = 0; w < nw; w++)
+                mgr->retired[i].tables[w] = old_tables[w];
+            mgr->retired[i].num_tables = nw;
             mgr->retired[i].swap_epoch = swap_epoch;
             mgr->retired[i].swap_timestamp_ns = now;
             mgr->retired[i].flow_rule_index = flow_rule_index;
@@ -132,13 +162,13 @@ void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_
             break;
         }
     }
-    /* Should be unreachable: retired_count was checked above */
-    /* (If we exit the loop without break, something is out of sync.) */
 
     /* Fill reply */
     reply->result = INFMON_SNAP_OK;
-    reply->retired_table = old_table;
-    reply->retired_generation = old_table->generation;
+    for (uint32_t w = 0; w < nw; w++)
+        reply->retired_tables[w] = old_tables[w];
+    reply->num_retired = nw;
+    reply->retired_generation = gen;
 }
 
 /* ── Retire poll ─────────────────────────────────────────────────── */
@@ -165,8 +195,12 @@ uint32_t infmon_retire_poll(infmon_snapshot_mgr_t *mgr)
             continue;
 
         /* Safe to free */
-        infmon_counter_table_destroy(rt->table);
-        rt->table = NULL;
+        for (uint32_t w = 0; w < rt->num_tables; w++) {
+            if (rt->tables[w]) {
+                infmon_counter_table_destroy(rt->tables[w]);
+                rt->tables[w] = NULL;
+            }
+        }
         rt->pending = false;
         mgr->retired_count--;
         freed++;
