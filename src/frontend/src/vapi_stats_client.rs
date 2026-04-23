@@ -18,6 +18,7 @@ pub enum VapiError {
     ConnectFailed,
     SnapshotFailed(String),
     ListFailed,
+    FlowRuleFailed(String),
 }
 
 impl std::fmt::Display for VapiError {
@@ -26,6 +27,7 @@ impl std::fmt::Display for VapiError {
             VapiError::ConnectFailed => write!(f, "failed to connect to VPP API"),
             VapiError::SnapshotFailed(s) => write!(f, "snapshot_inline_dump failed: {}", s),
             VapiError::ListFailed => write!(f, "list_flow_rules failed"),
+            VapiError::FlowRuleFailed(s) => write!(f, "flow rule operation failed: {}", s),
         }
     }
 }
