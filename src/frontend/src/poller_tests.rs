@@ -259,6 +259,55 @@ fn decode_snapshot_merges_per_worker_duplicate_keys() {
     // assert_eq!(snap.flow_rules[0].flows[0].counters.last_seen_ns, 20);
 }
 
+/// Focused unit test for the HashMap-based per-worker merge logic.
+/// Exercises the merge directly (sum counters, max last_update) without
+/// depending on `decode_key` / field schemas.
+#[test]
+fn merge_duplicate_keys_sums_counters_and_takes_max_last_update() {
+    use std::collections::HashMap;
+
+    // Reproduce the merge logic from decode_snapshot:
+    struct MergedSlot {
+        packets: u64,
+        bytes: u64,
+        last_update: u64,
+    }
+
+    let slots: Vec<(Vec<u8>, u64, u64, u64)> = vec![
+        (vec![1, 2, 3], 100, 5000, 10), // worker 0
+        (vec![1, 2, 3], 200, 8000, 20), // worker 1 (same key)
+        (vec![4, 5, 6], 50, 2000, 15),  // different key
+    ];
+
+    let mut merged: HashMap<Vec<u8>, MergedSlot> = HashMap::new();
+    for (key_bytes, packets, bytes, last_update) in &slots {
+        merged
+            .entry(key_bytes.clone())
+            .and_modify(|m| {
+                m.packets = m.packets.saturating_add(*packets);
+                m.bytes = m.bytes.saturating_add(*bytes);
+                m.last_update = m.last_update.max(*last_update);
+            })
+            .or_insert(MergedSlot {
+                packets: *packets,
+                bytes: *bytes,
+                last_update: *last_update,
+            });
+    }
+
+    assert_eq!(merged.len(), 2, "two distinct keys after merge");
+
+    let k123 = merged.get(&vec![1u8, 2, 3]).expect("key [1,2,3] present");
+    assert_eq!(k123.packets, 300);
+    assert_eq!(k123.bytes, 13000);
+    assert_eq!(k123.last_update, 20);
+
+    let k456 = merged.get(&vec![4u8, 5, 6]).expect("key [4,5,6] present");
+    assert_eq!(k456.packets, 50);
+    assert_eq!(k456.bytes, 2000);
+    assert_eq!(k456.last_update, 15);
+}
+
 #[test]
 fn decode_snapshot_skips_out_of_bounds_key() {
     use infmon_common::ipc::types::FlowRuleId;

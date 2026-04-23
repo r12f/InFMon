@@ -176,7 +176,6 @@ fn decode_snapshot(
             use std::collections::HashMap;
 
             struct MergedSlot {
-                key_bytes: Vec<u8>,
                 packets: u64,
                 bytes: u64,
                 last_update: u64,
@@ -196,14 +195,13 @@ fn decode_snapshot(
                 }
                 let key_bytes = desc.key_arena[start..end].to_vec();
                 merged
-                    .entry(key_bytes.clone())
+                    .entry(key_bytes)
                     .and_modify(|m| {
-                        m.packets += slot.packets;
-                        m.bytes += slot.bytes;
+                        m.packets = m.packets.saturating_add(slot.packets);
+                        m.bytes = m.bytes.saturating_add(slot.bytes);
                         m.last_update = m.last_update.max(slot.last_update);
                     })
                     .or_insert(MergedSlot {
-                        key_bytes,
                         packets: slot.packets,
                         bytes: slot.bytes,
                         last_update: slot.last_update,
@@ -211,9 +209,9 @@ fn decode_snapshot(
             }
 
             let flows = merged
-                .into_values()
-                .filter_map(|m| {
-                    let key = match decode_key(&fields, &m.key_bytes) {
+                .into_iter()
+                .filter_map(|(key_bytes, m)| {
+                    let key = match decode_key(&fields, &key_bytes) {
                         Ok(k) => k,
                         Err(e) => {
                             tracing::warn!("failed to decode flow key: {}", e);
