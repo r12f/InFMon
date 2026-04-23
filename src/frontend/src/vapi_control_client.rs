@@ -62,7 +62,7 @@ impl VapiControlClient {
 
         let eviction = match eviction_policy {
             EvictionPolicy::LruDrop => 0u8,
-            _ => 0u8, // Default to LruDrop for unknown policies
+            _ => panic!("unsupported EvictionPolicy variant: {eviction_policy:?}"),
         };
 
         let mut id_hi: u64 = 0;

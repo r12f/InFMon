@@ -296,6 +296,15 @@ fn handle_flow_rule_add(params: &FlowRuleAddParams, state: &ControlState) -> Res
 }
 
 fn handle_flow_rule_rm(params: &FlowRuleRmParams, state: &ControlState) -> Response {
+    // Check local existence before dispatching backend delete to avoid
+    // removing a rule from the backend when it doesn't exist locally.
+    {
+        let rules = state.flow_rules.read().unwrap_or_else(|e| e.into_inner());
+        if !rules.iter().any(|r| r.name == params.name) {
+            return Response::err(3, format!("flow rule '{}' not found", params.name));
+        }
+    }
+
     // Forward delete to VPP backend via VAPI if available
     #[cfg(feature = "vapi")]
     {
@@ -332,11 +341,7 @@ fn handle_flow_rule_rm(params: &FlowRuleRmParams, state: &ControlState) -> Respo
     }
 
     let mut rules = state.flow_rules.write().unwrap_or_else(|e| e.into_inner());
-    let before = rules.len();
     rules.retain(|r| r.name != params.name);
-    if rules.len() == before {
-        return Response::err(3, format!("flow rule '{}' not found", params.name));
-    }
 
     // Remove from ID map after successful local removal to keep
     // rule_id_map and flow_rules consistent (avoids divergence if
