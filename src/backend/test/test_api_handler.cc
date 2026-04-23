@@ -92,9 +92,9 @@ TEST_F(ApiHandlerTest, AddMultipleThenDeleteFirst)
     ASSERT_NE(found, nullptr);
     EXPECT_STREQ(found->name, "rule_bb");
 
-    /* counter table for rule_bb should have been compacted into slot 0. */
-    EXPECT_NE(ctx_.tables[0], nullptr);
-    EXPECT_EQ(ctx_.tables[1], nullptr);
+    /* counter table for rule_bb should have been compacted into slot 0 (worker 0). */
+    EXPECT_NE(ctx_.tables[0][0], nullptr);
+    EXPECT_EQ(ctx_.tables[0][1], nullptr);
 }
 
 TEST_F(ApiHandlerTest, NullInputsReturnInvalidRule)
@@ -309,9 +309,9 @@ TEST_F(ApiHandlerSnapTest, SnapshotAndClearBasic)
     EXPECT_EQ(reply.descriptor.generation, 0u); /* retired table is gen 0 */
     EXPECT_EQ(reply.descriptor.active, 1u);
 
-    /* New table should be at generation 1. */
-    EXPECT_NE(ctx_.tables[0], nullptr);
-    EXPECT_EQ(ctx_.tables[0]->generation, 1u);
+    /* New table should be at generation 1 (worker 0). */
+    EXPECT_NE(ctx_.tables[0][0], nullptr);
+    EXPECT_EQ(ctx_.tables[0][0]->generation, 1u);
 }
 
 TEST_F(ApiHandlerSnapTest, SnapshotAndClearNotFoundId)
@@ -380,7 +380,7 @@ TEST_F(ApiHandlerSnapTest, SnapshotAndClearMultipleSwaps)
     infmon_api_snapshot_and_clear(&ctx_, id, &reply2);
     ASSERT_EQ(reply2.result, INFMON_API_OK);
     EXPECT_EQ(reply2.descriptor.generation, 1u);
-    EXPECT_EQ(ctx_.tables[0]->generation, 2u);
+    EXPECT_EQ(ctx_.tables[0][0]->generation, 2u);
 }
 
 TEST_F(ApiHandlerSnapTest, AddWithIdPreservesIdAcrossDelete)

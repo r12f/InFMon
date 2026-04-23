@@ -83,9 +83,10 @@ static void infmon_vpp_publish_rules(void)
 
     __atomic_store_n(&pm->flow_rule_set, &infmon_vpp_rule_set_ref, __ATOMIC_RELEASE);
 
-    /* Sync counter-table pointers */
-    for (uint32_t i = 0; i < INFMON_MAX_ACTIVE_FLOW_RULES; i++)
-        __atomic_store_n(&pm->tables[i], ctx->tables[i], __ATOMIC_RELEASE);
+    /* Sync per-worker counter-table pointers */
+    for (uint32_t w = 0; w < INFMON_MAX_WORKERS; w++)
+        for (uint32_t i = 0; i < INFMON_MAX_ACTIVE_FLOW_RULES; i++)
+            __atomic_store_n(&pm->tables[w][i], (i < INFMON_FLOW_RULE_SET_MAX) ? ctx->tables[w][i] : NULL, __ATOMIC_RELEASE);
 }
 
 /**
@@ -106,6 +107,10 @@ static void infmon_vpp_api_ctx_ensure(void)
     infmon_stats_registry_init(&stats_reg, 0);
 
     infmon_api_ctx_init(&infmon_vpp_api_ctx, rs, &stats_reg);
+    infmon_vpp_api_ctx.worker_count = vlib_num_workers() + 1;
+
+    /* Also set plugin_main num_workers */
+    infmon_plugin_main.num_workers = vlib_num_workers() + 1;
 
     /* Create a snapshot manager. */
     static infmon_snapshot_mgr_t snap_mgr;
@@ -428,7 +433,7 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
     infmon_api_result_t result =
         infmon_api_snapshot_and_clear(&infmon_vpp_api_ctx, id, &snap_reply);
 
-    if (result != INFMON_API_OK || !snap_reply.retired_table) {
+    if (result != INFMON_API_OK || snap_reply.num_retired == 0) {
         /* Send an empty details message so the client does not hang.
          * Dump handlers cannot use REPLY_MACRO — send a bare message. */
         vl_api_infmon_snapshot_inline_details_t *rmp = vl_msg_api_alloc_zero(sizeof(*rmp));
@@ -440,13 +445,19 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
         return;
     }
 
-    infmon_counter_table_t *tbl = snap_reply.retired_table;
     infmon_stats_descriptor_t *desc = &snap_reply.descriptor;
 
     /*
-     * RCU safety: the retired table is pinned until infmon_api_snap_release()
+     * RCU safety: the retired tables are pinned until infmon_api_snap_release()
      * is called below, so it is safe to iterate for the lifetime of this handler.
+     *
+     * Stream slots from ALL per-worker retired tables.  The frontend merges
+     * entries that share the same key across workers.
      */
+    for (uint32_t w = 0; w < snap_reply.num_retired; w++) {
+        infmon_counter_table_t *tbl = snap_reply.retired_tables[w];
+        if (!tbl) continue;
+
     /* Walk all slots; emit a details message for each occupied one. */
     for (uint32_t i = 0; i < tbl->num_slots; i++) {
         infmon_slot_t *slot = &tbl->slots[i];
@@ -482,6 +493,7 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
 
         vl_api_send_msg(rp, (u8 *) rmp);
     }
+    } /* end per-worker loop */
 }
 
 /* ── Handler: status_dump ────────────────────────────────────────── */

@@ -46,7 +46,7 @@ typedef struct {
     infmon_snapshot_mgr_t *snap_mgr; /**< Optional; required for snapshot_and_clear. */
     /* private: Per-rule counter tables, indexed by rule position in the set.
      * Managed internally by add/del; caller must not touch. */
-    infmon_counter_table_t *tables[INFMON_FLOW_RULE_SET_MAX];
+    infmon_counter_table_t *tables[INFMON_MAX_WORKERS][INFMON_FLOW_RULE_SET_MAX];
     /* Per-rule UUID, indexed in parallel with tables[]. */
     infmon_flow_rule_id_t flow_rule_ids[INFMON_FLOW_RULE_SET_MAX];
     /* Per-worker status counters (set by caller, read by infmon_api_status). */
@@ -64,7 +64,8 @@ typedef struct {
     infmon_api_result_t result;
     infmon_stats_descriptor_t descriptor; /**< Populated on success. */
     infmon_counter_table_t
-        *retired_table; /**< Direct pointer to the retired table (VPP-internal). */
+        *retired_tables[INFMON_MAX_WORKERS]; /**< Per-worker retired tables. */
+    uint32_t num_retired;                    /**< Number of retired tables. */
 } infmon_api_snap_reply_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */

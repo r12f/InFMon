@@ -25,6 +25,7 @@
 #include "infmon/counter_table.h"
 #include "infmon/erspan_parser.h"
 #include "infmon/flow_rule.h"
+#include "infmon/snapshot.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -178,8 +179,9 @@ typedef struct {
 
 typedef struct {
     const infmon_flow_rule_set_ref_t *flow_rule_set;
-    infmon_counter_table_t *tables[INFMON_MAX_ACTIVE_FLOW_RULES];
+    infmon_counter_table_t *tables[INFMON_MAX_WORKERS][INFMON_MAX_ACTIVE_FLOW_RULES];
     uint64_t tick;
+    uint32_t num_workers; /* number of active workers */
 } infmon_plugin_main_t;
 
 /* ── Key encoding buffer (per-worker, reused across packets) ─────── */

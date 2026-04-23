@@ -96,10 +96,12 @@ void infmon_api_ctx_destroy(infmon_api_ctx_t *ctx)
 {
     if (!ctx)
         return;
-    for (uint32_t i = 0; i < INFMON_FLOW_RULE_SET_MAX; i++) {
-        if (ctx->tables[i]) {
-            infmon_counter_table_destroy(ctx->tables[i]);
-            ctx->tables[i] = NULL;
+    for (uint32_t w = 0; w < INFMON_MAX_WORKERS; w++) {
+        for (uint32_t i = 0; i < INFMON_FLOW_RULE_SET_MAX; i++) {
+            if (ctx->tables[w][i]) {
+                infmon_counter_table_destroy(ctx->tables[w][i]);
+                ctx->tables[w][i] = NULL;
+            }
         }
     }
     memset(ctx, 0, sizeof(*ctx));
@@ -137,14 +139,21 @@ static infmon_api_result_t flow_rule_add_internal(infmon_api_ctx_t *ctx,
         return INFMON_API_ERR_INTERNAL;
     }
 
-    /* 4. Create a counter table. */
-    infmon_counter_table_t *ct =
-        infmon_counter_table_create(inserted->max_keys, inserted->key_width);
-    if (!ct) {
-        infmon_flow_rule_rm(ctx->rule_set, rule->name);
-        return INFMON_API_ERR_INTERNAL;
+    /* 4. Create counter tables for each worker. */
+    uint32_t nw = ctx->worker_count > 0 ? ctx->worker_count : 1;
+    for (uint32_t w = 0; w < nw; w++) {
+        infmon_counter_table_t *ct =
+            infmon_counter_table_create(inserted->max_keys, inserted->key_width);
+        if (!ct) {
+            for (uint32_t cw = 0; cw < w; cw++) {
+                infmon_counter_table_destroy(ctx->tables[cw][idx]);
+                ctx->tables[cw][idx] = NULL;
+            }
+            infmon_flow_rule_rm(ctx->rule_set, rule->name);
+            return INFMON_API_ERR_INTERNAL;
+        }
+        ctx->tables[w][idx] = ct;
     }
-    ctx->tables[idx] = ct;
 
     /* 5. Record the flow_rule_id if provided, otherwise zero out the slot
      *    to avoid stale IDs from a previous occupant of this index. */
@@ -184,19 +193,24 @@ infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *
     if (rr != INFMON_FLOW_RULE_OK)
         return map_rule_result(rr);
 
-    /* 3. Destroy the counter table (rule is already gone, safe to free). */
-    if (ctx->tables[idx]) {
-        infmon_counter_table_destroy(ctx->tables[idx]);
-        ctx->tables[idx] = NULL;
+    /* 3. Destroy the counter tables for all workers. */
+    uint32_t nw = ctx->worker_count > 0 ? ctx->worker_count : 1;
+    for (uint32_t w = 0; w < nw; w++) {
+        if (ctx->tables[w][idx]) {
+            infmon_counter_table_destroy(ctx->tables[w][idx]);
+            ctx->tables[w][idx] = NULL;
+        }
     }
 
     /* 4. Compact the tables and flow_rule_ids arrays (rm shifts entries in the set). */
     uint32_t count = infmon_flow_rule_count(ctx->rule_set);
     for (uint32_t i = idx; i < count; i++) {
-        ctx->tables[i] = ctx->tables[i + 1];
+        for (uint32_t w = 0; w < INFMON_MAX_WORKERS; w++)
+            ctx->tables[w][i] = ctx->tables[w][i + 1];
         ctx->flow_rule_ids[i] = ctx->flow_rule_ids[i + 1];
     }
-    ctx->tables[count] = NULL;
+    for (uint32_t w = 0; w < INFMON_MAX_WORKERS; w++)
+        ctx->tables[w][count] = NULL;
     memset(&ctx->flow_rule_ids[count], 0, sizeof(ctx->flow_rule_ids[0]));
 
     return INFMON_API_OK;
@@ -295,7 +309,9 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
         reply->result = INFMON_API_ERR_INTERNAL;
         return INFMON_API_ERR_INTERNAL;
     }
-    infmon_snapshot_and_clear(ctx->snap_mgr, ctx->tables, idx, INFMON_FLOW_RULE_SET_MAX,
+    infmon_snapshot_and_clear(ctx->snap_mgr, &ctx->tables[0][0], INFMON_FLOW_RULE_SET_MAX,
+                              ctx->worker_count > 0 ? ctx->worker_count : 1,
+                              idx, INFMON_FLOW_RULE_SET_MAX,
                               rule->key_width, &snap_reply);
 
     reply->result = map_snap_result(snap_reply.result);
@@ -303,8 +319,8 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
     if (snap_reply.result != INFMON_SNAP_OK)
         return reply->result;
 
-    /* Build the descriptor from the retired table. */
-    infmon_counter_table_t *retired = snap_reply.retired_table;
+    /* Build the descriptor from the first retired table. */
+    infmon_counter_table_t *retired = snap_reply.retired_tables[0];
     infmon_stats_descriptor_t *desc = &reply->descriptor;
 
     desc->flow_rule_id = flow_rule_id;
@@ -323,8 +339,10 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
     desc->table_full = retired->table_full;
     desc->active = 1;
 
-    /* Expose the retired table pointer for inline callers. */
-    reply->retired_table = retired;
+    /* Expose the retired tables for inline callers. */
+    for (uint32_t w = 0; w < snap_reply.num_retired; w++)
+        reply->retired_tables[w] = snap_reply.retired_tables[w];
+    reply->num_retired = snap_reply.num_retired;
 
     return INFMON_API_OK;
 }

@@ -46,7 +46,8 @@ typedef struct {
 /* ── Retired table descriptor ────────────────────────────────────── */
 
 typedef struct {
-    infmon_counter_table_t *table; /**< The retired table. */
+    infmon_counter_table_t *tables[INFMON_MAX_WORKERS]; /**< Retired tables, one per worker. */
+    uint32_t num_tables;           /**< Number of workers that had tables. */
     uint64_t swap_epoch;           /**< Global epoch at time of swap. */
     uint64_t swap_timestamp_ns;    /**< Wall-clock timestamp of swap. */
     uint32_t flow_rule_index;      /**< Which flow_rule this belonged to. */
@@ -96,8 +97,9 @@ typedef enum {
 
 typedef struct {
     infmon_snap_result_t result;
-    infmon_counter_table_t *retired_table; /**< The old table (generation G). */
-    uint64_t retired_generation;           /**< Generation of the retired table. */
+    infmon_counter_table_t *retired_tables[INFMON_MAX_WORKERS]; /**< Per-worker retired tables. */
+    uint32_t num_retired;              /**< Number of retired tables (= num_workers). */
+    uint64_t retired_generation;       /**< Generation of the retired tables. */
 } infmon_snap_reply_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
@@ -153,13 +155,16 @@ static inline uint64_t infmon_worker_epoch_read(const infmon_snapshot_mgr_t *mgr
  * 4. Enqueues the old table for RCU retirement.
  *
  * @param mgr              Snapshot manager.
- * @param tables           Pointer to the tables array (e.g. pm->tables).
+ * @param tables_flat      Pointer to first element of 2D tables array.
+ * @param tables_stride    Number of flow rule slots per worker row.
+ * @param num_workers      Number of workers (rows in tables).
  * @param flow_rule_index  Index of the flow_rule to snapshot.
  * @param max_flow_rules   Size of the tables array.
  * @param max_key_width    Key width for the new table (same as old).
  * @param reply            Output: result + retired table info.
  */
-void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_t **tables,
+void infmon_snapshot_and_clear(infmon_snapshot_mgr_t *mgr, infmon_counter_table_t **tables_flat,
+                               uint32_t tables_stride, uint32_t num_workers,
                                uint32_t flow_rule_index, uint32_t max_flow_rules,
                                uint32_t max_key_width, infmon_snap_reply_t *reply);
 
