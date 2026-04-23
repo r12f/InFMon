@@ -146,6 +146,10 @@ impl VapiStatsClient {
             // Merge entries that share the same flow key across workers.
             // With per-worker counter tables, the same key can appear once per
             // worker. We merge: sum packets/bytes, max last_update.
+            // `first` captures snapshot-level metadata (generation, epoch_ns,
+            // insert_failed, table_full) from entries[0] — these fields are
+            // identical across workers for the same flow rule, so any entry
+            // would do.
             let first = &entries[0];
             let merged = merge_worker_entries(&entries);
 
@@ -174,8 +178,14 @@ impl VapiStatsClient {
                 epoch_ns: first.epoch_ns,
                 slots,
                 key_arena,
-                insert_failed: first.insert_failed,
-                table_full: first.table_full,
+                insert_failed: merged
+                    .iter()
+                    .map(|e| e.insert_failed)
+                    .fold(0u64, u64::saturating_add),
+                table_full: merged
+                    .iter()
+                    .map(|e| e.table_full)
+                    .fold(0u64, u64::saturating_add),
             });
         }
 
@@ -202,8 +212,8 @@ fn merge_worker_entries(entries: &[CollectedEntry]) -> Vec<CollectedEntry> {
     use std::collections::HashMap;
 
     // Map from (key_hash, key_bytes) → index into `merged`.
-    let mut index_map: HashMap<(u64, &[u8]), usize> = HashMap::new();
-    let mut merged: Vec<CollectedEntry> = Vec::new();
+    let mut index_map: HashMap<(u64, &[u8]), usize> = HashMap::with_capacity(entries.len());
+    let mut merged: Vec<CollectedEntry> = Vec::with_capacity(entries.len());
 
     for e in entries {
         let identity = (e.key_hash, e.key_bytes.as_slice());
@@ -214,6 +224,8 @@ fn merge_worker_entries(entries: &[CollectedEntry]) -> Vec<CollectedEntry> {
             if e.last_update > m.last_update {
                 m.last_update = e.last_update;
             }
+            m.insert_failed = m.insert_failed.saturating_add(e.insert_failed);
+            m.table_full = m.table_full.saturating_add(e.table_full);
         } else {
             let idx = merged.len();
             index_map.insert(identity, idx);
