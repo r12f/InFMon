@@ -219,14 +219,9 @@ int infmon_vapi_list_flow_rules(void *handle, void (*cb)(uint64_t hi, uint64_t l
  * On success, writes the assigned flow_rule_id into *out_id_hi / *out_id_lo.
  * Returns 0 on success, negative retval on error.
  */
-int infmon_vapi_flow_rule_add(void *handle,
-                               const char *name,
-                               const uint8_t *fields,
-                               uint32_t field_count,
-                               uint32_t max_keys,
-                               uint8_t eviction_policy,
-                               uint64_t *out_id_hi,
-                               uint64_t *out_id_lo)
+int infmon_vapi_flow_rule_add(void *handle, const char *name, const uint8_t *fields,
+                              uint32_t field_count, uint32_t max_keys, uint8_t eviction_policy,
+                              uint64_t *out_id_hi, uint64_t *out_id_lo)
 {
     if (!handle || !name)
         return -1;
@@ -254,8 +249,7 @@ int infmon_vapi_flow_rule_add(void *handle,
         return -1;
 
     /* The reply is written back into msg by the VAPI blocking call */
-    vapi_msg_infmon_flow_rule_add_reply *rmp =
-        (vapi_msg_infmon_flow_rule_add_reply *) msg;
+    vapi_msg_infmon_flow_rule_add_reply *rmp = (vapi_msg_infmon_flow_rule_add_reply *) msg;
     int32_t retval = ntohl(rmp->payload.retval);
 
     if (retval != 0)
@@ -293,8 +287,7 @@ int infmon_vapi_flow_rule_del(void *handle, uint64_t id_hi, uint64_t id_lo)
     if (rv != VAPI_OK)
         return -1;
 
-    vapi_msg_infmon_flow_rule_del_reply *rmp =
-        (vapi_msg_infmon_flow_rule_del_reply *) msg;
+    vapi_msg_infmon_flow_rule_del_reply *rmp = (vapi_msg_infmon_flow_rule_del_reply *) msg;
     int32_t retval = ntohl(rmp->payload.retval);
 
     return retval;

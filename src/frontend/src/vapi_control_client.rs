@@ -57,6 +57,7 @@ impl VapiControlClient {
 
         let eviction = match eviction_policy {
             EvictionPolicy::LruDrop => 0u8,
+            _ => 0u8, // Default to LruDrop for unknown policies
         };
 
         let mut id_hi: u64 = 0;
@@ -122,5 +123,6 @@ fn field_to_u8(f: Field) -> u8 {
         Field::MirrorSrcIp => 4,
         Field::SrcPort => 5,
         Field::DstPort => 6,
+        _ => 0, // Default to SrcIp for unknown fields
     }
 }
