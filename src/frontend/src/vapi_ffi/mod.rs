@@ -2,7 +2,7 @@
 // Copyright 2026 Riff
 //
 // Rust FFI bindings for the VAPI-based stats client.
-// Only compiled when cfg(feature = "vapi") is set by build.rs.
+// VAPI FFI bindings — compiled when libvapiclient and infmon.api.vapi.h are available.
 
 #![allow(non_camel_case_types)]
 
@@ -51,4 +51,15 @@ extern "C" {
         cb: infmon_ffi_list_cb,
         ctx: *mut c_void,
     ) -> c_int;
+    pub fn infmon_vapi_flow_rule_add(
+        handle: *mut c_void,
+        name: *const c_char,
+        fields: *const u8,
+        field_count: u32,
+        max_keys: u32,
+        eviction_policy: u8,
+        out_id_hi: *mut u64,
+        out_id_lo: *mut u64,
+    ) -> c_int;
+    pub fn infmon_vapi_flow_rule_del(handle: *mut c_void, id_hi: u64, id_lo: u64) -> c_int;
 }

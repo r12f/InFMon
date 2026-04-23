@@ -12,6 +12,13 @@ use infmon_common::config::model::FlowRule;
 use infmon_common::ipc::protocol::*;
 use infmon_common::ipc::types::FlowStatsSnapshot;
 
+#[cfg(feature = "vapi")]
+use crate::vapi_control_client::VapiControlClient;
+#[cfg(feature = "vapi")]
+use infmon_common::ipc::types::FlowRuleId;
+#[cfg(feature = "vapi")]
+use std::collections::HashMap;
+
 /// Shared state accessible to the control server.
 ///
 /// **Lock ordering invariant**: always acquire `flow_rules` before
@@ -23,6 +30,12 @@ pub struct ControlState {
     pub latest_snapshot: Mutex<Option<Arc<FlowStatsSnapshot>>>,
     /// Monotonic counter for generating unique flow rule IDs.
     next_rule_id: AtomicU64,
+    /// Optional VAPI control client for forwarding CRUD to the VPP backend.
+    #[cfg(feature = "vapi")]
+    pub vapi_control: Option<Mutex<VapiControlClient>>,
+    /// Maps flow rule name → backend-assigned ID (populated when VAPI is used).
+    #[cfg(feature = "vapi")]
+    pub rule_id_map: Mutex<HashMap<String, FlowRuleId>>,
 }
 
 impl ControlState {
@@ -32,6 +45,23 @@ impl ControlState {
             flow_rules: RwLock::new(initial_rules),
             latest_snapshot: Mutex::new(None),
             next_rule_id: AtomicU64::new(initial_count + 1),
+            #[cfg(feature = "vapi")]
+            vapi_control: None,
+            #[cfg(feature = "vapi")]
+            rule_id_map: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Create a ControlState with a VAPI control client for backend forwarding.
+    #[cfg(feature = "vapi")]
+    pub fn with_vapi(initial_rules: Vec<FlowRule>, client: VapiControlClient) -> Self {
+        let initial_count = initial_rules.len() as u64;
+        Self {
+            flow_rules: RwLock::new(initial_rules),
+            latest_snapshot: Mutex::new(None),
+            next_rule_id: AtomicU64::new(initial_count + 1),
+            vapi_control: Some(Mutex::new(client)),
+            rule_id_map: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -211,22 +241,118 @@ fn handle_flow_rule_add(params: &FlowRuleAddParams, state: &ControlState) -> Res
         return Response::err(6, format!("flow rule '{}' already exists", rule.name));
     }
 
-    rules.push(rule);
+    // Forward to VPP backend via VAPI if available
+    #[cfg(feature = "vapi")]
+    let id_str = {
+        if let Some(ref vapi_mutex) = state.vapi_control {
+            let vapi = vapi_mutex.lock().unwrap_or_else(|e| e.into_inner());
+            match vapi.flow_rule_add(
+                &rule.name,
+                &rule.fields,
+                rule.max_keys,
+                rule.eviction_policy,
+            ) {
+                Ok(id) => {
+                    tracing::info!(
+                        "flow rule '{}' added to backend (id={:016x}-{:016x})",
+                        rule.name,
+                        id.hi,
+                        id.lo
+                    );
+                    let id_str = format!("{:016x}-{:016x}", id.hi, id.lo);
+                    // Store name → ID mapping for later deletion
+                    let mut map = state.rule_id_map.lock().unwrap_or_else(|e| e.into_inner());
+                    map.insert(rule.name.clone(), id);
+                    rules.push(rule);
+                    id_str
+                }
+                Err(e) => {
+                    return Response::err(
+                        7,
+                        format!("backend rejected flow rule '{}': {e}", params.name),
+                    );
+                }
+            }
+        } else {
+            // No VAPI client — local-only mode
+            rules.push(rule);
+            let seq = state
+                .next_rule_id
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            format!("{:016x}-{:016x}", seq, 0u64)
+        }
+    };
 
-    let seq = state
-        .next_rule_id
-        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let id = format!("{:016x}-{:016x}", seq, 0u64);
-    Response::ok(ResponseData::FlowRuleId(FlowRuleIdData { id }))
+    #[cfg(not(feature = "vapi"))]
+    let id_str = {
+        rules.push(rule);
+        let seq = state
+            .next_rule_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        format!("{:016x}-{:016x}", seq, 0u64)
+    };
+
+    Response::ok(ResponseData::FlowRuleId(FlowRuleIdData { id: id_str }))
 }
 
 fn handle_flow_rule_rm(params: &FlowRuleRmParams, state: &ControlState) -> Response {
-    let mut rules = state.flow_rules.write().unwrap_or_else(|e| e.into_inner());
-    let before = rules.len();
-    rules.retain(|r| r.name != params.name);
-    if rules.len() == before {
-        return Response::err(3, format!("flow rule '{}' not found", params.name));
+    // Check local existence before dispatching backend delete to avoid
+    // removing a rule from the backend when it doesn't exist locally.
+    {
+        let rules = state.flow_rules.read().unwrap_or_else(|e| e.into_inner());
+        if !rules.iter().any(|r| r.name == params.name) {
+            return Response::err(3, format!("flow rule '{}' not found", params.name));
+        }
     }
+
+    // Forward delete to VPP backend via VAPI if available
+    #[cfg(feature = "vapi")]
+    {
+        if let Some(ref vapi_mutex) = state.vapi_control {
+            let id = {
+                let map = state.rule_id_map.lock().unwrap_or_else(|e| e.into_inner());
+                map.get(&params.name).cloned()
+            };
+            match id {
+                Some(rule_id) => {
+                    let vapi = vapi_mutex.lock().unwrap_or_else(|e| e.into_inner());
+                    if let Err(e) = vapi.flow_rule_del(&rule_id) {
+                        return Response::err(
+                            7,
+                            format!("backend failed to delete flow rule '{}': {e}", params.name),
+                        );
+                    }
+                    tracing::info!(
+                        "flow rule '{}' deleted from backend (id={:016x}-{:016x})",
+                        params.name,
+                        rule_id.hi,
+                        rule_id.lo
+                    );
+                }
+                None => {
+                    // Rule not in ID map — may not have been added via VAPI
+                    tracing::warn!(
+                        "flow rule '{}' has no backend ID, removing locally only",
+                        params.name
+                    );
+                }
+            }
+        }
+    }
+
+    let mut rules = state.flow_rules.write().unwrap_or_else(|e| e.into_inner());
+    rules.retain(|r| r.name != params.name);
+
+    // Remove from ID map after successful local removal
+    #[cfg(feature = "vapi")]
+    {
+        state
+            .rule_id_map
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&params.name);
+    }
+
     Response::ok_empty()
 }
 

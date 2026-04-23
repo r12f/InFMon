@@ -24,7 +24,7 @@ pub type SnapshotSender = std::sync::mpsc::SyncSender<Arc<FlowStatsSnapshot>>;
 /// Configuration for the poller thread.
 #[derive(Debug, Clone)]
 pub struct PollerConfig {
-    /// Path to the VPP stats segment socket.
+    /// Path to the VPP API socket.
     pub stats_socket: PathBuf,
     /// Polling interval (default: 1000 ms).
     pub interval: Duration,
@@ -33,7 +33,7 @@ pub struct PollerConfig {
 impl Default for PollerConfig {
     fn default() -> Self {
         Self {
-            stats_socket: PathBuf::from("/run/vpp/stats.sock"),
+            stats_socket: PathBuf::from("/run/vpp/api.sock"),
             interval: Duration::from_millis(1000),
         }
     }
@@ -92,6 +92,7 @@ pub fn spawn(config: PollerConfig, senders: Vec<SnapshotSender>) -> PollerHandle
 // ── internals ──────────────────────────────────────────────────────
 
 /// Read monotonic clock in nanoseconds.
+#[cfg(any(feature = "vapi", test))]
 fn monotonic_ns() -> u64 {
     let mut ts = libc::timespec {
         tv_sec: 0,
@@ -109,6 +110,7 @@ fn monotonic_ns() -> u64 {
 }
 
 /// Read wall-clock (CLOCK_REALTIME) in nanoseconds.
+#[cfg(any(feature = "vapi", test))]
 fn wall_clock_ns() -> u64 {
     let mut ts = libc::timespec {
         tv_sec: 0,
@@ -138,6 +140,7 @@ fn try_connect_vapi() -> Option<VapiStatsClient> {
 }
 
 /// Decode a `RawSnapshot` into a `FlowStatsSnapshot`.
+#[cfg(any(feature = "vapi", test))]
 fn decode_snapshot(
     raw: infmon_common::ipc::stats_client::RawSnapshot,
     tick_id: u64,
@@ -226,17 +229,20 @@ fn decode_snapshot(
 }
 
 /// Main poller loop.
+
 fn run_loop(
     config: &PollerConfig,
     senders: &[SnapshotSender],
     stop: &std::sync::atomic::AtomicBool,
 ) {
-    let _ = &config.stats_socket; // unused in VAPI mode
     let mut client: Option<VapiStatsClient> = None;
     let mut tick_id: u64 = 0;
     let mut prev_mono: u64 = 0;
     let mut backoff = Duration::from_millis(100);
     let max_backoff = Duration::from_secs(5);
+    // Shorter than the old 30s ceiling — VAPI reconnects are lightweight
+    // (just a Unix-socket connect + app-attach handshake), so we can retry
+    // more aggressively without hammering VPP.
 
     while !stop.load(std::sync::atomic::Ordering::Acquire) {
         let tick_start = monotonic_ns();
@@ -291,6 +297,19 @@ fn run_loop(
     }
 
     tracing::info!("poller stopped after {} ticks", tick_id);
+}
+
+/// Main poller loop (stub — VAPI not available at build time).
+#[cfg(not(feature = "vapi"))]
+fn run_loop(
+    _config: &PollerConfig,
+    _senders: &[SnapshotSender],
+    stop: &std::sync::atomic::AtomicBool,
+) {
+    tracing::warn!("VAPI not available — poller will idle");
+    while !stop.load(std::sync::atomic::Ordering::Acquire) {
+        sleep_interruptible(Duration::from_secs(1), stop);
+    }
 }
 
 /// Sleep for `dur`, but wake early if `stop` is set.
