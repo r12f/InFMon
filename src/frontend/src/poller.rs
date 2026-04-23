@@ -1,6 +1,6 @@
 //! Poller thread: drives the 1 Hz tick loop.
 //!
-//! The poller owns the [`VapiStatsClient`] and on each tick:
+//! The poller owns the `VapiStatsClient` and on each tick:
 //! 1. Reads and clears the counters via `snapshot_and_clear` (VAPI).
 //! 2. Decodes the raw snapshot into a [`FlowStatsSnapshot`].
 //! 3. Wraps it in `Arc` and fans it out to exporter channels.
