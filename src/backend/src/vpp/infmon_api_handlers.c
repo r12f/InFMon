@@ -84,7 +84,8 @@ static void infmon_vpp_publish_rules(void)
     __atomic_store_n(&pm->flow_rule_set, &infmon_vpp_rule_set_ref, __ATOMIC_RELEASE);
 
     /* Sync per-worker counter-table pointers */
-    for (uint32_t w = 0; w < INFMON_MAX_WORKERS; w++)
+    uint32_t nw = ctx->worker_count > 0 ? ctx->worker_count : 1;
+    for (uint32_t w = 0; w < nw; w++)
         for (uint32_t i = 0; i < INFMON_MAX_ACTIVE_FLOW_RULES; i++)
             __atomic_store_n(&pm->tables[w][i],
                              (i < INFMON_FLOW_RULE_SET_MAX) ? ctx->tables[w][i] : NULL,

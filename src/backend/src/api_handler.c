@@ -205,11 +205,11 @@ infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *
     /* 4. Compact the tables and flow_rule_ids arrays (rm shifts entries in the set). */
     uint32_t count = infmon_flow_rule_count(ctx->rule_set);
     for (uint32_t i = idx; i < count; i++) {
-        for (uint32_t w = 0; w < INFMON_MAX_WORKERS; w++)
+        for (uint32_t w = 0; w < nw; w++)
             ctx->tables[w][i] = ctx->tables[w][i + 1];
         ctx->flow_rule_ids[i] = ctx->flow_rule_ids[i + 1];
     }
-    for (uint32_t w = 0; w < INFMON_MAX_WORKERS; w++)
+    for (uint32_t w = 0; w < nw; w++)
         ctx->tables[w][count] = NULL;
     memset(&ctx->flow_rule_ids[count], 0, sizeof(ctx->flow_rule_ids[0]));
 

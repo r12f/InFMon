@@ -357,6 +357,12 @@ static uword infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node, 
 
     /* Load table pointers with ACQUIRE once per frame (§8) — per-worker */
     u32 worker_id = vlib_get_thread_index();
+    if (PREDICT_FALSE(worker_id >= INFMON_MAX_WORKERS)) {
+        vlib_node_increment_counter(vm, node->node_index, INFMON_COUNTER_ERROR_DROP,
+                                    frame->n_vectors);
+        vlib_buffer_free(vm, vlib_frame_vector_args(frame), frame->n_vectors);
+        return frame->n_vectors;
+    }
     infmon_counter_table_t *tables[INFMON_MAX_ACTIVE_FLOW_RULES];
     for (uint32_t i = 0; i < INFMON_MAX_ACTIVE_FLOW_RULES; i++)
         tables[i] = __atomic_load_n(&pm->tables[worker_id][i], __ATOMIC_ACQUIRE);
@@ -529,8 +535,18 @@ static clib_error_t *infmon_flow_rule_add_command_fn(CLIB_UNUSED(vlib_main_t *vm
             for (uint32_t w = 0; w < nw; w++) {
                 infmon_counter_table_t *ct =
                     infmon_counter_table_create(added->max_keys, added->key_width);
-                if (ct)
+                if (ct) {
                     __atomic_store_n(&infmon_plugin_main.tables[w][n - 1], ct, __ATOMIC_RELEASE);
+                } else {
+                    /* Allocation failed — roll back tables created for workers 0..w-1 */
+                    for (uint32_t rw = 0; rw < w; rw++) {
+                        infmon_counter_table_t *prev = __atomic_exchange_n(
+                            &infmon_plugin_main.tables[rw][n - 1], NULL, __ATOMIC_RELEASE);
+                        if (prev)
+                            infmon_counter_table_destroy(prev);
+                    }
+                    break;
+                }
             }
         }
     }
