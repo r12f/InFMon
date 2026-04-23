@@ -252,7 +252,7 @@ int infmon_vapi_flow_rule_add(void *handle, const char *name, const uint8_t *fie
     msg->payload.eviction_policy = eviction_policy;
 
     /* Send as blocking request */
-    vapi_error_e rv = vapi_infmon_flow_rule_add(ctx, msg);
+    vapi_error_e rv = vapi_infmon_flow_rule_add(ctx, msg, NULL, NULL);
     if (rv != VAPI_OK)
         return -1;
 
@@ -295,7 +295,7 @@ int infmon_vapi_flow_rule_del(void *handle, uint64_t id_hi, uint64_t id_lo)
     msg->payload.flow_rule_id.hi = htobe64(id_hi);
     msg->payload.flow_rule_id.lo = htobe64(id_lo);
 
-    vapi_error_e rv = vapi_infmon_flow_rule_del(ctx, msg);
+    vapi_error_e rv = vapi_infmon_flow_rule_del(ctx, msg, NULL, NULL);
     if (rv != VAPI_OK)
         return -1;
 
