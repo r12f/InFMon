@@ -211,3 +211,91 @@ int infmon_vapi_list_flow_rules(void *handle, void (*cb)(uint64_t hi, uint64_t l
 
     return (rv == VAPI_OK) ? 0 : -1;
 }
+
+/* ── flow_rule_add ────────────────────────────────────────────────── */
+
+/**
+ * Add a flow rule to the VPP backend.
+ * On success, writes the assigned flow_rule_id into *out_id_hi / *out_id_lo.
+ * Returns 0 on success, negative retval on error.
+ */
+int infmon_vapi_flow_rule_add(void *handle,
+                               const char *name,
+                               const uint8_t *fields,
+                               uint32_t field_count,
+                               uint32_t max_keys,
+                               uint8_t eviction_policy,
+                               uint64_t *out_id_hi,
+                               uint64_t *out_id_lo)
+{
+    if (!handle || !name)
+        return -1;
+
+    vapi_ctx_t ctx = (vapi_ctx_t) handle;
+
+    vapi_msg_infmon_flow_rule_add *msg = vapi_alloc_infmon_flow_rule_add(ctx);
+    if (!msg)
+        return -1;
+
+    /* Fill payload */
+    memset(msg->payload.name, 0, sizeof(msg->payload.name));
+    strncpy((char *) msg->payload.name, name, sizeof(msg->payload.name) - 1);
+
+    msg->payload.field_count = htonl(field_count);
+    for (uint32_t i = 0; i < field_count && i < 8; i++)
+        msg->payload.fields[i] = fields[i];
+
+    msg->payload.max_keys = htonl(max_keys);
+    msg->payload.eviction_policy = eviction_policy;
+
+    /* Send as blocking request */
+    vapi_error_e rv = vapi_infmon_flow_rule_add(ctx, msg);
+    if (rv != VAPI_OK)
+        return -1;
+
+    /* The reply is written back into msg by the VAPI blocking call */
+    vapi_msg_infmon_flow_rule_add_reply *rmp =
+        (vapi_msg_infmon_flow_rule_add_reply *) msg;
+    int32_t retval = ntohl(rmp->payload.retval);
+
+    if (retval != 0)
+        return retval;
+
+    if (out_id_hi)
+        *out_id_hi = be64toh(rmp->payload.flow_rule_id.hi);
+    if (out_id_lo)
+        *out_id_lo = be64toh(rmp->payload.flow_rule_id.lo);
+
+    return 0;
+}
+
+/* ── flow_rule_del ────────────────────────────────────────────────── */
+
+/**
+ * Delete a flow rule from the VPP backend by its ID.
+ * Returns 0 on success, negative retval on error.
+ */
+int infmon_vapi_flow_rule_del(void *handle, uint64_t id_hi, uint64_t id_lo)
+{
+    if (!handle)
+        return -1;
+
+    vapi_ctx_t ctx = (vapi_ctx_t) handle;
+
+    vapi_msg_infmon_flow_rule_del *msg = vapi_alloc_infmon_flow_rule_del(ctx);
+    if (!msg)
+        return -1;
+
+    msg->payload.flow_rule_id.hi = htobe64(id_hi);
+    msg->payload.flow_rule_id.lo = htobe64(id_lo);
+
+    vapi_error_e rv = vapi_infmon_flow_rule_del(ctx, msg);
+    if (rv != VAPI_OK)
+        return -1;
+
+    vapi_msg_infmon_flow_rule_del_reply *rmp =
+        (vapi_msg_infmon_flow_rule_del_reply *) msg;
+    int32_t retval = ntohl(rmp->payload.retval);
+
+    return retval;
+}

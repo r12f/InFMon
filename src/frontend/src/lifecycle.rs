@@ -151,6 +151,20 @@ impl Frontend {
 
         // Spawn control server for CLI RPCs
         let control_socket = PathBuf::from(&frontend_cfg.control_socket);
+        #[cfg(feature = "vapi")]
+        let control_state = {
+            match crate::vapi_control_client::VapiControlClient::connect("infmon-control") {
+                Ok(client) => {
+                    tracing::info!("VAPI control client connected — flow-rule CRUD will be forwarded to VPP backend");
+                    Arc::new(ControlState::with_vapi(config.flow_rules.clone(), client))
+                }
+                Err(e) => {
+                    tracing::warn!("VAPI control client failed to connect: {e} — flow-rule CRUD will be local-only");
+                    Arc::new(ControlState::new(config.flow_rules.clone()))
+                }
+            }
+        };
+        #[cfg(not(feature = "vapi"))]
         let control_state = Arc::new(ControlState::new(config.flow_rules.clone()));
         let control_handle = match control::spawn(&control_socket, control_state) {
             Ok(h) => {
