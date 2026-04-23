@@ -229,7 +229,7 @@ fn decode_snapshot(
 }
 
 /// Main poller loop.
-
+#[cfg(feature = "vapi")]
 fn run_loop(
     config: &PollerConfig,
     senders: &[SnapshotSender],
