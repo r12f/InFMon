@@ -12,7 +12,7 @@ from typing import List
 
 import pytest
 
-from helpers import clear_all_flow_rules, flow_rule_add, flow_rule_rm, wait_for_stats
+from helpers import flow_rule_add, flow_rule_rm, wait_for_stats
 from replay_traffic import replay
 
 # ---------------------------------------------------------------------------
