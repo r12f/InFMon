@@ -123,7 +123,7 @@ static infmon_api_result_t flow_rule_add_internal(infmon_api_ctx_t *ctx,
     if (!ctx || !rule)
         return INFMON_API_ERR_INVALID_RULE;
 
-    INFMON_RULE_INFO("flow_rule_add: name='%s' fields=%u max_keys=%u", rule->name,
+    INFMON_RULE_DEBUG("flow_rule_add: name='%s' fields=%u max_keys=%u", rule->name,
                      rule->field_count, rule->max_keys);
 
     /* 1. Insert into the rule set (validates + checks budget). */
