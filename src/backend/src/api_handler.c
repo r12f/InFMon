@@ -5,8 +5,10 @@
 
 #include "infmon/api_handler.h"
 
+#include <inttypes.h>
 #include <string.h>
 
+#include "infmon/log.h"
 #include "infmon/snapshot.h" /* INFMON_MAX_WORKERS */
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
@@ -90,12 +92,14 @@ void infmon_api_ctx_init(infmon_api_ctx_t *ctx, infmon_flow_rule_set_t *rule_set
     memset(ctx, 0, sizeof(*ctx));
     ctx->rule_set = rule_set;
     ctx->stats_reg = stats_reg;
+    INFMON_API_INFO("ctx_init: rule_set=%p stats_reg=%p", (void *) rule_set, (void *) stats_reg);
 }
 
 void infmon_api_ctx_destroy(infmon_api_ctx_t *ctx)
 {
     if (!ctx)
         return;
+    INFMON_API_INFO("ctx_destroy: ctx=%p", (void *) ctx);
     for (uint32_t w = 0; w < INFMON_MAX_WORKERS; w++) {
         for (uint32_t i = 0; i < INFMON_FLOW_RULE_SET_MAX; i++) {
             if (ctx->tables[w][i]) {
@@ -119,10 +123,15 @@ static infmon_api_result_t flow_rule_add_internal(infmon_api_ctx_t *ctx,
     if (!ctx || !rule)
         return INFMON_API_ERR_INVALID_RULE;
 
+    INFMON_RULE_INFO("flow_rule_add: name='%s' fields=%u max_keys=%u", rule->name,
+                     rule->field_count, rule->max_keys);
+
     /* 1. Insert into the rule set (validates + checks budget). */
     infmon_flow_rule_result_t rr = infmon_flow_rule_add(ctx->rule_set, rule);
-    if (rr != INFMON_FLOW_RULE_OK)
+    if (rr != INFMON_FLOW_RULE_OK) {
+        INFMON_RULE_ERR("flow_rule_add: '%s' insert failed: %d", rule->name, (int) rr);
         return map_rule_result(rr);
+    }
 
     /* 2. Find the index the rule landed at. */
     uint32_t idx = find_rule_index(ctx->rule_set, rule->name);
@@ -163,6 +172,9 @@ static infmon_api_result_t flow_rule_add_internal(infmon_api_ctx_t *ctx,
         memset(&ctx->flow_rule_ids[idx], 0, sizeof(ctx->flow_rule_ids[0]));
     }
 
+    INFMON_RULE_INFO("flow_rule_add: '%s' ok — idx=%u key_width=%u workers=%u", rule->name, idx,
+                     inserted->key_width, ctx->worker_count > 0 ? ctx->worker_count : 1);
+
     return INFMON_API_OK;
 }
 
@@ -182,6 +194,8 @@ infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *
 {
     if (!ctx || !name)
         return INFMON_API_ERR_INVALID_RULE;
+
+    INFMON_RULE_INFO("flow_rule_del: name='%s'", name);
 
     /* 1. Find the rule index before removing. */
     uint32_t idx = find_rule_index(ctx->rule_set, name);
@@ -213,6 +227,8 @@ infmon_api_result_t infmon_api_flow_rule_del(infmon_api_ctx_t *ctx, const char *
         ctx->tables[w][count] = NULL;
     memset(&ctx->flow_rule_ids[count], 0, sizeof(ctx->flow_rule_ids[0]));
 
+    INFMON_RULE_INFO("flow_rule_del: '%s' ok — removed idx=%u, %u rules remain", name, idx, count);
+
     return INFMON_API_OK;
 }
 
@@ -228,10 +244,8 @@ infmon_api_result_t infmon_api_flow_rule_list(const infmon_api_ctx_t *ctx,
     if (!cb)
         return INFMON_API_OK;
 
-    /* The rule set is dense (add appends, rm compacts), so
-     * infmon_flow_rule_get() should not return NULL for i < count.
-     * The NULL guard is purely defensive. */
     uint32_t n = infmon_flow_rule_count(ctx->rule_set);
+    INFMON_API_DEBUG("flow_rule_list: %u rules", n);
     for (uint32_t i = 0; i < n; i++) {
         const infmon_flow_rule_t *r = infmon_flow_rule_get(ctx->rule_set, i);
         if (r)
@@ -267,6 +281,9 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
                                                   infmon_flow_rule_id_t flow_rule_id,
                                                   infmon_api_snap_reply_t *reply)
 {
+    INFMON_CTR_DEBUG("snapshot_and_clear: id=%016" PRIx64 "-%016" PRIx64, flow_rule_id.hi,
+                     flow_rule_id.lo);
+
     if (!reply)
         return INFMON_API_ERR_INTERNAL;
 
@@ -316,8 +333,11 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
 
     reply->result = map_snap_result(snap_reply.result);
 
-    if (snap_reply.result != INFMON_SNAP_OK)
+    if (snap_reply.result != INFMON_SNAP_OK) {
+        INFMON_CTR_WARN("snapshot_and_clear: snap failed for idx=%u result=%d", idx,
+                        (int) snap_reply.result);
         return reply->result;
+    }
 
     /* Build the descriptor by aggregating across all retired worker tables. */
     infmon_counter_table_t *retired = snap_reply.retired_tables[0];
@@ -354,6 +374,10 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
         reply->retired_tables[w] = snap_reply.retired_tables[w];
     reply->num_retired = snap_reply.num_retired;
 
+    INFMON_CTR_DEBUG(
+        "snapshot_and_clear: ok — idx=%u gen=%" PRIu64 " retired=%u slots_len=%u arena_used=%u",
+        idx, desc->generation, snap_reply.num_retired, desc->slots_len, desc->key_arena_used);
+
     return INFMON_API_OK;
 }
 
@@ -389,5 +413,8 @@ infmon_api_result_t infmon_api_status(const infmon_api_ctx_t *ctx, infmon_api_st
     reply->workers = ctx->worker_counters;
     reply->worker_count = ctx->worker_count;
     reply->result = INFMON_API_OK;
+
+    INFMON_API_DEBUG("status: worker_count=%u", reply->worker_count);
+
     return INFMON_API_OK;
 }

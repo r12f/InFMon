@@ -15,6 +15,7 @@
 
 #ifdef INFMON_VPP_BUILD
 
+#include <inttypes.h>
 #include <vlib/unix/plugin.h>
 #include <vlib/vlib.h>
 #include <vlibapi/api.h>
@@ -161,7 +162,9 @@ static void vl_api_infmon_flow_rule_add_t_handler(vl_api_infmon_flow_rule_add_t 
 
     infmon_vpp_api_ctx_ensure();
 
-    /* Convert API message to infmon_flow_rule_t */
+    INFMON_RULE_INFO("vapi: flow_rule_add name='%.*s' fields=%u max_keys=%u",
+                     (int) sizeof(mp->name), mp->name, clib_net_to_host_u32(mp->field_count),
+                     clib_net_to_host_u32(mp->max_keys));
     infmon_flow_rule_t rule;
     clib_memset(&rule, 0, sizeof(rule));
 
@@ -196,8 +199,12 @@ static void vl_api_infmon_flow_rule_add_t_handler(vl_api_infmon_flow_rule_add_t 
 
     rv = infmon_api_result_to_retval(result);
 
-    if (result == INFMON_API_OK)
+    if (result == INFMON_API_OK) {
         infmon_vpp_publish_rules();
+        INFMON_RULE_INFO("vapi: flow_rule_add ok — published rules");
+    } else {
+        INFMON_RULE_ERR("vapi: flow_rule_add failed: result=%d rv=%d", (int) result, (int) rv);
+    }
 
     REPLY_MACRO2(VL_API_INFMON_FLOW_RULE_ADD_REPLY, ({
                      if (result == INFMON_API_OK) {
@@ -219,6 +226,10 @@ static void vl_api_infmon_flow_rule_del_t_handler(vl_api_infmon_flow_rule_del_t 
     i32 rv = 0;
 
     infmon_vpp_api_ctx_ensure();
+
+    INFMON_RULE_INFO("vapi: flow_rule_del id=%016" PRIx64 "-%016" PRIx64,
+                     clib_net_to_host_u64(mp->flow_rule_id.hi),
+                     clib_net_to_host_u64(mp->flow_rule_id.lo));
 
     /* Find the rule by ID */
     infmon_flow_rule_id_t id;
@@ -246,9 +257,14 @@ static void vl_api_infmon_flow_rule_del_t_handler(vl_api_infmon_flow_rule_del_t 
     if (name) {
         infmon_api_result_t result = infmon_api_flow_rule_del(&infmon_vpp_api_ctx, name);
         rv = infmon_api_result_to_retval(result);
-        if (result == INFMON_API_OK)
+        if (result == INFMON_API_OK) {
             infmon_vpp_publish_rules();
+            INFMON_RULE_INFO("vapi: flow_rule_del '%s' ok — published rules", name);
+        } else {
+            INFMON_RULE_ERR("vapi: flow_rule_del '%s' failed: result=%d", name, (int) result);
+        }
     } else {
+        INFMON_RULE_ERR("vapi: flow_rule_del — rule not found for id");
         rv = VNET_API_ERROR_NO_SUCH_ENTRY;
     }
 
@@ -303,6 +319,8 @@ static void vl_api_infmon_flow_rule_list_dump_t_handler(vl_api_infmon_flow_rule_
 
     infmon_vpp_api_ctx_ensure();
 
+    INFMON_API_DEBUG("vapi: flow_rule_list_dump");
+
     infmon_list_walk_ctx_t wctx = {
         .rp = rp,
         .context = mp->context,
@@ -321,6 +339,10 @@ static void vl_api_infmon_flow_rule_get_t_handler(vl_api_infmon_flow_rule_get_t 
     i32 rv = 0;
 
     infmon_vpp_api_ctx_ensure();
+
+    INFMON_API_DEBUG("vapi: flow_rule_get id=%016" PRIx64 "-%016" PRIx64,
+                     clib_net_to_host_u64(mp->flow_rule_id.hi),
+                     clib_net_to_host_u64(mp->flow_rule_id.lo));
 
     infmon_flow_rule_id_t id;
     id.hi = clib_net_to_host_u64(mp->flow_rule_id.hi);
@@ -378,6 +400,10 @@ static void vl_api_infmon_snapshot_and_clear_t_handler(vl_api_infmon_snapshot_an
 
     infmon_vpp_api_ctx_ensure();
 
+    INFMON_CTR_INFO("vapi: snapshot_and_clear id=%016" PRIx64 "-%016" PRIx64,
+                    clib_net_to_host_u64(mp->flow_rule_id.hi),
+                    clib_net_to_host_u64(mp->flow_rule_id.lo));
+
     infmon_flow_rule_id_t id;
     id.hi = clib_net_to_host_u64(mp->flow_rule_id.hi);
     id.lo = clib_net_to_host_u64(mp->flow_rule_id.lo);
@@ -389,6 +415,8 @@ static void vl_api_infmon_snapshot_and_clear_t_handler(vl_api_infmon_snapshot_an
         infmon_api_snapshot_and_clear(&infmon_vpp_api_ctx, id, &snap_reply);
 
     rv = infmon_api_result_to_retval(result);
+
+    INFMON_CTR_INFO("vapi: snapshot_and_clear result=%d rv=%d", (int) result, (int) rv);
 
     REPLY_MACRO2(VL_API_INFMON_SNAPSHOT_AND_CLEAR_REPLY, ({
                      if (result == INFMON_API_OK) {
@@ -428,6 +456,10 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
 
     infmon_vpp_api_ctx_ensure();
 
+    INFMON_CTR_INFO("vapi: snapshot_inline_dump id=%016" PRIx64 "-%016" PRIx64,
+                    clib_net_to_host_u64(mp->flow_rule_id.hi),
+                    clib_net_to_host_u64(mp->flow_rule_id.lo));
+
     infmon_flow_rule_id_t id;
     id.hi = clib_net_to_host_u64(mp->flow_rule_id.hi);
     id.lo = clib_net_to_host_u64(mp->flow_rule_id.lo);
@@ -439,6 +471,8 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
         infmon_api_snapshot_and_clear(&infmon_vpp_api_ctx, id, &snap_reply);
 
     if (result != INFMON_API_OK || snap_reply.num_retired == 0) {
+        INFMON_CTR_DEBUG("vapi: snapshot_inline_dump — empty (result=%d retired=%u)", (int) result,
+                         snap_reply.num_retired);
         /* Send an empty details message so the client does not hang.
          * Dump handlers cannot use REPLY_MACRO — send a bare message. */
         vl_api_infmon_snapshot_inline_details_t *rmp = vl_msg_api_alloc_zero(sizeof(*rmp));
@@ -511,6 +545,8 @@ static void vl_api_infmon_status_dump_t_handler(vl_api_infmon_status_dump_t *mp)
         return;
 
     infmon_vpp_api_ctx_ensure();
+
+    INFMON_API_DEBUG("vapi: status_dump");
 
     infmon_api_status_reply_t status;
     infmon_api_result_t result = infmon_api_status(&infmon_vpp_api_ctx, &status);
