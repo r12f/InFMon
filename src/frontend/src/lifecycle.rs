@@ -147,25 +147,37 @@ impl Frontend {
             .iter()
             .map(|s| s.as_raw_sender().clone())
             .collect();
-        let poller_handle = poller::spawn(poller_config, raw_senders);
+
+        // Create pull channel for on-demand snapshot requests
+        let (pull_tx, pull_rx) = std::sync::mpsc::sync_channel(4);
+
+        let poller_handle = poller::spawn(poller_config, raw_senders, pull_rx);
 
         // Spawn control server for CLI RPCs
         let control_socket = PathBuf::from(&frontend_cfg.control_socket);
         #[cfg(feature = "vapi")]
         let control_state = {
-            match crate::vapi_control_client::VapiControlClient::connect("infmon-control") {
+            let mut state = match crate::vapi_control_client::VapiControlClient::connect(
+                "infmon-control",
+            ) {
                 Ok(client) => {
                     tracing::info!("VAPI control client connected — flow-rule CRUD will be forwarded to VPP backend");
-                    Arc::new(ControlState::with_vapi(config.flow_rules.clone(), client))
+                    ControlState::with_vapi(config.flow_rules.clone(), client)
                 }
                 Err(e) => {
                     tracing::warn!("VAPI control client failed to connect: {e} — flow-rule CRUD will be local-only");
-                    Arc::new(ControlState::new(config.flow_rules.clone()))
+                    ControlState::new(config.flow_rules.clone())
                 }
-            }
+            };
+            state.pull_tx = Some(pull_tx);
+            Arc::new(state)
         };
         #[cfg(not(feature = "vapi"))]
-        let control_state = Arc::new(ControlState::new(config.flow_rules.clone()));
+        let control_state = {
+            let mut state = ControlState::new(config.flow_rules.clone());
+            state.pull_tx = Some(pull_tx);
+            Arc::new(state)
+        };
         let control_handle = match control::spawn(&control_socket, control_state) {
             Ok(h) => {
                 tracing::info!("control server listening on {}", control_socket.display());

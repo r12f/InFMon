@@ -204,6 +204,15 @@ impl InFMonControlClient {
         }
     }
 
+    /// Trigger an immediate snapshot pull from the poller.
+    pub async fn stats_pull(&self) -> Result<StatsPullData, CtlError> {
+        let request = Request::StatsPull;
+        match self.rpc_ok(&request).await? {
+            Some(ResponseData::StatsPull(data)) => Ok(data),
+            _ => Err(CtlError::Protocol("unexpected response data".into())),
+        }
+    }
+
     /// Trigger a config reload on the frontend.
     pub async fn reload(&self) -> Result<(), CtlError> {
         let _ = &self.socket_path;

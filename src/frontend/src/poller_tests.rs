@@ -1,6 +1,11 @@
 use super::*;
 use std::sync::mpsc;
 
+fn dummy_pull_rx() -> super::PullReceiver {
+    let (_tx, rx) = std::sync::mpsc::sync_channel(1);
+    rx
+}
+
 #[test]
 fn decode_empty_raw_snapshot() {
     let raw = infmon_common::ipc::stats_client::RawSnapshot {
@@ -31,7 +36,7 @@ fn poller_stops_immediately() {
         interval: Duration::from_millis(100),
     };
     let (tx, _rx) = mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(2);
-    let handle = spawn(config, vec![tx]);
+    let handle = spawn(config, vec![tx], dummy_pull_rx());
 
     // Give it a moment to start, then stop.
     thread::sleep(Duration::from_millis(150));
@@ -53,7 +58,7 @@ fn poller_sends_snapshots_on_real_segment() {
         interval: Duration::from_millis(50),
     };
     let (tx, rx) = mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(8);
-    let handle = spawn(config, vec![tx]);
+    let handle = spawn(config, vec![tx], dummy_pull_rx());
 
     // Wait for a few ticks.
     thread::sleep(Duration::from_millis(200));
@@ -85,7 +90,7 @@ fn backpressure_drops_snapshots() {
         interval: Duration::from_millis(20),
     };
     let (tx, rx) = mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(1);
-    let handle = spawn(config, vec![tx]);
+    let handle = spawn(config, vec![tx], dummy_pull_rx());
 
     // Don't consume — let the channel fill up.
     thread::sleep(Duration::from_millis(200));
@@ -121,7 +126,7 @@ fn poller_handle_drop_stops_thread() {
     };
     let (tx, _rx) = mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(2);
     // Dropping handle should stop the thread cleanly
-    let handle = spawn(config, vec![tx]);
+    let handle = spawn(config, vec![tx], dummy_pull_rx());
     drop(handle);
 }
 
@@ -132,7 +137,7 @@ fn poller_with_no_senders() {
         stats_socket: PathBuf::from("/tmp/nonexistent-infmon-no-senders-test.sock"),
         interval: Duration::from_millis(100),
     };
-    let handle = spawn(config, vec![]);
+    let handle = spawn(config, vec![], dummy_pull_rx());
     thread::sleep(Duration::from_millis(150));
     handle.stop();
 }
@@ -146,7 +151,7 @@ fn poller_with_multiple_senders() {
     };
     let (tx1, _rx1) = mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(2);
     let (tx2, _rx2) = mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(2);
-    let handle = spawn(config, vec![tx1, tx2]);
+    let handle = spawn(config, vec![tx1, tx2], dummy_pull_rx());
     thread::sleep(Duration::from_millis(150));
     handle.stop();
 }

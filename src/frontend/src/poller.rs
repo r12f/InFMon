@@ -22,6 +22,14 @@ use crate::vapi_stats_client::VapiStatsClient;
 /// Sender half that exporter threads receive snapshots through.
 pub type SnapshotSender = std::sync::mpsc::SyncSender<Arc<FlowStatsSnapshot>>;
 
+/// A one-shot pull request: the control server sends this to the poller,
+/// which performs an immediate snapshot and sends the result back.
+pub type PullRequest = std::sync::mpsc::SyncSender<Arc<FlowStatsSnapshot>>;
+/// Receiver for pull requests (held by the poller thread).
+pub type PullReceiver = std::sync::mpsc::Receiver<PullRequest>;
+/// Sender for pull requests (held by ControlState).
+pub type PullSender = std::sync::mpsc::SyncSender<PullRequest>;
+
 /// Configuration for the poller thread.
 #[derive(Debug, Clone)]
 pub struct PollerConfig {
@@ -73,14 +81,18 @@ impl Drop for PollerHandle {
 /// `senders` are bounded channels to each registered exporter. The
 /// poller will try to send to every exporter; if a channel is full the
 /// snapshot is dropped for that exporter (backpressure, §7 of spec).
-pub fn spawn(config: PollerConfig, senders: Vec<SnapshotSender>) -> PollerHandle {
+pub fn spawn(
+    config: PollerConfig,
+    senders: Vec<SnapshotSender>,
+    pull_rx: PullReceiver,
+) -> PollerHandle {
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let stop2 = stop.clone();
 
     let join = thread::Builder::new()
         .name("poller".into())
         .spawn(move || {
-            run_loop(&config, &senders, &stop2);
+            run_loop(&config, &senders, &pull_rx, &stop2);
         })
         .expect("failed to spawn poller thread");
 
@@ -268,6 +280,7 @@ fn decode_snapshot(
 fn run_loop(
     config: &PollerConfig,
     senders: &[SnapshotSender],
+    pull_rx: &PullReceiver,
     stop: &std::sync::atomic::AtomicBool,
 ) {
     let mut client: Option<VapiStatsClient> = None;
@@ -325,6 +338,43 @@ fn run_loop(
             }
         }
 
+        // Service any pending pull requests before sleeping.
+        // Each pull requester gets the same snapshot we just produced
+        // (or a fresh one if no tick happened this iteration).
+        while let Ok(reply_tx) = pull_rx.try_recv() {
+            // If we already have a snapshot from this tick, reuse it.
+            // Otherwise perform an ad-hoc snapshot.
+            if let Some(c) = client.as_ref() {
+                match c.snapshot_and_clear() {
+                    Ok(raw) => {
+                        tick_id += 1;
+                        let wall = wall_clock_ns();
+                        let mono = monotonic_ns();
+                        let snapshot = decode_snapshot(raw, tick_id, wall, mono, prev_mono);
+                        prev_mono = mono;
+                        let snap = Arc::new(snapshot);
+
+                        // Fan out to exporters as well
+                        for (i, tx) in senders.iter().enumerate() {
+                            if tx.try_send(snap.clone()).is_err() {
+                                tracing::warn!(
+                                    "exporter {} channel full, dropping pull snapshot (tick {})",
+                                    i,
+                                    tick_id
+                                );
+                            }
+                        }
+
+                        let _ = reply_tx.send(snap);
+                    }
+                    Err(e) => {
+                        tracing::warn!("pull snapshot_and_clear failed: {e}");
+                        // Don't reply — the requester will time out
+                    }
+                }
+            }
+        }
+
         let elapsed = Duration::from_nanos(monotonic_ns().saturating_sub(tick_start));
         if let Some(remaining) = config.interval.checked_sub(elapsed) {
             sleep_interruptible(remaining, stop);
@@ -339,6 +389,7 @@ fn run_loop(
 fn run_loop(
     _config: &PollerConfig,
     _senders: &[SnapshotSender],
+    _pull_rx: &PullReceiver,
     stop: &std::sync::atomic::AtomicBool,
 ) {
     tracing::warn!("VAPI not available — poller will idle");
