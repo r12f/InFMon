@@ -8,8 +8,8 @@
  * C-callable interface for the Rust frontend to call VPP binary API.
  */
 
-#include <stdlib.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 #include <vapi/vapi.h>
 #include <vapi/vapi_dbg.h>
