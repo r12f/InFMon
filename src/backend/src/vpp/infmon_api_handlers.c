@@ -163,7 +163,7 @@ static void vl_api_infmon_flow_rule_add_t_handler(vl_api_infmon_flow_rule_add_t 
     infmon_vpp_api_ctx_ensure();
 
     INFMON_RULE_INFO("vapi: flow_rule_add name='%.*s' fields=%u max_keys=%u",
-                     (int) sizeof(mp->name), mp->name, clib_net_to_host_u32(mp->field_count),
+                     (int) strnlen(mp->name, sizeof(mp->name)), mp->name, clib_net_to_host_u32(mp->field_count),
                      clib_net_to_host_u32(mp->max_keys));
     infmon_flow_rule_t rule;
     clib_memset(&rule, 0, sizeof(rule));
@@ -400,7 +400,7 @@ static void vl_api_infmon_snapshot_and_clear_t_handler(vl_api_infmon_snapshot_an
 
     infmon_vpp_api_ctx_ensure();
 
-    INFMON_CTR_INFO("vapi: snapshot_and_clear id=%016" PRIx64 "-%016" PRIx64,
+    INFMON_CTR_DEBUG("vapi: snapshot_and_clear id=%016" PRIx64 "-%016" PRIx64,
                     clib_net_to_host_u64(mp->flow_rule_id.hi),
                     clib_net_to_host_u64(mp->flow_rule_id.lo));
 
@@ -416,7 +416,7 @@ static void vl_api_infmon_snapshot_and_clear_t_handler(vl_api_infmon_snapshot_an
 
     rv = infmon_api_result_to_retval(result);
 
-    INFMON_CTR_INFO("vapi: snapshot_and_clear result=%d rv=%d", (int) result, (int) rv);
+    INFMON_CTR_DEBUG("vapi: snapshot_and_clear result=%d rv=%d", (int) result, (int) rv);
 
     REPLY_MACRO2(VL_API_INFMON_SNAPSHOT_AND_CLEAR_REPLY, ({
                      if (result == INFMON_API_OK) {
@@ -456,7 +456,7 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
 
     infmon_vpp_api_ctx_ensure();
 
-    INFMON_CTR_INFO("vapi: snapshot_inline_dump id=%016" PRIx64 "-%016" PRIx64,
+    INFMON_CTR_DEBUG("vapi: snapshot_inline_dump id=%016" PRIx64 "-%016" PRIx64,
                     clib_net_to_host_u64(mp->flow_rule_id.hi),
                     clib_net_to_host_u64(mp->flow_rule_id.lo));
 

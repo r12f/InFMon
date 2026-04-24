@@ -92,14 +92,14 @@ void infmon_api_ctx_init(infmon_api_ctx_t *ctx, infmon_flow_rule_set_t *rule_set
     memset(ctx, 0, sizeof(*ctx));
     ctx->rule_set = rule_set;
     ctx->stats_reg = stats_reg;
-    INFMON_API_INFO("ctx_init: rule_set=%p stats_reg=%p", (void *) rule_set, (void *) stats_reg);
+    INFMON_API_DEBUG("ctx_init: ready");
 }
 
 void infmon_api_ctx_destroy(infmon_api_ctx_t *ctx)
 {
     if (!ctx)
         return;
-    INFMON_API_INFO("ctx_destroy: ctx=%p", (void *) ctx);
+    INFMON_API_DEBUG("ctx_destroy: cleaning up");
     for (uint32_t w = 0; w < INFMON_MAX_WORKERS; w++) {
         for (uint32_t i = 0; i < INFMON_FLOW_RULE_SET_MAX; i++) {
             if (ctx->tables[w][i]) {
@@ -248,6 +248,9 @@ infmon_api_result_t infmon_api_flow_rule_list(const infmon_api_ctx_t *ctx,
     INFMON_API_DEBUG("flow_rule_list: %u rules", n);
     for (uint32_t i = 0; i < n; i++) {
         const infmon_flow_rule_t *r = infmon_flow_rule_get(ctx->rule_set, i);
+        /* The rule set is dense (add appends, rm compacts), so
+         * infmon_flow_rule_get() should not return NULL for i < count.
+         * The NULL guard is purely defensive. */
         if (r)
             cb(r, i, user);
     }
@@ -281,11 +284,11 @@ infmon_api_result_t infmon_api_snapshot_and_clear(infmon_api_ctx_t *ctx,
                                                   infmon_flow_rule_id_t flow_rule_id,
                                                   infmon_api_snap_reply_t *reply)
 {
-    INFMON_CTR_DEBUG("snapshot_and_clear: id=%016" PRIx64 "-%016" PRIx64, flow_rule_id.hi,
-                     flow_rule_id.lo);
-
     if (!reply)
         return INFMON_API_ERR_INTERNAL;
+
+    INFMON_CTR_DEBUG("snapshot_and_clear: id=%016" PRIx64 "-%016" PRIx64, flow_rule_id.hi,
+                     flow_rule_id.lo);
 
     memset(reply, 0, sizeof(*reply));
 
