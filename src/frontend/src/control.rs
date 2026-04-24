@@ -52,6 +52,14 @@ impl ControlState {
         }
     }
 
+    /// Replace the latest snapshot (called by the snapshot‐forwarding thread).
+    pub fn update_snapshot(&self, snap: Arc<FlowStatsSnapshot>) {
+        *self
+            .latest_snapshot
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(snap);
+    }
+
     /// Create a ControlState with a VAPI control client for backend forwarding.
     #[cfg(feature = "vapi")]
     pub fn with_vapi(initial_rules: Vec<FlowRule>, client: VapiControlClient) -> Self {

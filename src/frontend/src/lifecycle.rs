@@ -12,6 +12,8 @@ use crate::exporter::{
 };
 use crate::poller::{self, PollerConfig, PollerHandle};
 
+use infmon_common::ipc::types::FlowStatsSnapshot;
+
 /// Errors during lifecycle operations.
 #[derive(Debug)]
 pub enum LifecycleError {
@@ -143,13 +145,7 @@ impl Frontend {
             interval: Duration::from_millis(frontend_cfg.polling_interval_ms),
         };
 
-        let raw_senders: Vec<_> = exporter_senders
-            .iter()
-            .map(|s| s.as_raw_sender().clone())
-            .collect();
-        let poller_handle = poller::spawn(poller_config, raw_senders);
-
-        // Spawn control server for CLI RPCs
+        // Spawn control server for CLI RPCs (before poller so we can wire the snapshot channel)
         let control_socket = PathBuf::from(&frontend_cfg.control_socket);
         #[cfg(feature = "vapi")]
         let control_state = {
@@ -166,7 +162,7 @@ impl Frontend {
         };
         #[cfg(not(feature = "vapi"))]
         let control_state = Arc::new(ControlState::new(config.flow_rules.clone()));
-        let control_handle = match control::spawn(&control_socket, control_state) {
+        let control_handle = match control::spawn(&control_socket, control_state.clone()) {
             Ok(h) => {
                 tracing::info!("control server listening on {}", control_socket.display());
                 Some(h)
@@ -176,6 +172,30 @@ impl Frontend {
                 None
             }
         };
+
+        // Create a snapshot channel that forwards to the control state so
+        // `infmonctl stats show` can read the latest counters.
+        let (stats_tx, stats_rx) = std::sync::mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(1);
+        {
+            let cs = control_state.clone();
+            std::thread::Builder::new()
+                .name("snapshot-to-control".into())
+                .spawn(move || {
+                    while let Ok(snap) = stats_rx.recv() {
+                        cs.update_snapshot(snap);
+                    }
+                    tracing::debug!("snapshot-to-control thread exiting");
+                })
+                .expect("failed to spawn snapshot-to-control thread");
+        }
+
+        // Spawn poller with exporter senders + control-state sender
+        let mut raw_senders: Vec<_> = exporter_senders
+            .iter()
+            .map(|s| s.as_raw_sender().clone())
+            .collect();
+        raw_senders.push(stats_tx);
+        let poller_handle = poller::spawn(poller_config, raw_senders);
 
         Ok(Frontend {
             poller_handle: Some(poller_handle),
