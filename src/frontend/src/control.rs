@@ -493,8 +493,15 @@ fn handle_stats_pull(state: &ControlState) -> Response {
     // Create a one-shot channel for the reply
     let (reply_tx, reply_rx): (PullRequest, _) = std::sync::mpsc::sync_channel(1);
 
-    if pull_tx.try_send(reply_tx).is_err() {
-        return Response::err(9, "poller busy, try again later");
+    if let Err(e) = pull_tx.try_send(reply_tx) {
+        return match e {
+            std::sync::mpsc::TrySendError::Full(_) => {
+                Response::err(9, "poller busy, try again later")
+            }
+            std::sync::mpsc::TrySendError::Disconnected(_) => {
+                Response::err(9, "poller not running")
+            }
+        };
     }
 
     // Wait up to 5s for the poller to respond

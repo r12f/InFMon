@@ -338,12 +338,15 @@ fn run_loop(
             }
         }
 
-        // Service any pending pull requests before sleeping.
-        // Each pull requester gets the same snapshot we just produced
-        // (or a fresh one if no tick happened this iteration).
+        // Drain all pending pull requests, then service them with a
+        // single snapshot so concurrent requesters see consistent
+        // counters (snapshot_and_clear resets VPP counters, so
+        // per-request snapshots would give near-zero to later ones).
+        let mut pull_waiters = Vec::new();
         while let Ok(reply_tx) = pull_rx.try_recv() {
-            // If we already have a snapshot from this tick, reuse it.
-            // Otherwise perform an ad-hoc snapshot.
+            pull_waiters.push(reply_tx);
+        }
+        if !pull_waiters.is_empty() {
             if let Some(c) = client.as_ref() {
                 match c.snapshot_and_clear() {
                     Ok(raw) => {
@@ -354,7 +357,9 @@ fn run_loop(
                         prev_mono = mono;
                         let snap = Arc::new(snapshot);
 
-                        // Fan out to exporters as well
+                        // Fan out to exporters — intentional: a pull
+                        // triggers an export cycle so dashboards stay
+                        // current even between regular polling ticks.
                         for (i, tx) in senders.iter().enumerate() {
                             if tx.try_send(snap.clone()).is_err() {
                                 tracing::warn!(
@@ -365,11 +370,16 @@ fn run_loop(
                             }
                         }
 
-                        let _ = reply_tx.send(snap);
+                        for waiter in &pull_waiters {
+                            let _ = waiter.send(snap.clone());
+                        }
                     }
                     Err(e) => {
-                        tracing::warn!("pull snapshot_and_clear failed: {e}");
-                        // Don't reply — the requester will time out
+                        tracing::warn!(
+                            "pull snapshot_and_clear failed: {e} — \
+                             {} pull requester(s) will time out",
+                            pull_waiters.len()
+                        );
                     }
                 }
             }
