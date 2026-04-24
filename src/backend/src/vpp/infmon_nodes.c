@@ -358,7 +358,7 @@ static uword infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node, 
     /* Load table pointers with ACQUIRE once per frame (§8) — per-worker */
     u32 worker_id = vlib_get_thread_index();
     if (PREDICT_FALSE(worker_id >= INFMON_MAX_WORKERS)) {
-        vlib_node_increment_counter(vm, node->node_index, INFMON_COUNTER_ERROR_DROP,
+        vlib_node_increment_counter(vm, node->node_index, INFMON_NODE_ERR_COUNTER_TABLE_FULL,
                                     frame->n_vectors);
         vlib_buffer_free(vm, vlib_frame_vector_args(frame), frame->n_vectors);
         return frame->n_vectors;
