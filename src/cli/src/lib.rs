@@ -238,6 +238,8 @@ pub enum StatsCommands {
         #[arg(long)]
         watch: Option<u64>,
     },
+    /// Trigger an immediate snapshot pull from VPP
+    Pull,
     /// Export stats snapshot in a specific format
     Export {
         /// Export format

@@ -17,6 +17,7 @@ pub enum Request {
     FlowRuleList,
     FlowRuleShow(FlowRuleShowParams),
     StatsShow(StatsShowParams),
+    StatsPull,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -66,6 +67,7 @@ pub enum ResponseData {
     FlowRuleList(FlowRuleListData),
     FlowRuleDetail(FlowRuleDetailData),
     StatsShow(StatsShowData),
+    StatsPull(StatsPullData),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -137,6 +139,14 @@ pub struct FlowRuleStatsData {
     pub evictions: u64,
     pub drops: u64,
     pub active_flows: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StatsPullData {
+    pub tick_id: u64,
+    pub wall_clock_ns: u64,
+    #[serde(flatten)]
+    pub stats: StatsShowData,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────

@@ -12,6 +12,8 @@ use infmon_common::config::model::FlowRule;
 use infmon_common::ipc::protocol::*;
 use infmon_common::ipc::types::FlowStatsSnapshot;
 
+use crate::poller::PullSender;
+
 #[cfg(feature = "vapi")]
 use crate::vapi_control_client::VapiControlClient;
 #[cfg(feature = "vapi")]
@@ -36,6 +38,8 @@ pub struct ControlState {
     /// Maps flow rule name → backend-assigned ID (populated when VAPI is used).
     #[cfg(feature = "vapi")]
     pub rule_id_map: Mutex<HashMap<String, FlowRuleId>>,
+    /// Sender for triggering an on-demand snapshot pull from the poller.
+    pub pull_tx: Option<PullSender>,
 }
 
 impl ControlState {
@@ -49,6 +53,7 @@ impl ControlState {
             vapi_control: None,
             #[cfg(feature = "vapi")]
             rule_id_map: Mutex::new(HashMap::new()),
+            pull_tx: None,
         }
     }
 
@@ -73,6 +78,7 @@ impl ControlState {
             next_rule_id: AtomicU64::new(initial_count + 1),
             vapi_control: Some(Mutex::new(client)),
             rule_id_map: Mutex::new(HashMap::new()),
+            pull_tx: None,
         }
     }
 }
@@ -235,6 +241,7 @@ fn handle_request(req: &Request, state: &ControlState) -> Response {
         Request::FlowRuleList => handle_flow_rule_list(state),
         Request::FlowRuleShow(params) => handle_flow_rule_show(params, state),
         Request::StatsShow(params) => handle_stats_show(params, state),
+        Request::StatsPull => handle_stats_pull(state),
     }
 }
 
@@ -484,4 +491,61 @@ fn handle_stats_show(params: &StatsShowParams, state: &ControlState) -> Response
     Response::ok(ResponseData::StatsShow(StatsShowData {
         flow_rules: flow_rule_stats,
     }))
+}
+
+fn handle_stats_pull(state: &ControlState) -> Response {
+    use crate::poller::PullRequest;
+
+    let pull_tx = match state.pull_tx.as_ref() {
+        Some(tx) => tx,
+        None => return Response::err(8, "stats pull not available (no poller connected)"),
+    };
+
+    // Create a one-shot channel for the reply
+    let (reply_tx, reply_rx): (PullRequest, _) = std::sync::mpsc::sync_channel(1);
+
+    if let Err(e) = pull_tx.try_send(reply_tx) {
+        return match e {
+            std::sync::mpsc::TrySendError::Full(_) => {
+                Response::err(9, "poller busy, try again later")
+            }
+            std::sync::mpsc::TrySendError::Disconnected(_) => {
+                Response::err(9, "poller not running")
+            }
+        };
+    }
+
+    // Wait up to 5s for the poller to respond
+    match reply_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+        Ok(snapshot) => {
+            // Also update latest_snapshot so subsequent stats show picks it up
+            {
+                let mut latest = state
+                    .latest_snapshot
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                *latest = Some(snapshot.clone());
+            }
+
+            let flow_rules = snapshot
+                .flow_rules
+                .iter()
+                .map(|frs| FlowRuleStatsData {
+                    name: frs.name.clone(),
+                    packets: frs.counters.packets,
+                    bytes: frs.counters.bytes,
+                    evictions: frs.counters.evictions,
+                    drops: frs.counters.drops,
+                    active_flows: frs.flows.len() as u64,
+                })
+                .collect();
+
+            Response::ok(ResponseData::StatsPull(StatsPullData {
+                tick_id: snapshot.tick_id,
+                wall_clock_ns: snapshot.wall_clock_ns,
+                stats: StatsShowData { flow_rules },
+            }))
+        }
+        Err(_) => Response::err(10, "pull timed out waiting for poller"),
+    }
 }

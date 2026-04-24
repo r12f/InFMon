@@ -11,7 +11,9 @@ use infmon_cli::{
     StatsCommands,
 };
 use infmon_common::ipc::control_client::InFMonControlClient;
-use infmon_common::ipc::protocol::{FlowRuleData, FlowRuleDetailData, StatsShowData};
+use infmon_common::ipc::protocol::{
+    FlowRuleData, FlowRuleDetailData, StatsPullData, StatsShowData,
+};
 
 fn main() {
     // Handle --generate-completions and --generate-manpage before clap
@@ -715,6 +717,16 @@ async fn run_stats(cmd: &StatsCommands, cli: &Cli) -> i32 {
                 }
             }
         }
+        StatsCommands::Pull => match client.stats_pull().await {
+            Ok(data) => {
+                print_output(&StatsPullOutput(data), &output, cli.compact);
+                EXIT_SUCCESS
+            }
+            Err(e) => {
+                eprintln!("infmonctl: stats pull: {e}");
+                ctl_error_to_exit_code(&e)
+            }
+        },
         StatsCommands::Export { ref format } => {
             let _ = (format, cli);
             eprintln!("infmonctl: stats export: not yet implemented (stub)");
@@ -811,6 +823,32 @@ impl TableDisplay for FlowRuleShowOutput {
 
 #[derive(serde::Serialize)]
 struct StatsShowOutput(StatsShowData);
+
+#[derive(serde::Serialize)]
+struct StatsPullOutput(StatsPullData);
+
+impl TableDisplay for StatsPullOutput {
+    fn print_table(&self) {
+        println!(
+            "Snapshot pulled (tick_id={}, wall_clock_ns={})",
+            self.0.tick_id, self.0.wall_clock_ns
+        );
+        if self.0.stats.flow_rules.is_empty() {
+            println!("No flow rule stats in snapshot.");
+            return;
+        }
+        println!(
+            "{:<20} {:>12} {:>12} {:>10} {:>8} {:>8}",
+            "RULE", "PACKETS", "BYTES", "FLOWS", "EVICT", "DROPS"
+        );
+        for r in &self.0.stats.flow_rules {
+            println!(
+                "{:<20} {:>12} {:>12} {:>10} {:>8} {:>8}",
+                r.name, r.packets, r.bytes, r.active_flows, r.evictions, r.drops
+            );
+        }
+    }
+}
 
 impl TableDisplay for StatsShowOutput {
     fn print_table(&self) {
