@@ -15,7 +15,6 @@
 
 #ifdef INFMON_VPP_BUILD
 
-#include <inttypes.h>
 #include <vlib/unix/plugin.h>
 #include <vlib/vlib.h>
 #include <vnet/buffer.h>
@@ -25,7 +24,6 @@
 
 #include "infmon/counter_table.h"
 #include "infmon/graph_node.h"
-#include "infmon/log.h"
 
 /* ── VPP plugin registration ─────────────────────────────────────── */
 

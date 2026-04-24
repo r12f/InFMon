@@ -172,8 +172,8 @@ static infmon_api_result_t flow_rule_add_internal(infmon_api_ctx_t *ctx,
         memset(&ctx->flow_rule_ids[idx], 0, sizeof(ctx->flow_rule_ids[0]));
     }
 
-    INFMON_RULE_INFO("flow_rule_add: '%s' ok — idx=%u key_width=%u workers=%u", rule->name, idx,
-                     inserted->key_width, ctx->worker_count > 0 ? ctx->worker_count : 1);
+    INFMON_RULE_DEBUG("flow_rule_add: '%s' ok — idx=%u key_width=%u workers=%u", rule->name, idx,
+                      inserted->key_width, ctx->worker_count > 0 ? ctx->worker_count : 1);
 
     return INFMON_API_OK;
 }
