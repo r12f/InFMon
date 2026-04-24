@@ -7,8 +7,10 @@
 
 #ifdef INFMON_VPP_BUILD
 
+// clang-format off
+#include <vlib/vlib.h>  /* must precede vlib/log.h — provides vlib_log_class_t */
 #include <vlib/log.h>
-#include <vlib/vlib.h>
+// clang-format on
 
 vlib_log_class_t infmon_log_general;
 vlib_log_class_t infmon_log_api;

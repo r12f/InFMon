@@ -163,7 +163,7 @@ static void vl_api_infmon_flow_rule_add_t_handler(vl_api_infmon_flow_rule_add_t 
     infmon_vpp_api_ctx_ensure();
 
     INFMON_RULE_INFO("vapi: flow_rule_add name='%.*s' fields=%u max_keys=%u",
-                     (int) strnlen(mp->name, sizeof(mp->name)), mp->name,
+                     (int) strnlen((const char *) mp->name, sizeof(mp->name)), mp->name,
                      clib_net_to_host_u32(mp->field_count), clib_net_to_host_u32(mp->max_keys));
     infmon_flow_rule_t rule;
     clib_memset(&rule, 0, sizeof(rule));
@@ -418,6 +418,12 @@ static void vl_api_infmon_snapshot_and_clear_t_handler(vl_api_infmon_snapshot_an
 
     INFMON_CTR_DEBUG("vapi: snapshot_and_clear result=%d rv=%d", (int) result, (int) rv);
 
+    /* After swapping, ctx->tables[][] now holds the fresh table.
+     * Republish so the data-plane (pm->tables) picks up the new pointer;
+     * otherwise workers keep writing to the retired table. */
+    if (result == INFMON_API_OK)
+        infmon_vpp_publish_rules();
+
     REPLY_MACRO2(VL_API_INFMON_SNAPSHOT_AND_CLEAR_REPLY, ({
                      if (result == INFMON_API_OK) {
                          infmon_stats_descriptor_t *desc = &snap_reply.descriptor;
@@ -469,6 +475,10 @@ static void vl_api_infmon_snapshot_inline_dump_t_handler(vl_api_infmon_snapshot_
 
     infmon_api_result_t result =
         infmon_api_snapshot_and_clear(&infmon_vpp_api_ctx, id, &snap_reply);
+
+    /* Republish so the data-plane picks up the fresh table pointer. */
+    if (result == INFMON_API_OK)
+        infmon_vpp_publish_rules();
 
     if (result != INFMON_API_OK || snap_reply.num_retired == 0) {
         INFMON_CTR_DEBUG("vapi: snapshot_inline_dump — empty (result=%d retired=%u)", (int) result,
