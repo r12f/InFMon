@@ -53,6 +53,9 @@ impl ControlState {
     }
 
     /// Replace the latest snapshot (called by the snapshot‐forwarding thread).
+    ///
+    /// Intentionally recovers from mutex poison (`into_inner()`) — losing a
+    /// snapshot is preferable to panicking on the stats path.
     pub fn update_snapshot(&self, snap: Arc<FlowStatsSnapshot>) {
         *self
             .latest_snapshot

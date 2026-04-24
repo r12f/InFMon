@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 use crate::control::{self, ControlHandle, ControlState};
@@ -49,6 +50,7 @@ pub struct Frontend {
     exporter_handles: Vec<ExporterHandle>,
     exporter_senders: Vec<SnapshotSender>,
     control_handle: Option<ControlHandle>,
+    snapshot_thread: Option<JoinHandle<()>>,
     config_path: PathBuf,
     shutdown: Arc<AtomicBool>,
 }
@@ -175,8 +177,9 @@ impl Frontend {
 
         // Create a snapshot channel that forwards to the control state so
         // `infmonctl stats show` can read the latest counters.
+        // Capacity 1: poller drops stale snapshots via try_send, we only need the latest.
         let (stats_tx, stats_rx) = std::sync::mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(1);
-        {
+        let snapshot_thread = {
             let cs = control_state.clone();
             std::thread::Builder::new()
                 .name("snapshot-to-control".into())
@@ -186,8 +189,8 @@ impl Frontend {
                     }
                     tracing::debug!("snapshot-to-control thread exiting");
                 })
-                .expect("failed to spawn snapshot-to-control thread");
-        }
+                .expect("failed to spawn snapshot-to-control thread")
+        };
 
         // Spawn poller with exporter senders + control-state sender
         let mut raw_senders: Vec<_> = exporter_senders
@@ -202,6 +205,7 @@ impl Frontend {
             exporter_handles,
             exporter_senders,
             control_handle,
+            snapshot_thread: Some(snapshot_thread),
             config_path: config_path.to_path_buf(),
             shutdown,
         })
@@ -243,6 +247,12 @@ impl Frontend {
         if let Some(handle) = self.poller_handle.take() {
             handle.stop();
             tracing::info!("poller stopped");
+        }
+
+        // 1b. Join snapshot-to-control thread (exits when poller drops stats_tx)
+        if let Some(h) = self.snapshot_thread.take() {
+            let _ = h.join();
+            tracing::info!("snapshot-to-control thread joined");
         }
 
         // 2. Close exporter channels (drop senders) so exporters drain
