@@ -64,8 +64,9 @@ def flow_rule_list() -> List[Dict[str, Any]]:
         parsed = _parse_json_output(result)
         if isinstance(parsed, list):
             return parsed
-    # Fallback: extract rule metadata from stats output
-    result = _run_infmonctl("stats", "show", "--json", check=False)
+    # Fallback: extract rule metadata from stats pull output (forces a
+    # fresh snapshot from VPP, avoiding the stale-cache / 0-counter issue).
+    result = _run_infmonctl("stats", "pull", "--json", check=False)
     if result.returncode != 0:
         return []
     parsed = _parse_json_output(result)
@@ -75,8 +76,12 @@ def flow_rule_list() -> List[Dict[str, Any]]:
 
 
 def get_flow_stats(rule_name: str) -> Optional[Dict[str, Any]]:
-    """Get flow statistics for a specific rule, returning parsed JSON."""
-    result = _run_infmonctl("stats", "show", "--json", check=False)
+    """Get flow statistics for a specific rule, returning parsed JSON.
+
+    Uses ``stats pull`` which forces a fresh snapshot from VPP, avoiding
+    the stale-cache / 0-counter issue that affects ``stats show``.
+    """
+    result = _run_infmonctl("stats", "pull", "--json", check=False)
     if result.returncode != 0:
         return None
     parsed = _parse_json_output(result)
