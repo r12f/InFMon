@@ -63,11 +63,11 @@ extern vlib_log_class_t infmon_log_stats;
 #define INFMON_RULE_DEBUG(...) vlib_log_debug(infmon_log_rule, __VA_ARGS__)
 
 /* infmon/node */
-#define INFMON_NODE_LOG_ERR(...) vlib_log_err(infmon_log_node, __VA_ARGS__)
-#define INFMON_NODE_LOG_WARN(...) vlib_log_warn(infmon_log_node, __VA_ARGS__)
-#define INFMON_NODE_LOG_NOTICE(...) vlib_log_notice(infmon_log_node, __VA_ARGS__)
-#define INFMON_NODE_LOG_INFO(...) vlib_log_info(infmon_log_node, __VA_ARGS__)
-#define INFMON_NODE_LOG_DEBUG(...) vlib_log_debug(infmon_log_node, __VA_ARGS__)
+#define INFMON_NODE_ERR(...) vlib_log_err(infmon_log_node, __VA_ARGS__)
+#define INFMON_NODE_WARN(...) vlib_log_warn(infmon_log_node, __VA_ARGS__)
+#define INFMON_NODE_NOTICE(...) vlib_log_notice(infmon_log_node, __VA_ARGS__)
+#define INFMON_NODE_INFO(...) vlib_log_info(infmon_log_node, __VA_ARGS__)
+#define INFMON_NODE_DEBUG(...) vlib_log_debug(infmon_log_node, __VA_ARGS__)
 
 /* infmon/counter */
 #define INFMON_CTR_ERR(...) vlib_log_err(infmon_log_counter, __VA_ARGS__)
@@ -103,11 +103,11 @@ extern vlib_log_class_t infmon_log_stats;
 #define INFMON_RULE_INFO(...) ((void) 0)
 #define INFMON_RULE_DEBUG(...) ((void) 0)
 
-#define INFMON_NODE_LOG_ERR(...) ((void) 0)
-#define INFMON_NODE_LOG_WARN(...) ((void) 0)
-#define INFMON_NODE_LOG_NOTICE(...) ((void) 0)
-#define INFMON_NODE_LOG_INFO(...) ((void) 0)
-#define INFMON_NODE_LOG_DEBUG(...) ((void) 0)
+#define INFMON_NODE_ERR(...) ((void) 0)
+#define INFMON_NODE_WARN(...) ((void) 0)
+#define INFMON_NODE_NOTICE(...) ((void) 0)
+#define INFMON_NODE_INFO(...) ((void) 0)
+#define INFMON_NODE_DEBUG(...) ((void) 0)
 
 #define INFMON_CTR_ERR(...) ((void) 0)
 #define INFMON_CTR_WARN(...) ((void) 0)

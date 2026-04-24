@@ -70,8 +70,16 @@ def test_packet_replay(scenario: str, infmon_env: dict) -> None:
     #    concurrently with their own rules.
     try:
         flow_rule_rm(scenario)
-    except subprocess.CalledProcessError:
-        pass  # rule didn't exist — fine
+    except subprocess.CalledProcessError as exc:
+        # Only swallow "rule not found" — propagate unexpected failures.
+        if exc.returncode != 0 and "not found" not in (exc.stderr or "").lower():
+            import logging
+            logging.getLogger(__name__).debug(
+                "flow_rule_rm(%s) failed (rc=%d): %s",
+                scenario, exc.returncode, exc.stderr,
+            )
+        # In both cases we proceed — the rule either didn't exist or
+        # will be re-created below.
 
     # 2. Create a flow rule for this scenario.
     #    Use the scenario name as the rule name.

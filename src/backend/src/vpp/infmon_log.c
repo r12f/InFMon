@@ -30,7 +30,13 @@ static clib_error_t *infmon_log_init(CLIB_UNUSED(vlib_main_t *vm))
     return 0;
 }
 
-/* Run early so log classes are available before other init functions. */
-VLIB_INIT_FUNCTION(infmon_log_init);
+/*
+ * Run early so log classes are available before other init functions.
+ * .runs_before ensures infmon_log_init completes before any future
+ * infmon_*_init that registers a dependency on it.
+ */
+VLIB_INIT_FUNCTION(infmon_log_init) = {
+    .runs_before = VLIB_INITS("infmon_api_init", "infmon_node_init"),
+};
 
 #endif /* INFMON_VPP_BUILD */
