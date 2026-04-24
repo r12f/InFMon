@@ -195,6 +195,7 @@ if(ENABLE_VPP_PLUGIN)
     endif()
 
     add_library(infmon_plugin MODULE
+        src/vpp/infmon_log.c
         src/vpp/infmon_nodes.c
         src/vpp/infmon_api_handlers.c
     )

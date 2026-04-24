@@ -28,6 +28,7 @@
 #include "infmon/counter_table.h"
 #include "infmon/flow_rule.h"
 #include "infmon/graph_node.h"
+#include "infmon/log.h"
 #include "infmon/snapshot.h"
 #include "infmon/stats_segment.h"
 
