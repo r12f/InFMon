@@ -7,11 +7,12 @@ and compares flow counters against expected baselines.
 import json
 import os
 import pathlib
+import subprocess
 from typing import List
 
 import pytest
 
-from helpers import clear_all_flow_rules, flow_rule_add, wait_for_stats
+from helpers import clear_all_flow_rules, flow_rule_add, flow_rule_rm, wait_for_stats
 from replay_traffic import replay
 
 # ---------------------------------------------------------------------------
@@ -64,8 +65,13 @@ def test_packet_replay(scenario: str, infmon_env: dict) -> None:
 
     refresh_mode = os.environ.get("INFMON_E2E_TEST_REFRESH_BASELINE", "0") == "1"
 
-    # 1. Clear all existing flow rules
-    clear_all_flow_rules()
+    # 1. Remove any stale rule from a prior run of *this* scenario.
+    #    Do NOT clear all rules — other xdist workers may be running
+    #    concurrently with their own rules.
+    try:
+        flow_rule_rm(scenario)
+    except subprocess.CalledProcessError:
+        pass  # rule didn't exist — fine
 
     # 2. Create a flow rule for this scenario.
     #    Use the scenario name as the rule name.
@@ -127,5 +133,8 @@ def test_packet_replay(scenario: str, infmon_env: dict) -> None:
                 f"Actual:   {json.dumps(stats, indent=2)}"
             )
     finally:
-        # Ensure flow rules are cleaned up even on failure
-        clear_all_flow_rules()
+        # Ensure this scenario's flow rule is cleaned up even on failure
+        try:
+            flow_rule_rm(scenario)
+        except subprocess.CalledProcessError:
+            pass
