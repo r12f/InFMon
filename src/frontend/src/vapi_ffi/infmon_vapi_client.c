@@ -9,8 +9,10 @@
  */
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <vapi/vapi.h>
+#include <vapi/vapi_dbg.h>
 
 /* Pull in the generated VAPI header for our plugin API. */
 /* We need the generated header — built by CMake or vapi_c_gen.py.
@@ -98,7 +100,7 @@ struct flow_rule_add_reply_ctx {
     int32_t retval;
     uint64_t id_hi;
     uint64_t id_lo;
-    int got_reply;
+    bool got_reply;
 };
 
 static vapi_error_e flow_rule_add_reply_cb(vapi_ctx_t vapi_ctx, void *callback_ctx, vapi_error_e rv,
@@ -112,14 +114,17 @@ static vapi_error_e flow_rule_add_reply_cb(vapi_ctx_t vapi_ctx, void *callback_c
         ctx->retval = reply->retval;
         ctx->id_hi = reply->flow_rule_id.hi;
         ctx->id_lo = reply->flow_rule_id.lo;
-        ctx->got_reply = 1;
+        ctx->got_reply = true;
+    }
+    if (rv != VAPI_OK) {
+        VAPI_ERR("flow_rule_add reply callback: rv=%d", rv);
     }
     return VAPI_OK;
 }
 
 struct flow_rule_del_reply_ctx {
     int32_t retval;
-    int got_reply;
+    bool got_reply;
 };
 
 static vapi_error_e flow_rule_del_reply_cb(vapi_ctx_t vapi_ctx, void *callback_ctx, vapi_error_e rv,
@@ -131,7 +136,10 @@ static vapi_error_e flow_rule_del_reply_cb(vapi_ctx_t vapi_ctx, void *callback_c
     struct flow_rule_del_reply_ctx *ctx = callback_ctx;
     if (rv == VAPI_OK && reply) {
         ctx->retval = reply->retval;
-        ctx->got_reply = 1;
+        ctx->got_reply = true;
+    }
+    if (rv != VAPI_OK) {
+        VAPI_ERR("flow_rule_del reply callback: rv=%d", rv);
     }
     return VAPI_OK;
 }
@@ -296,7 +304,8 @@ int infmon_vapi_flow_rule_add(void *handle, const char *name, const uint8_t *fie
     msg->payload.eviction_policy = eviction_policy;
 
     /* Context struct to capture the reply in the blocking callback. */
-    struct flow_rule_add_reply_ctx reply_ctx = {.retval = -1, .got_reply = 0};
+    /* msg is consumed by the VAPI blocking call below — no manual free needed. */
+    struct flow_rule_add_reply_ctx reply_ctx = {.retval = -1, .got_reply = false};
 
     vapi_error_e rv = vapi_infmon_flow_rule_add(ctx, msg,
                                                 /* callback */ flow_rule_add_reply_cb, &reply_ctx);
@@ -337,7 +346,8 @@ int infmon_vapi_flow_rule_del(void *handle, uint64_t id_hi, uint64_t id_lo)
     msg->payload.flow_rule_id.hi = id_hi;
     msg->payload.flow_rule_id.lo = id_lo;
 
-    struct flow_rule_del_reply_ctx reply_ctx = {.retval = -1, .got_reply = 0};
+    /* msg is consumed by the VAPI blocking call below — no manual free needed. */
+    struct flow_rule_del_reply_ctx reply_ctx = {.retval = -1, .got_reply = false};
 
     vapi_error_e rv = vapi_infmon_flow_rule_del(ctx, msg, flow_rule_del_reply_cb, &reply_ctx);
     if (rv != VAPI_OK)
