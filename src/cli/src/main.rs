@@ -833,13 +833,19 @@ impl TableDisplay for StatsPullOutput {
             "Snapshot pulled (tick_id={}, wall_clock_ns={})",
             self.0.tick_id, self.0.wall_clock_ns
         );
-        if self.0.flow_rules.is_empty() {
+        if self.0.stats.flow_rules.is_empty() {
             println!("No flow rule stats in snapshot.");
             return;
         }
-        println!("{:<20} {:>10}", "RULE", "ACTIVE_FLOWS");
-        for r in &self.0.flow_rules {
-            println!("{:<20} {:>10}", r.name, r.active_flows);
+        println!(
+            "{:<20} {:>12} {:>12} {:>10} {:>8} {:>8}",
+            "RULE", "PACKETS", "BYTES", "FLOWS", "EVICT", "DROPS"
+        );
+        for r in &self.0.stats.flow_rules {
+            println!(
+                "{:<20} {:>12} {:>12} {:>10} {:>8} {:>8}",
+                r.name, r.packets, r.bytes, r.active_flows, r.evictions, r.drops
+            );
         }
     }
 }

@@ -145,7 +145,8 @@ pub struct FlowRuleStatsData {
 pub struct StatsPullData {
     pub tick_id: u64,
     pub wall_clock_ns: u64,
-    pub flow_rules: Vec<FlowRuleStatsData>,
+    #[serde(flatten)]
+    pub stats: StatsShowData,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────

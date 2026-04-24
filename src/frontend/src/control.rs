@@ -532,7 +532,7 @@ fn handle_stats_pull(state: &ControlState) -> Response {
             Response::ok(ResponseData::StatsPull(StatsPullData {
                 tick_id: snapshot.tick_id,
                 wall_clock_ns: snapshot.wall_clock_ns,
-                flow_rules,
+                stats: StatsShowData { flow_rules },
             }))
         }
         Err(_) => Response::err(10, "pull timed out waiting for poller"),
