@@ -176,20 +176,28 @@ impl Frontend {
         };
 
         // Create a snapshot channel that forwards to the control state so
-        // `infmonctl stats show` can read the latest counters.
+        // `infmonctl stats show` can read the latest counters.  Only useful
+        // when the control server is running — skip if it failed to start.
         // Capacity 1: poller drops stale snapshots via try_send, we only need the latest.
-        let (stats_tx, stats_rx) = std::sync::mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(1);
-        let snapshot_thread = {
+        let (snapshot_thread, stats_tx) = if control_handle.is_some() {
+            let (tx, stats_rx) = std::sync::mpsc::sync_channel::<Arc<FlowStatsSnapshot>>(1);
             let cs = control_state.clone();
-            std::thread::Builder::new()
+            match std::thread::Builder::new()
                 .name("snapshot-to-control".into())
                 .spawn(move || {
                     while let Ok(snap) = stats_rx.recv() {
                         cs.update_snapshot(snap);
                     }
                     tracing::debug!("snapshot-to-control thread exiting");
-                })
-                .expect("failed to spawn snapshot-to-control thread")
+                }) {
+                Ok(h) => (Some(h), Some(tx)),
+                Err(e) => {
+                    tracing::warn!("failed to spawn snapshot-to-control thread: {e}");
+                    (None, None)
+                }
+            }
+        } else {
+            (None, None)
         };
 
         // Spawn poller with exporter senders + control-state sender
@@ -197,7 +205,9 @@ impl Frontend {
             .iter()
             .map(|s| s.as_raw_sender().clone())
             .collect();
-        raw_senders.push(stats_tx);
+        if let Some(tx) = stats_tx {
+            raw_senders.push(tx);
+        }
         let poller_handle = poller::spawn(poller_config, raw_senders);
 
         Ok(Frontend {
@@ -205,7 +215,7 @@ impl Frontend {
             exporter_handles,
             exporter_senders,
             control_handle,
-            snapshot_thread: Some(snapshot_thread),
+            snapshot_thread,
             config_path: config_path.to_path_buf(),
             shutdown,
         })
