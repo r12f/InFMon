@@ -382,6 +382,11 @@ fn run_loop(
                         );
                     }
                 }
+            } else {
+                tracing::warn!(
+                    "VAPI not connected — {} pull requester(s) will time out",
+                    pull_waiters.len()
+                );
             }
         }
 
