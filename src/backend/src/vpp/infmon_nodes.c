@@ -15,6 +15,7 @@
 
 #ifdef INFMON_VPP_BUILD
 
+#include <inttypes.h>
 #include <vlib/unix/plugin.h>
 #include <vlib/vlib.h>
 #include <vnet/buffer.h>
@@ -24,6 +25,7 @@
 
 #include "infmon/counter_table.h"
 #include "infmon/graph_node.h"
+#include "infmon/log.h"
 
 /* ── VPP plugin registration ─────────────────────────────────────── */
 
@@ -239,6 +241,8 @@ static uword infmon_erspan_decap_node_fn(vlib_main_t *vm, vlib_node_runtime_t *n
     vlib_put_next_frame(vm, node, next_match, n_left_match);
     vlib_put_next_frame(vm, node, next_pass, n_left_pass);
 
+    INFMON_NODE_DEBUG("erspan-decap: processed %u pkts", frame->n_vectors);
+
     return frame->n_vectors;
 }
 
@@ -277,6 +281,9 @@ static uword infmon_flow_match_node_fn(vlib_main_t *vm, vlib_node_runtime_t *nod
     const infmon_flow_rule_set_ref_t *rs = __atomic_load_n(&pm->flow_rule_set, __ATOMIC_ACQUIRE);
     const infmon_flow_rule_t *rules = rs ? rs->rules : NULL;
     uint32_t rule_count = rs ? rs->count : 0;
+
+    INFMON_NODE_DEBUG("flow-match: frame %u pkts, rule_count=%u rs=%p", frame->n_vectors,
+                      rule_count, (void *) rs);
 
     infmon_scratch_reset(&infmon_tls_scratch);
 
@@ -389,6 +396,10 @@ static uword infmon_counter_node_fn(vlib_main_t *vm, vlib_node_runtime_t *node, 
 
     /* Update counters once for the entire scratch vector */
     infmon_counter_update(&infmon_tls_scratch, tables, tick, &insert_retry, &table_full);
+
+    INFMON_NODE_DEBUG("counter: frame %u pkts, worker=%u tick=%" PRIu64 " insert_retry=%" PRIu64
+                      " table_full=%" PRIu64,
+                      frame->n_vectors, worker_id, tick, insert_retry, table_full);
 
     node->errors[INFMON_NODE_ERR_COUNTER_INSERT_RETRY_EXHAUSTED] += insert_retry;
     node->errors[INFMON_NODE_ERR_COUNTER_TABLE_FULL] += table_full;
